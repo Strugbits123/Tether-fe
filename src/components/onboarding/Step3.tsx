@@ -1,19 +1,19 @@
 "use client"
 
 import React, { useState } from 'react'
-import { ArrowLeft, ArrowRight, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import CustomSelect from './CustomSelect'
-import { useRouter } from 'next/navigation'
 
-interface Recipient {
+interface ReleaseManager {
   firstName: string
   lastName: string
-  relationship: string
+  phone: string
   email: string
+  relationship: string
 }
 
-interface Step2Props {
-  onNext: (recipients: Recipient[]) => void
+interface Step3Props {
+  onNext: (manager: ReleaseManager | null) => void
   onBack: () => void
 }
 
@@ -28,35 +28,20 @@ const relationshipOptions = [
   'Other',
 ]
 
-export default function Step2({ onNext, onBack }: Step2Props) {
-  const router = useRouter()
-  const [recipients, setRecipients] = useState<Recipient[]>([])
+export default function Step3({ onNext, onBack }: Step3Props) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [relationship, setRelationship] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-
-  const handleAddPerson = () => {
-    if (!firstName.trim() || !lastName.trim() || !relationship || !email.trim()) return
-
-    setRecipients(prev => [
-      ...prev,
-      { firstName, lastName, relationship, email },
-    ])
-
-    setFirstName('')
-    setLastName('')
-    setRelationship('')
-    setEmail('')
-  }
+  const [relationship, setRelationship] = useState('')
 
   const handleContinue = () => {
-    
-    onNext(recipients)
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !relationship) return
+    onNext({ firstName, lastName, phone, email, relationship })
   }
 
   const handleSkip = () => {
-    onNext([])
+    onNext(null)
   }
 
   return (
@@ -95,9 +80,7 @@ export default function Step2({ onNext, onBack }: Step2Props) {
               letterSpacing: '0px',
             }}
           >
-            Add your recipients - family,
-            <br />
-            friends, whomever.
+            Assign your Release Manager
           </h1>
           <p
             className="text-[#4A5565]"
@@ -109,16 +92,16 @@ export default function Step2({ onNext, onBack }: Step2Props) {
               letterSpacing: '-0.44px',
             }}
           >
-            Who should have access to your information when the time comes?
+            Chose someone you trust to release your information when the time comes
           </p>
         </div>
 
         {/* Form Card */}
         <div
-          className="bg-white rounded-[14px] mb-6"
+          className="bg-white rounded-[14px] mb-4"
           style={{
             border: '1.25px solid rgba(0, 0, 0, 0.1)',
-            padding: '24px',
+            padding: '25px',
           }}
         >
           <div className="space-y-4">
@@ -184,7 +167,7 @@ export default function Step2({ onNext, onBack }: Step2Props) {
               </div>
             </div>
 
-            {/* Relationship */}
+            {/* Phone Number */}
             <div>
               <label
                 className="block mb-1.5"
@@ -197,13 +180,21 @@ export default function Step2({ onNext, onBack }: Step2Props) {
                   color: '#374151',
                 }}
               >
-                Relationship <span className="text-red-500">*</span>
+                Phone Number
               </label>
-              <CustomSelect
-                options={relationshipOptions}
-                value={relationship}
-                onChange={setRelationship}
-                placeholder="Select relationship"
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 (555) 000-0000"
+                className="w-full text-sm focus:outline-none focus:border-indigo-600 transition-all"
+                style={{
+                  height: '48px',
+                  borderRadius: '12px',
+                  border: '1.25px solid #D1D5DC',
+                  padding: '0 16px',
+                  fontFamily: 'Inter, sans-serif',
+                }}
               />
             </div>
 
@@ -238,56 +229,101 @@ export default function Step2({ onNext, onBack }: Step2Props) {
               />
             </div>
 
-            {/* Add Person Button */}
-            <button
-              onClick={handleAddPerson}
-              disabled={!firstName.trim() || !lastName.trim() || !relationship || !email.trim()}
-              className="w-full flex items-center justify-center gap-2 text-white font-medium rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                height: '45px',
-                background: '#4F46E5',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: '14px',
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                borderRadius: '8px',
-              }}
-            >
-              <Plus className="w-4 h-4" />
-              Add Person
-            </button>
+            {/* Relationship */}
+            <div>
+              <label
+                className="block mb-1.5"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: '14px',
+                  lineHeight: '14px',
+                  letterSpacing: '-0.15px',
+                  color: '#374151',
+                }}
+              >
+                Relationship <span className="text-red-500">*</span>
+              </label>
+              <CustomSelect
+                options={relationshipOptions}
+                value={relationship}
+                onChange={setRelationship}
+                placeholder="Select relationship"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Added Recipients List */}
-        {recipients.length > 0 && (
-          <div className="space-y-2 mb-6">
-            {recipients.map((r, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between px-4 py-3 bg-white rounded-lg border border-[#E5E7EB]"
+        {/* Info Card */}
+        <div
+          className="rounded-[14px] mb-6"
+          style={{
+            border: '1.25px solid #EEECFF',
+            background: '#EEF2FF',
+            padding: '24px',
+          }}
+        >
+          <h3
+            className="mb-4"
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              fontSize: '18px',
+              lineHeight: '27px',
+              letterSpacing: '-0.44px',
+              color: '#4F46E5',
+            }}
+          >
+            What can a Release Manager do?
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-start gap-2">
+              <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#4F46E5' }} />
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: '14px',
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#4F46E5',
+                }}
               >
-                <div>
-                  <span className="font-medium text-sm text-[#101828]">
-                    {r.firstName} {r.lastName}
-                  </span>
-                  <span className="text-xs text-[#6A7282] ml-2">
-                    ({r.relationship})
-                  </span>
-                </div>
-                <button
-                  onClick={() =>
-                    setRecipients(prev => prev.filter((_, idx) => idx !== i))
-                  }
-                  className="text-red-500 text-xs hover:text-red-700 cursor-pointer"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+                Access all your documents and messages when needed
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#4F46E5' }} />
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: '14px',
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#4F46E5',
+                }}
+              >
+                Manage distribution of information to family and friends
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#4F46E5' }} />
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: '14px',
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#4F46E5',
+                }}
+              >
+                Ensure your wishes are carried out
+              </span>
+            </div>
           </div>
-        )}
+        </div>
 
         {/* Action Buttons */}
         <div className="flex items-center justify-between">
@@ -312,12 +348,12 @@ export default function Step2({ onNext, onBack }: Step2Props) {
 
           <button
             onClick={handleContinue}
-           
+            disabled={!firstName.trim() || !lastName.trim() || !email.trim() || !relationship}
             className="flex items-center justify-center gap-2 text-white font-medium rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               width: '165px',
               height: '50px',
-              background:  '#4F46E5' ,
+              background: firstName.trim() && lastName.trim() && email.trim() && relationship ? '#4F46E5' : '#9CA3AF',
               fontFamily: 'Inter, sans-serif',
               fontWeight: 500,
               fontSize: '14px',
@@ -330,6 +366,21 @@ export default function Step2({ onNext, onBack }: Step2Props) {
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Helper Text */}
+        <p
+          className="text-center mt-4"
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 400,
+            fontSize: '14px',
+            lineHeight: '20px',
+            letterSpacing: '-0.15px',
+            color: '#6A7282',
+          }}
+        >
+          You can change your Release Manager anytime in settings
+        </p>
       </div>
     </div>
   )
