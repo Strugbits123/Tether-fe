@@ -40,6 +40,16 @@
   }
 }
 
+/* Audio waveform pulse — used in the Messages mockup */
+@keyframes waveform {
+  0%, 100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 .page-enter {
   animation: pageEnter 300ms ease-out;
 }
