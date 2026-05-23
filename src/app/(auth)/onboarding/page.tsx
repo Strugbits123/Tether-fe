@@ -3,6 +3,8 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
+import { createClient } from '@/lib/supabase/client'
+import { api } from '@/lib/api/client'
 import Step1 from '@/components/onboarding/Step1'
 import Step2 from '@/components/onboarding/Step2'
 import Step3 from '@/components/onboarding/Step3'
@@ -15,6 +17,7 @@ export default function OnboardingPage() {
   
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [stepLoading, setStepLoading] = useState(false)
 
   // Step 1: Purpose
   const [purposes, setPurposes] = useState<string[]>([])
@@ -27,23 +30,74 @@ export default function OnboardingPage() {
 
   // Step 4: Message
 
-  const handleStep1Next = (selections: string[]) => {
+  const handleStep1Next = async (selections: string[]) => {
     setPurposes(selections)
-    setCurrentStep(2)
+    setStepLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        await api.post('/users/onboarding/purposes', { purposes: selections }, session.access_token)
+      }
+    } catch {
+      // Non-blocking — proceed regardless
+    } finally {
+      setStepLoading(false)
+      setCurrentStep(2)
+    }
   }
 
-  const handleStep2Next = (recips: any[]) => {
+  const handleStep2Next = async (recips: any[]) => {
     setRecipients(recips)
-    setCurrentStep(3)
+    setStepLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (token && recips.length > 0) {
+        await Promise.allSettled(
+          recips.map((r) =>
+            api.post('/recipients', {
+              name: `${r.firstName} ${r.lastName}`,
+              email: r.email,
+              relationship: r.relationship.toLowerCase(),
+            }, token)
+          )
+        )
+      }
+    } catch {
+      // Non-blocking — proceed regardless
+    } finally {
+      setStepLoading(false)
+      setCurrentStep(3)
+    }
   }
 
   const handleStep2Back = () => {
     setCurrentStep(1)
   }
 
-  const handleStep3Next = (manager: any) => {
+  const handleStep3Next = async (manager: any) => {
     setReleaseManager(manager)
-    setCurrentStep(4)
+    setStepLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (token && manager) {
+        await api.post('/release-managers', {
+          name: `${manager.firstName} ${manager.lastName}`,
+          email: manager.email,
+          relationship: manager.relationship.toLowerCase(),
+          phone_number: manager.phone || undefined,
+        }, token)
+      }
+    } catch {
+      // Non-blocking — proceed regardless
+    } finally {
+      setStepLoading(false)
+      setCurrentStep(4)
+    }
   }
 
   const handleStep3Back = () => {
@@ -58,16 +112,28 @@ export default function OnboardingPage() {
     setCurrentStep(3)
   }
 
-  const handleStep5Next = () => {
+  const handleStep5Next = async () => {
     setLoading(true)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('tether_onboarded', 'true')
-    }
-    setTimeout(() => {
-      setLoading(false)
-      showToast('Onboarding completed! Welcome to Tether.', 'success')
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      if (!token) {
+        showToast('Session expired. Please sign in again.', 'error')
+        router.push('/signin')
+        return
+      }
+
+      await api.post('/users/onboarding/complete', {}, token)
+
+      showToast('Welcome to Tether!', 'success')
       router.push('/dashboard')
-    }, 1500)
+    } catch (err: any) {
+      showToast(err.message || 'Something went wrong. Please try again.', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleStep5Back = () => {
@@ -82,15 +148,15 @@ export default function OnboardingPage() {
       }}
     >
       {currentStep === 1 && (
-        <Step1 onNext={handleStep1Next} />
+        <Step1 onNext={handleStep1Next} loading={stepLoading} />
       )}
 
       {currentStep === 2 && (
-        <Step2 onNext={handleStep2Next} onBack={handleStep2Back} />
+        <Step2 onNext={handleStep2Next} onBack={handleStep2Back} loading={stepLoading} />
       )}
 
       {currentStep === 3 && (
-        <Step3 onNext={handleStep3Next} onBack={handleStep3Back} />
+        <Step3 onNext={handleStep3Next} onBack={handleStep3Back} loading={stepLoading} />
       )}
 
       {currentStep === 4 && (

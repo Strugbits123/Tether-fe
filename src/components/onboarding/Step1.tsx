@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 
 interface Step1Props {
   onNext: (selections: string[]) => void
+  loading?: boolean
 }
 
 const options = [
@@ -38,7 +39,7 @@ const options = [
   },
 ]
 
-export default function Step1({ onNext }: Step1Props) {
+export default function Step1({ onNext, loading }: Step1Props) {
   const router = useRouter()
   const [selected, setSelected] = useState<string[]>([])
 
@@ -169,16 +170,25 @@ export default function Step1({ onNext }: Step1Props) {
         <div className="flex flex-col items-center gap-3">
           <button
             onClick={handleContinue}
-            disabled={selected.length === 0}
+            disabled={selected.length === 0 || loading}
             className="flex items-center justify-center gap-2 text-white font-medium rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
               w-full max-w-[165px] h-[50px]"
             style={{
-              background: selected.length > 0 ? "#4F46E5" : "#9CA3AF",
+              background: selected.length > 0 && !loading ? "#4F46E5" : "#9CA3AF",
               fontFamily: "Inter, sans-serif",
             }}
           >
-            Continue
-            <ArrowRight className="w-4 h-4" />
+            {loading ? (
+              <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
 
           {/* Helper Text */}

@@ -267,8 +267,9 @@ export default function Step5({ onNext, onBack, loading }: Step5Props) {
         {/* Action Buttons */}
         <div className="flex items-center justify-between">
           <button
-            onClick={onBack}
-            className="flex items-center justify-center text-[#0A0A0A] font-medium rounded-lg transition-all cursor-pointer hover:bg-slate-50"
+            onClick={onNext}
+            disabled={loading}
+            className="flex items-center justify-center text-[#0A0A0A] font-medium rounded-lg transition-all cursor-pointer hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               width: '165px',
               height: '50px',

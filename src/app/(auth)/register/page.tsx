@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
 import { Eye, EyeOff } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { api } from '@/lib/api/client'
 
 function RegisterForm() {
   const router = useRouter()
@@ -34,7 +36,7 @@ function RegisterForm() {
     }
   }, [searchParams])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!email || !password) {
@@ -58,18 +60,45 @@ function RegisterForm() {
     }
 
     setLoading(true)
-
-    // Simulate network latency
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      const supabase = createClient()
       if (isSignUp) {
-        showToast('Account created successfully! Welcome to Tether.', 'success')
-        router.push('/onboarding')
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: { first_name: firstName, last_name: lastName },
+          },
+        })
+        if (error) {
+          showToast(error.message, 'error')
+          return
+        }
+        if (data.user && !data.user.email_confirmed_at) {
+          showToast('Account created! Please check your email to verify your account.', 'success')
+        } else {
+          router.push('/onboarding')
+        }
       } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) {
+          showToast('Invalid email or password', 'error')
+          return
+        }
+        try {
+          await api.post('/auth/login', { email, password })
+        } catch {
+          // Non-blocking — login still works via Supabase
+        }
         showToast('Welcome back to Tether!', 'success')
-        router.push('/')
+        router.push('/dashboard')
       }
-    }, 1200)
+    } catch (err: any) {
+      showToast(err.message || 'Something went wrong', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const toggleMode = () => {
@@ -307,12 +336,24 @@ function RegisterForm() {
             {/* Continue with Google */}
             <button
               type="button"
+              onClick={async () => {
+                try {
+                  const supabase = createClient()
+                  const { error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: { redirectTo: `${window.location.origin}/auth/callback` },
+                  })
+                  if (error) showToast(error.message, 'error')
+                } catch {
+                  showToast('Failed to connect to Google', 'error')
+                }
+              }}
               className="w-full h-[48px] bg-[#FFFFFF] border-[1.25px] border-[#D1D5DB] hover:bg-[#F9FAFB] rounded-[10px] transition-all flex items-center justify-center text-sm font-sans font-medium text-[#374151] cursor-pointer"
             >
-              <img 
-                src="/register/google.png" 
-                alt="Google Icon" 
-                className="w-[18px] h-[18px] mr-2 select-none" 
+              <img
+                src="/register/google.png"
+                alt="Google Icon"
+                className="w-[18px] h-[18px] mr-2 select-none"
               />
               <span>Continue with Google</span>
             </button>
