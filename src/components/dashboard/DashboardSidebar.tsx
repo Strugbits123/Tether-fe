@@ -1,6 +1,8 @@
 'use client'
 
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/context/AuthContext'
 import {
   Home,
   FileText,
@@ -33,6 +35,32 @@ const navItems = [
 
 export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSidebarProps) {
   const router = useRouter()
+  const { profile, signOut } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const firstName = profile?.first_name?.trim() || ''
+  const lastName = profile?.last_name?.trim() || ''
+  const displayName = firstName && lastName
+    ? `${firstName} ${lastName}`
+    : firstName || profile?.email?.split('@')[0] || 'User'
+  const initials = firstName && lastName
+    ? `${firstName[0]}${lastName[0]}`.toUpperCase()
+    : displayName.charAt(0).toUpperCase()
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
   return (
     <>
       {/* Mobile overlay */}
@@ -106,13 +134,19 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
             })}
           </nav>
 
-          {/* Spacer to push settings card down */}
           <div className="flex-1" />
+        </div>
 
-          {/* Settings card */}
-          <div className="px-4 pb-4">
+        {/* Account footer with dropdown */}
+        <div
+          ref={menuRef}
+          className="p-4 flex flex-col gap-2 flex-shrink-0 relative"
+          style={{ borderTop: '0.8px solid rgba(255,255,255,0.1)' }}
+        >
+          {/* Dropdown menu — appears above the button */}
+          {menuOpen && (
             <div
-              className="bg-white rounded-[10px] overflow-hidden"
+              className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-[10px] overflow-hidden"
               style={{
                 borderTop: '1.25px solid #E5E7EB',
                 boxShadow:
@@ -149,7 +183,7 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
 
               <button
                 type="button"
-                onClick={() => router.push('/')}
+                onClick={() => { setMenuOpen(false); signOut() }}
                 className="w-full flex items-center gap-3 px-[18px] py-[10px] hover:bg-red-50 transition-colors cursor-pointer"
               >
                 <LogOut className="w-[15px] h-[15px] text-[#FF0000]" strokeWidth={2} />
@@ -161,14 +195,8 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
                 </span>
               </button>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Account footer */}
-        <div
-          className="p-4 flex flex-col gap-2 flex-shrink-0"
-          style={{ borderTop: '0.8px solid rgba(255,255,255,0.1)' }}
-        >
           <p
             className="text-[11.1px] leading-4 text-white/60"
             style={{ fontFamily: 'Inter, sans-serif' }}
@@ -177,6 +205,7 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
           </p>
           <button
             type="button"
+            onClick={() => setMenuOpen((prev) => !prev)}
             className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 transition-colors w-full cursor-pointer"
           >
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -184,16 +213,19 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
                 className="text-white font-semibold text-[13px] leading-5"
                 style={{ fontFamily: 'Inter, sans-serif' }}
               >
-                J
+                {initials}
               </span>
             </div>
             <span
-              className="flex-1 text-left text-white font-semibold text-[14px] leading-5"
+              className="flex-1 text-left text-white font-semibold text-[14px] leading-5 truncate"
               style={{ fontFamily: 'Inter, sans-serif' }}
             >
-              Jennifer
+              {displayName}
             </span>
-            <ChevronDown className="w-4 h-4 text-white/70" strokeWidth={2} />
+            <ChevronDown
+              className={`w-4 h-4 text-white/70 transition-transform duration-200 ${menuOpen ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+            />
           </button>
         </div>
       </aside>

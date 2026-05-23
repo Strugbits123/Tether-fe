@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, Instrument_Serif } from 'next/font/google'
 import './globals.css'
 import { ToastProvider } from '@/lib/context/ToastContext'
+import { AuthProvider } from '@/lib/context/AuthContext'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -29,7 +30,9 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full font-sans bg-slate-50 text-slate-900 antialiased" suppressHydrationWarning>
         <ToastProvider>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>
