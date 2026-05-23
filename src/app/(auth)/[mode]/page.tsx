@@ -106,7 +106,7 @@ function MainAuthForm({
         router.push('/onboarding')
       } else {
         showToast('Welcome back to Tether!', 'success')
-        router.push('/')
+        router.push('/onboarding')
       }
     }, 1200)
   }
