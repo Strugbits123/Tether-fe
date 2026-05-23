@@ -66,7 +66,7 @@ export default function OnboardingPage() {
     setTimeout(() => {
       setLoading(false)
       showToast('Onboarding completed! Welcome to Tether.', 'success')
-      router.push('/')
+      router.push('/dashboard')
     }, 1500)
   }
 

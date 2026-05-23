@@ -149,6 +149,7 @@ export default function HeroSection() {
               width={536}
               height={600}
               className="w-full h-auto"
+              style={{ width: '100%', height: 'auto' }}
               priority
             />
           </div>
