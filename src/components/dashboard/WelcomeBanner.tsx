@@ -2,9 +2,12 @@
 
 import { X } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '@/lib/context/AuthContext'
 
 export default function WelcomeBanner() {
   const [visible, setVisible] = useState(true)
+  const { profile, user } = useAuth()
+  const firstName = profile?.first_name?.trim() || user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'there'
   if (!visible) return null
 
   return (
@@ -48,7 +51,7 @@ export default function WelcomeBanner() {
                 fontWeight: 400,
               }}
             >
-              Welcome to Tether, Jennifer!
+              Welcome to Tether, {firstName}!
             </h2>
             <span
               className="inline-flex items-center px-2 py-[2px] rounded-md bg-[#FF6900] text-white text-[11px] font-semibold uppercase tracking-wide"

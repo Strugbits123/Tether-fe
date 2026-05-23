@@ -141,7 +141,7 @@ export default function Step4({ onNext, onBack }: Step4Props) {
         {/* Action Buttons */}
         <div className="flex items-center justify-between">
           <button
-            onClick={onBack}
+            onClick={onNext}
             className="flex items-center justify-center text-[#0A0A0A] font-medium rounded-lg transition-all cursor-pointer hover:bg-slate-50"
             style={{
               width: '165px',
