@@ -7,6 +7,8 @@ import { useToast } from '@/lib/context/ToastContext'
 import { Eye, EyeOff } from 'lucide-react'
 import { FiArrowLeft, FiLock } from 'react-icons/fi'
 import { HiOutlineSparkles } from 'react-icons/hi'
+import { createClient } from '@/lib/supabase/client'
+import { api } from '@/lib/api/client'
 
 /* ─── Allowed modes ─── */
 const VALID_MODES = ['signin', 'signup'] as const
@@ -75,7 +77,7 @@ function MainAuthForm({
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!email || !password) {
@@ -99,16 +101,45 @@ function MainAuthForm({
     }
 
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      const supabase = createClient()
       if (isSignUp) {
-        showToast('Account created successfully! Welcome to Tether.', 'success')
-        router.push('/onboarding')
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: { first_name: firstName, last_name: lastName },
+          },
+        })
+        if (error) {
+          showToast(error.message, 'error')
+          return
+        }
+        if (data.user && !data.user.email_confirmed_at) {
+          showToast('Account created! Please check your email to verify your account.', 'success')
+        } else {
+          router.push('/onboarding')
+        }
       } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) {
+          showToast('Invalid email or password', 'error')
+          return
+        }
+        try {
+          await api.post('/auth/login', { email, password })
+        } catch {
+          // Non-blocking — login still works via Supabase
+        }
         showToast('Welcome back to Tether!', 'success')
-        router.push('/onboarding')
+        router.push('/dashboard')
       }
-    }, 1200)
+    } catch (err: any) {
+      showToast(err.message || 'Something went wrong', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -304,6 +335,18 @@ function MainAuthForm({
 
           <button
             type="button"
+            onClick={async () => {
+              try {
+                const supabase = createClient()
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'google',
+                  options: { redirectTo: `${window.location.origin}/auth/callback` },
+                })
+                if (error) showToast(error.message, 'error')
+              } catch {
+                showToast('Failed to connect to Google', 'error')
+              }
+            }}
             className="w-full h-[48px] bg-[#FFFFFF] border-[1.25px] border-[#D1D5DB] hover:bg-[#F9FAFB] rounded-[10px] transition-all flex items-center justify-center text-sm font-sans font-medium text-[#374151] cursor-pointer"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -341,17 +384,32 @@ function MagicLinkForm({
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) {
       showToast('Please enter your email address.', 'error')
       return
     }
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          shouldCreateUser: false,
+        },
+      })
+      if (error) {
+        showToast(error.message, 'error')
+        return
+      }
       onSent()
-    }, 1000)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to send magic link', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -657,17 +715,28 @@ function ForgotPasswordForm({
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) {
       showToast('Please enter your email address.', 'error')
       return
     }
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      })
+      if (error) {
+        showToast(error.message, 'error')
+        return
+      }
       onSent()
-    }, 1000)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to send reset email', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
