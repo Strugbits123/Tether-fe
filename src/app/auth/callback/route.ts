@@ -4,10 +4,16 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const type = searchParams.get('type')
 
   if (code) {
     const supabase = await createClient()
     await supabase.auth.exchangeCodeForSession(code)
+
+    // Password reset — send to the update-password page, skip all other checks
+    if (type === 'recovery') {
+      return NextResponse.redirect(`${origin}/update-password`)
+    }
 
     const { data: { user } } = await supabase.auth.getUser()
 
