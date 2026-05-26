@@ -1,41 +1,32 @@
 'use client'
 
-import Sidebar from '@/components/layout/Sidebar'
-import TopBar from '@/components/layout/TopBar'
-import { AuthProvider } from '@/lib/context/AuthContext'
-import { usePathname } from 'next/navigation'
 import { useState } from 'react'
+import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
 
-const pageTitles: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/settings': 'Settings',
-}
-
-function DashboardShell({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const pathname = usePathname()
-  const title = pageTitles[pathname] || 'Dashboard'
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F1F5F9]">
-      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <div className="min-h-screen flex bg-[#F8FAFC] font-sans">
+      <DashboardSidebar
+        mobileOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+      />
 
-      <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-        <TopBar title={title} onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-auto">
-          <div className="page-enter">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <DashboardTopBar onMenuClick={() => setMobileOpen(true)} />
+
+        <main className="flex-1 px-4 sm:px-6 py-6">
+          <div className="w-full max-w-[1280px] mx-auto flex flex-col gap-6">
             {children}
           </div>
         </main>
       </div>
     </div>
-  )
-}
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <AuthProvider>
-      <DashboardShell>{children}</DashboardShell>
-    </AuthProvider>
   )
 }
