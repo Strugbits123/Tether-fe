@@ -72,13 +72,22 @@ function RegisterForm() {
           },
         })
         if (error) {
-          showToast(error.message, 'error')
+          if (error.message.toLowerCase().includes('already registered')) {
+            showToast('An account with this email already exists.', 'error')
+          } else {
+            showToast(error.message, 'error')
+          }
           return
         }
+        // Email confirmation required — no session yet
         if (data.user && !data.user.email_confirmed_at) {
-          showToast('Account created! Please check your email to verify your account.', 'success')
-        } else {
+          router.push(`/verify-email?email=${encodeURIComponent(email)}`)
+          return
+        }
+        // Email confirmation disabled in Supabase — session exists immediately
+        if (data.session) {
           router.push('/onboarding')
+          return
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
