@@ -79,16 +79,14 @@ function RegisterForm() {
           }
           return
         }
-        // Email confirmation required — no session yet
-        if (data.user && !data.user.email_confirmed_at) {
-          router.push(`/verify-email?email=${encodeURIComponent(email)}`)
-          return
-        }
         // Email confirmation disabled in Supabase — session exists immediately
         if (data.session) {
           router.push('/onboarding')
           return
         }
+        // Email confirmation required (or duplicate unconfirmed email — Supabase
+        // returns user: null, session: null with no error in that case)
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`)
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) {
