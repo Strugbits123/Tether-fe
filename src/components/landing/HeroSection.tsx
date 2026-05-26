@@ -145,7 +145,7 @@ export default function HeroSection() {
           {/* ── RIGHT COLUMN — 536 × 600 at lg+, scales proportionally below ── */}
           <div className="relative w-full max-w-[536px] flex-shrink-0">
             <Image
-              src="/images/LandingPage/bannerImage.png"
+              src="/images/LandingPage/BannerImage.png"
               alt="Tether app preview"
               width={536}
               height={600}
