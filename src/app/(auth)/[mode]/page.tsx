@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, use } from 'react'
+import React, { useState, use, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, notFound } from 'next/navigation'
+import { useRouter, notFound, useSearchParams } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
 import { Eye, EyeOff } from 'lucide-react'
 import { FiArrowLeft, FiLock } from 'react-icons/fi'
@@ -65,6 +65,14 @@ function MainAuthForm({
 }) {
   const router = useRouter()
   const { showToast } = useToast()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const error = searchParams.get('error')
+    if (error === 'verification_failed') {
+      showToast('Verification link expired or invalid. Please request a new one.', 'error')
+    }
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -113,13 +121,22 @@ function MainAuthForm({
           },
         })
         if (error) {
-          showToast(error.message, 'error')
+          if (error.message.toLowerCase().includes('already registered')) {
+            showToast('An account with this email already exists.', 'error')
+          } else {
+            showToast(error.message, 'error')
+          }
           return
         }
+        // Email confirmation required — no session yet
         if (data.user && !data.user.email_confirmed_at) {
-          showToast('Account created! Please check your email to verify your account.', 'success')
-        } else {
+          router.push(`/verify-email?email=${encodeURIComponent(email)}`)
+          return
+        }
+        // Email confirmation disabled in Supabase — session exists immediately
+        if (data.session) {
           router.push('/onboarding')
+          return
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
