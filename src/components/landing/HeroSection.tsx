@@ -1,25 +1,24 @@
-import React from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { BsFillPlayFill } from 'react-icons/bs'
+import React from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { BsFillPlayFill } from "react-icons/bs";
 
 const BULLETS = [
-  'Easily build and share your personal memoir',
-  'Store and share photos, documents, and files',
-  'Make video, audio, and written messages for loved ones',
-  'Automated delivery when the time comes',
-]
+  "Easily build and share your personal memoir",
+  "Store and share photos, documents, and files",
+  "Make video, audio, and written messages for loved ones",
+  "Automated delivery when the time comes",
+];
 
 export default function HeroSection() {
   return (
     <section className="relative w-full overflow-hidden min-h-[640px] lg:min-h-[742px]">
       {/* Background image */}
       <Image
-        src="/images/landingpage/HeroSectionBg.png"
+        src="/images/LandingPage/HeroSectionBg.png"
         alt=""
         fill
         className="object-cover object-center"
-       
         priority
       />
       {/* White overlay */}
@@ -28,10 +27,8 @@ export default function HeroSection() {
       {/* Content */}
       <div className="relative z-10 flex items-center justify-center px-3 sm:px-6 lg:px-8 py-10 sm:py-14 lg:py-0 min-h-[640px] lg:min-h-[742px]">
         <div className="w-full max-w-[1095px] flex flex-col lg:flex-row items-center justify-between gap-10 sm:gap-12 lg:gap-8">
-
           {/* ── LEFT COLUMN ── */}
           <div className="w-full max-w-[516px] flex flex-col gap-5 sm:gap-6 items-center lg:items-start text-center lg:text-left">
-
             {/* Badge */}
             <div className="w-fit max-w-full flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-white shadow-sm px-3 py-1.5 sm:py-2">
               <div className="bg-[#4F46E5] rounded-full px-2 py-[2px] flex items-center justify-center flex-shrink-0">
@@ -60,7 +57,8 @@ export default function HeroSection() {
                 break-words
               "
               style={{
-                fontFamily: '"Instrument Serif", Georgia, "Times New Roman", serif',
+                fontFamily:
+                  '"Instrument Serif", Georgia, "Times New Roman", serif',
                 fontWeight: 400,
               }}
             >
@@ -110,7 +108,7 @@ export default function HeroSection() {
                   justify-center
                   px-6
                 "
-                style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
+                style={{ boxShadow: "0px 1px 2px 0px #4F46E54D" }}
               >
                 Start Free
               </Link>
@@ -136,7 +134,10 @@ export default function HeroSection() {
                 "
               >
                 <span>See how it works</span>
-                <BsFillPlayFill className="w-5 h-5 flex-shrink-0" style={{ color: '#111827' }} />
+                <BsFillPlayFill
+                  className="w-5 h-5 flex-shrink-0"
+                  style={{ color: "#111827" }}
+                />
               </Link>
             </div>
           </div>
@@ -144,18 +145,17 @@ export default function HeroSection() {
           {/* ── RIGHT COLUMN — 536 × 600 at lg+, scales proportionally below ── */}
           <div className="relative w-full max-w-[536px] flex-shrink-0">
             <Image
-              src="/images/landingpage/bannerImage.png"
+              src="/images/LandingPage/bannerImage.png"
               alt="Tether app preview"
               width={536}
               height={600}
               className="w-full h-auto"
-              style={{ width: '100%', height: 'auto' }}
+              style={{ width: "100%", height: "auto" }}
               priority
             />
           </div>
-
         </div>
       </div>
     </section>
-  )
+  );
 }
