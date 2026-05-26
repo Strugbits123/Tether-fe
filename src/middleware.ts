@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -27,18 +27,18 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const protectedPaths = ['/dashboard', '/settings']
+  const protectedPaths = ['/dashboard', '/settings', '/messages', '/documents', '/photos', '/memoir', '/recipients']
   const isProtected = protectedPaths.some(path =>
     request.nextUrl.pathname.startsWith(path)
   )
 
   if (isProtected && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/signin', request.url))
   }
 
-  const authPaths = ['/login', '/signup']
+  const authPaths = ['/signin', '/signup', '/register']
   const isAuthPage = authPaths.some(path =>
-    request.nextUrl.pathname.startsWith(path)
+    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path)
   )
 
   if (isAuthPage && user) {
@@ -50,6 +50,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

@@ -1,11 +1,19 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Instrument_Serif } from 'next/font/google'
 import './globals.css'
 import { ToastProvider } from '@/lib/context/ToastContext'
+import { AuthProvider } from '@/lib/context/AuthContext'
 
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
+})
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  weight: ['400'],
+  style: ['normal', 'italic'],
+  variable: '--font-instrument-serif',
 })
 
 export const metadata: Metadata = {
@@ -19,10 +27,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full font-[family-name:var(--font-inter)] bg-[#F1F5F9] text-[#1E293B]">
+    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="min-h-full font-sans bg-slate-50 text-slate-900 antialiased" suppressHydrationWarning>
         <ToastProvider>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>
