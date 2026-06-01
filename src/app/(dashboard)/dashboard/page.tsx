@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { createClient } from '@/lib/supabase/client'
@@ -9,7 +9,7 @@ import SetupSteps from '@/components/dashboard/SetupSteps'
 import RecentActivity from '@/components/dashboard/RecentActivity'
 import QuickActions from '@/components/dashboard/QuickActions'
 
-export default function DashboardPage() {
+function DashboardContent() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -46,5 +46,13 @@ export default function DashboardPage() {
         <QuickActions />
       </div>
     </>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardContent />
+    </Suspense>
   )
 }
