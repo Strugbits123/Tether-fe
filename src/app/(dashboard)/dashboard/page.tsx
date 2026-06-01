@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { createClient } from '@/lib/supabase/client'
 import WelcomeBanner from '@/components/dashboard/WelcomeBanner'
@@ -12,10 +12,14 @@ import QuickActions from '@/components/dashboard/QuickActions'
 export default function DashboardPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const justOnboarded = searchParams.get('onboarded') === 'true'
   const supabase = createClient()
 
   useEffect(() => {
     if (loading) return
+    if (justOnboarded) return // skip check — just completed onboarding
+
     if (!user) {
       router.push('/signin')
       return
@@ -31,7 +35,7 @@ export default function DashboardPage() {
           router.push('/onboarding')
         }
       })
-  }, [user, loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, loading, justOnboarded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
