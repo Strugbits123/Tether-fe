@@ -8,10 +8,12 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   org: 'tether-inc',
   project: 'tether-web',
-  silent: !process.env.CI,
+  silent: true,
   widenClientFileUpload: true,
   tunnelRoute: '/monitoring',
   sourcemaps: { disable: true },
-  disableLogger: true,
-  automaticVercelMonitors: true,
+  webpack: {
+    treeshake: { removeDebugLogging: true },
+    automaticVercelMonitors: true,
+  },
 })
