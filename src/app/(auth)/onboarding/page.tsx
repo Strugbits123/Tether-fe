@@ -128,7 +128,7 @@ export default function OnboardingPage() {
       await api.post('/users/onboarding/complete', {}, token)
 
       showToast('Welcome to Tether!', 'success')
-      router.push('/dashboard')
+      router.push('/dashboard?onboarded=true')
     } catch (err: any) {
       showToast(err.message || 'Something went wrong. Please try again.', 'error')
     } finally {
