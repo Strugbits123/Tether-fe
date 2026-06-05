@@ -12,18 +12,18 @@ export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
       className="h-16 bg-white flex items-center"
       style={{ borderBottom: '0.8px solid #E5E7EB' }}
     >
-      <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-3 h-[63.2px]">
+      <div className="w-full max-w-[1280px] mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3 h-[63.2px]">
         {/* Mobile menu button */}
         <button
           onClick={onMenuClick}
-          className="lg:hidden p-2 -ml-2 rounded-lg text-[#4A5565] hover:bg-gray-100 transition-colors flex-shrink-0"
+          className="lg:hidden p-2 -ml-1 rounded-lg text-[#4A5565] hover:bg-gray-100 transition-colors flex-shrink-0"
           aria-label="Open menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Search */}
-        <div className="flex-1 max-w-[672px]">
+        {/* Search — full bar on >=sm, icon-only on small */}
+        <div className="flex-1 min-w-0 max-w-[672px] hidden sm:block">
           <div
             className="w-full h-9 px-3 flex items-center gap-2 rounded-lg"
             style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}
@@ -37,12 +37,20 @@ export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
             />
           </div>
         </div>
+        <div className="flex-1 sm:hidden" />
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           <button
             type="button"
-            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
+            className="sm:hidden w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
+            aria-label="Search"
+          >
+            <Search className="w-4 h-4 text-[#4A5565]" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            className="hidden sm:flex w-9 h-9 rounded-lg items-center justify-center hover:bg-gray-100 transition-colors"
             aria-label="Help"
           >
             <HelpCircle className="w-4 h-4 text-[#4A5565]" strokeWidth={2} />
