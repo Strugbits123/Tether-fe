@@ -86,7 +86,7 @@ function slideStyle(active: boolean): React.CSSProperties {
   }
 }
 
-export default function MemoirMockup() {
+export default function StoryMockup() {
   /* 0 = cover, 1 = ch1, 2 = exhibits, 3 = ch2 */
   const [slide, setSlide] = useState(0)
 
@@ -109,7 +109,7 @@ export default function MemoirMockup() {
           <div className="aspect-[4/3] bg-gradient-to-br from-[#F8F7F4] to-[#E5E4E0] flex items-center justify-center p-12">
             <div className="text-center space-y-5">
               <div className="inline-block px-4 py-1.5 bg-[#4F46E5]/10 rounded-full">
-                <p className="text-[11px] font-semibold text-[#4F46E5] uppercase tracking-wider">A Memoir</p>
+                <p className="text-[11px] font-semibold text-[#4F46E5] uppercase tracking-wider">A Story</p>
               </div>
               <h1
                 className="text-[40px] leading-[1.1] text-[#111827]"
@@ -266,7 +266,7 @@ export default function MemoirMockup() {
           <button
             key={i}
             type="button"
-            aria-label={`Show memoir slide ${i + 1}`}
+            aria-label={`Show story slide ${i + 1}`}
             onClick={() => setSlide(i)}
             className="w-2 h-2 rounded-full transition-all duration-300 cursor-pointer"
             style={{ backgroundColor: slide === i ? '#4F46E5' : '#D1D5DB' }}
