@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import {
   Home,
@@ -23,18 +23,19 @@ interface DashboardSidebarProps {
   onClose: () => void
 }
 
-const navItems = [
-  { label: 'Home', icon: Home, active: true },
-  { label: 'Docs & Files', icon: FileText },
-  { label: 'Photos', icon: ImageIcon },
-  { label: 'Messages', icon: MessageSquare },
-  { label: 'My Memoir', icon: BookOpen },
-  { label: 'Access', icon: Shield },
-  { label: 'Activity', icon: Activity },
+const navItems: { label: string; icon: typeof Home; href?: string }[] = [
+  { label: 'Home',          icon: Home,           href: '/dashboard' },
+  { label: 'Docs & Files',  icon: FileText,       href: '/docs' },
+  { label: 'Photos',        icon: ImageIcon,      href: '/photos' },
+  { label: 'Messages',      icon: MessageSquare,  href: '/messages' },
+  { label: 'My Memoir',     icon: BookOpen,       href: '/memoir' },
+  { label: 'Access',        icon: Shield,         href: '/access' },
+  { label: 'Activity',      icon: Activity,       href: '/activity' },
 ]
 
 export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSidebarProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { profile, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -111,16 +112,25 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
           <nav className="p-3 flex flex-col gap-1">
             {navItems.map((item) => {
               const Icon = item.icon
+              const isActive =
+                !!item.href &&
+                (pathname === item.href || pathname?.startsWith(item.href + '/'))
               return (
                 <button
                   key={item.label}
                   type="button"
+                  onClick={() => {
+                    if (item.href) {
+                      router.push(item.href)
+                      onClose()
+                    }
+                  }}
                   className={`
                     flex items-center gap-3 px-4 py-3 rounded-lg w-full text-left
                     text-white text-[16px] font-semibold leading-6
                     transition-colors cursor-pointer
                     ${
-                      item.active
+                      isActive
                         ? 'bg-white/10 border-l-2 border-white'
                         : 'hover:bg-white/5 border-l-2 border-transparent'
                     }
