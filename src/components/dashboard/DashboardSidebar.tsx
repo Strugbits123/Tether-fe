@@ -28,7 +28,7 @@ const navItems: { label: string; icon: typeof Home; href?: string }[] = [
   { label: 'Docs & Files',  icon: FileText,       href: '/docs' },
   { label: 'Photos',        icon: ImageIcon,      href: '/photos' },
   { label: 'Messages',      icon: MessageSquare,  href: '/messages' },
-  { label: 'My Memoir',     icon: BookOpen,       href: '/memoir' },
+  { label: 'My Story',     icon: BookOpen,       href: '/story' },
   { label: 'Access',        icon: Shield,         href: '/access' },
   { label: 'Activity',      icon: Activity,       href: '/activity' },
 ]
