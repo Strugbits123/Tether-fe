@@ -22,6 +22,7 @@ import CreateMessageModal, {
 import AssignRecipientsModal from '@/components/dashboard/AssignRecipientsModal'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
+import { withRetry } from '@/lib/utils/retry'
 import {
   type Assignment,
   type Message,
@@ -131,7 +132,7 @@ export default function MessagesPage() {
       return
     }
     try {
-      const data = await getMessages(token)
+      const data = await withRetry(() => getMessages(token))
       setItems(data)
     } catch (e) {
       showToast(errorMessage(e, 'Could not load your messages.'), 'error')
@@ -243,7 +244,7 @@ export default function MessagesPage() {
     const token = await getToken()
     if (!token) {
       showToast('Your session has expired. Please sign in again.', 'error')
-      return
+      throw new Error('No session')
     }
     try {
       await updateMessage(token, m.id, {
@@ -251,13 +252,14 @@ export default function MessagesPage() {
         notes: m.notes || undefined,
         // Only text messages carry an editable body.
         body: m.messageType === 'write' ? m.body : undefined,
-        assignments: buildAssignments(m.audience, m.selectedIndividualId ?? ''),
+        assignments: buildAssignments(m.audience, m.selectedIndividualIds ?? []),
       })
       showToast('Message updated', 'success')
-      setEditing(null)
       load()
     } catch (e) {
       showToast(errorMessage(e, 'Could not update the message.'), 'error')
+      // Re-throw so the modal keeps its loading state cleared and stays open.
+      throw e
     }
   }
 
