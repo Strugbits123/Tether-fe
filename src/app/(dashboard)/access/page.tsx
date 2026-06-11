@@ -71,12 +71,16 @@ export default function AccessPage() {
       return
     }
     try {
-      const [recipientsData, rmData] = await Promise.all([
+      const [recipientsResult, rmResult] = await Promise.allSettled([
         getRecipients(token),
         getReleaseManager(token),
       ])
-      setRecipients(recipientsData)
-      setReleaseManager(rmData)
+      if (recipientsResult.status === 'fulfilled') {
+        setRecipients(recipientsResult.value)
+      }
+      if (rmResult.status === 'fulfilled') {
+        setReleaseManager(rmResult.value)
+      }
     } catch {
       showToast('Failed to load your access settings.', 'error')
     } finally {

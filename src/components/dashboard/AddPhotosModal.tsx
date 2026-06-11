@@ -17,16 +17,25 @@ import { buildAssignments, formatFileSize } from '@/lib/utils/assignments'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
 import { requestPhotoUploadUrls, createPhotosBatch } from '@/lib/api/photos'
 import { requestDocUploadUrls, createDocumentsBatch } from '@/lib/api/documents'
+import {
+  createVideoUploadUrl,
+  createAudioUploadUrl,
+  confirmAudioUpload,
+} from '@/lib/api/messages'
 
 interface AddPhotosModalProps {
   open: boolean
   onClose: () => void
   /** Called after files are successfully uploaded + recorded on the backend. */
   onCreated?: () => void
+  /** Skip this onboarding step without uploading. */
+  onSkip?: () => void
   /** 'photo' (default) or 'document' — switches accepted types, limits, and endpoints. */
   kind?: 'photo' | 'document'
   title?: string
   subtitle?: string
+  /** Onboarding mode: 1-file limit, audio/video → video message, Skip button. */
+  isOnboarding?: boolean
 }
 
 const GROUP_OPTIONS = [
@@ -40,9 +49,12 @@ const GROUP_OPTIONS = [
 
 const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic'
 const DOC_ACCEPT = '.pdf,.docx,.doc,.jpg,.jpeg,.png,.heic'
+const ONBOARDING_ACCEPT = '.pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,video/*,audio/*'
 const MAX_FILES = 10
 const PHOTO_MAX_BYTES = 10 * 1024 * 1024
 const DOC_MAX_BYTES = 25 * 1024 * 1024
+
+const isMediaFile = (f: File) => f.type.startsWith('audio/') || f.type.startsWith('video/')
 
 function deriveDocFileType(mimeType: string): string {
   const map: Record<string, string> = {
@@ -75,9 +87,11 @@ export default function AddPhotosModal({
   open,
   onClose,
   onCreated,
+  onSkip,
   kind = 'photo',
   title = 'Add Photos',
   subtitle = "Upload your most cherished photos — moments you want your family to see and keep forever. They'll be safely stored and shared when your Tether is released.",
+  isOnboarding = false,
 }: AddPhotosModalProps) {
   const { showToast } = useToast()
   const isDoc = kind === 'document'
@@ -180,18 +194,21 @@ export default function AddPhotosModal({
 
   const mergeFiles = (incoming: File[]) => {
     const errs: string[] = []
+    const maxAllowed = isOnboarding ? 1 : MAX_FILES
     setFiles((prev) => {
       const seen = new Set(prev.map((f) => `${f.name}::${f.size}::${f.lastModified}`))
-      const next = [...prev]
+      const next = isOnboarding ? [] : [...prev] // onboarding: always replace with new selection
       for (const f of incoming) {
         const key = `${f.name}::${f.size}::${f.lastModified}`
-        if (seen.has(key)) continue
-        if (f.size > maxBytes) {
+        if (seen.has(key) && !isOnboarding) continue
+        // In onboarding, allow audio/video without size check (backend limits apply)
+        if (!isMediaFile(f) && f.size > maxBytes) {
           errs.push(`${f.name} exceeds ${sizeLabel} limit`)
           continue
         }
-        if (next.length >= MAX_FILES) {
-          errs.push(`Maximum ${MAX_FILES} ${isDoc ? 'documents' : 'photos'} per upload`)
+        if (next.length >= maxAllowed) {
+          if (isOnboarding) errs.push('Only 1 file can be uploaded in this step')
+          else errs.push(`Maximum ${MAX_FILES} ${isDoc ? 'documents' : 'photos'} per upload`)
           break
         }
         seen.add(key)
@@ -217,6 +234,38 @@ export default function AddPhotosModal({
   }
   const removeFile = (idx: number) => setFiles((prev) => prev.filter((_, i) => i !== idx))
 
+  const handleMediaAsMessage = async (file: File, token: string) => {
+    const assignments = [{ scope: 'assign_later' as const }]
+    if (file.type.startsWith('video/')) {
+      const { uploadUrl } = await createVideoUploadUrl(token, {
+        title: 'untitled',
+        assignments,
+      })
+      const res = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      })
+      if (!res.ok) throw new Error('Video upload failed. Please try again.')
+    } else {
+      const { signedUploadUrl, messageId } = await createAudioUploadUrl(token, {
+        title: 'untitled',
+        assignments,
+        fileType: file.type,
+      })
+      const res = await fetch(signedUploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      })
+      if (!res.ok) throw new Error('Audio upload failed. Please try again.')
+      await confirmAudioUpload(token, messageId, {
+        durationSeconds: 0,
+        fileSizeBytes: file.size,
+      })
+    }
+  }
+
   const handleUpload = async () => {
     if (uploading) return
     setErrors([])
@@ -232,6 +281,22 @@ export default function AddPhotosModal({
     const token = session?.access_token
     if (!token) {
       showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+
+    // In onboarding mode, route audio/video to message creation.
+    if (isOnboarding && files.length > 0 && isMediaFile(files[0])) {
+      setUploading(true)
+      try {
+        await handleMediaAsMessage(files[0], token)
+        showToast('File saved as a message', 'success')
+        onCreated?.()
+        onClose()
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Upload failed', 'error')
+      } finally {
+        setUploading(false)
+      }
       return
     }
 
@@ -338,8 +403,8 @@ export default function AddPhotosModal({
       <input
         ref={fileInputRef}
         type="file"
-        accept={isDoc ? DOC_ACCEPT : PHOTO_ACCEPT}
-        multiple
+        accept={isOnboarding ? ONBOARDING_ACCEPT : (isDoc ? DOC_ACCEPT : PHOTO_ACCEPT)}
+        multiple={!isOnboarding}
         onChange={handleFilesChange}
         className="hidden"
       />
@@ -449,7 +514,9 @@ export default function AddPhotosModal({
                     color: '#99A1AF',
                   }}
                 >
-                  {isDoc
+                  {isOnboarding
+                    ? '1 file · PDF, DOCX, images, video, or audio'
+                    : isDoc
                     ? `Up to ${MAX_FILES} files · ${sizeLabel} each`
                     : 'You can select multiple images at once'}
                 </span>
@@ -741,11 +808,10 @@ export default function AddPhotosModal({
           >
             <button
               type="button"
-              onClick={onClose}
+              onClick={onSkip ?? onClose}
               disabled={uploading}
               className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
               style={{
-                width: 77.6,
                 height: 36,
                 padding: '7.8px 15.8px',
                 borderRadius: 8,
@@ -758,13 +824,13 @@ export default function AddPhotosModal({
                 color: '#0A0A0A',
               }}
             >
-              Cancel
+              {isOnboarding ? 'Skip' : 'Cancel'}
             </button>
             <button
               type="button"
               onClick={handleUpload}
-              disabled={uploading}
-              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+              disabled={uploading || files.length === 0}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 height: 36,
                 padding: '8px 16px',
@@ -779,8 +845,8 @@ export default function AddPhotosModal({
             >
               {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
               {uploading
-                ? `Uploading ${progress.current} of ${progress.total}…`
-                : 'Upload'}
+                ? `Uploading…`
+                : isOnboarding ? 'Continue →' : 'Upload'}
             </button>
           </div>
         </div>
