@@ -13,6 +13,10 @@ interface AddReleaseManagerModalProps {
   onClose: () => void
   /** Called after a Release Manager is successfully created on the backend. */
   onCreated?: () => void
+  /** Skip this onboarding step without saving. */
+  onSkip?: () => void
+  /** Onboarding mode: keep modal open after add, show Skip + Continue footer. */
+  isOnboarding?: boolean
 }
 
 const RELATIONSHIP_OPTIONS = [
@@ -31,6 +35,8 @@ export default function AddReleaseManagerModal({
   open,
   onClose,
   onCreated,
+  onSkip,
+  isOnboarding = false,
 }: AddReleaseManagerModalProps) {
   const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
@@ -43,6 +49,8 @@ export default function AddReleaseManagerModal({
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [addedThisSession, setAddedThisSession] = useState(0)
 
   // Reset the form ONLY when the modal transitions to open — never on a
   // re-render or after an API error, so the user's input is preserved on failure.
@@ -56,7 +64,9 @@ export default function AddReleaseManagerModal({
     setNote('')
     setFormError(null)
     setEmailError(null)
+    setFieldErrors({})
     setLoading(false)
+    setAddedThisSession(0)
   }, [open])
 
   // Escape-to-close + scroll lock.
@@ -76,13 +86,26 @@ export default function AddReleaseManagerModal({
 
   if (!open) return null
 
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!firstName.trim()) errs.firstName = 'First name is required.'
+    if (!lastName.trim()) errs.lastName = 'Last name is required.'
+    if (!email.trim()) {
+      errs.email = 'Email is required.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errs.email = 'Enter a valid email address.'
+    }
+    if (phone.trim() && !/^\+?[\d\s()\-]{7,20}$/.test(phone.trim())) {
+      errs.phone = 'Enter a valid phone number.'
+    }
+    setFieldErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const handleAdd = async () => {
     setFormError(null)
     setEmailError(null)
-    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
-      setFormError('Please fill in the required fields.')
-      return
-    }
+    if (!validate()) return
 
     const supabase = createClient()
     const {
@@ -105,8 +128,16 @@ export default function AddReleaseManagerModal({
         note: note.trim() || undefined,
       })
       showToast('Release Manager added successfully', 'success')
-      onCreated?.()
-      onClose()
+      if (isOnboarding) {
+        // Keep modal open — let user confirm and click Continue.
+        setAddedThisSession((n) => n + 1)
+        setFirstName(''); setLastName(''); setEmail(''); setPhone('')
+        setRelationship('Family'); setNote('')
+        setFormError(null); setEmailError(null); setFieldErrors({})
+      } else {
+        onCreated?.()
+        onClose()
+      }
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 409) {
         setEmailError(
@@ -196,10 +227,22 @@ export default function AddReleaseManagerModal({
           {/* First / Last name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="First Name" required>
-              <TextInput value={firstName} onChange={setFirstName} placeholder="Enter first Name" />
+              <TextInput
+                value={firstName}
+                onChange={(v) => { setFirstName(v); if (fieldErrors.firstName) setFieldErrors((p) => ({ ...p, firstName: '' })) }}
+                placeholder="Enter first Name"
+                invalid={!!fieldErrors.firstName}
+              />
+              {fieldErrors.firstName && <FieldError message={fieldErrors.firstName} />}
             </Field>
             <Field label="Last Name" required>
-              <TextInput value={lastName} onChange={setLastName} placeholder="Enter last name" />
+              <TextInput
+                value={lastName}
+                onChange={(v) => { setLastName(v); if (fieldErrors.lastName) setFieldErrors((p) => ({ ...p, lastName: '' })) }}
+                placeholder="Enter last name"
+                invalid={!!fieldErrors.lastName}
+              />
+              {fieldErrors.lastName && <FieldError message={fieldErrors.lastName} />}
             </Field>
           </div>
 
@@ -210,22 +253,25 @@ export default function AddReleaseManagerModal({
               onChange={(v) => {
                 setEmail(v)
                 if (emailError) setEmailError(null)
+                if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: '' }))
               }}
               placeholder="email@example.com"
               type="email"
-              invalid={!!emailError}
+              invalid={!!emailError || !!fieldErrors.email}
             />
-            {emailError && <FieldError message={emailError} />}
+            {(emailError || fieldErrors.email) && <FieldError message={emailError ?? fieldErrors.email!} />}
           </Field>
 
           {/* Phone Number — no asterisk */}
           <Field label="Phone Number">
             <TextInput
               value={phone}
-              onChange={setPhone}
+              onChange={(v) => { setPhone(v); if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: '' })) }}
               placeholder="+1 (555) 123-4567"
               type="tel"
+              invalid={!!fieldErrors.phone}
             />
+            {fieldErrors.phone && <FieldError message={fieldErrors.phone} />}
           </Field>
 
           {/* Relationship */}
@@ -308,14 +354,18 @@ export default function AddReleaseManagerModal({
           }}
         >
           {formError && <FieldError message={formError} />}
+          {isOnboarding && addedThisSession > 0 && (
+            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#16A34A', fontWeight: 500 }}>
+              Release Manager added ✓
+            </p>
+          )}
           <div className="flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={onSkip ?? onClose}
               disabled={loading}
               className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
               style={{
-                width: 77.6,
                 height: 36,
                 padding: '7.8px 15.8px',
                 borderRadius: 8,
@@ -328,29 +378,52 @@ export default function AddReleaseManagerModal({
                 color: '#0A0A0A',
               }}
             >
-              Cancel
+              {isOnboarding ? 'Skip' : 'Cancel'}
             </button>
-            <button
-              type="button"
-              onClick={handleAdd}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
-              style={{
-                minWidth: 80,
-                height: 36,
-                padding: '8px 16px',
-                borderRadius: 8,
-                background: '#4F46E5',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 14,
-                lineHeight: '20px',
-                color: '#FFFFFF',
-              }}
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? 'Adding…' : 'Add'}
-            </button>
+            {!(isOnboarding && addedThisSession > 0) && (
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={loading}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+                style={{
+                  minWidth: 80,
+                  height: 36,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#4F46E5',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#FFFFFF',
+                }}
+              >
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? 'Adding…' : 'Add'}
+              </button>
+            )}
+            {isOnboarding && (
+              <button
+                type="button"
+                onClick={() => { onCreated?.(); onClose() }}
+                disabled={addedThisSession === 0}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  height: 36,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#4F46E5',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#FFFFFF',
+                }}
+              >
+                Continue →
+              </button>
+            )}
           </div>
         </div>
       </div>
