@@ -1,99 +1,288 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import {
   FileText,
+  Loader2,
   Mic,
   MoreVertical,
   Pencil,
+  Play,
   Plus,
   Trash2,
-  Users,
   UserPlus,
   Video,
+  X,
 } from 'lucide-react'
-import CreateMessageModal, { type EditableMessage } from '@/components/dashboard/CreateMessageModal'
+import CreateMessageModal, {
+  type EditableMessage,
+  buildAssignments,
+} from '@/components/dashboard/CreateMessageModal'
 import AssignRecipientsModal from '@/components/dashboard/AssignRecipientsModal'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import {
+  type Assignment,
+  type Message,
+  assignmentsToAudience,
+  deleteMessage,
+  getAudioUrl,
+  getMessage,
+  getMessages,
+  getMessageStatus,
+  getPlaybackToken,
+  updateMessage,
+} from '@/lib/api/messages'
 
-type MessageKind = 'audio' | 'video' | 'written'
+const MuxPlayer = dynamic(() => import('@mux/mux-player-react'), { ssr: false })
 
-interface MessageItem {
-  id: string
-  title: string
-  recipientGroup: string
-  groups: string[]
-  individualIds: string[]
-  kind: MessageKind
-  duration?: string
-  excerpt?: string
-  body?: string
-  notes?: string
-  createdAgo: string
-}
+type FilterKey = 'all' | Message['type']
 
-const INITIAL_MESSAGES: MessageItem[] = [
-  { id: 'm1', title: 'Message to My Kids', recipientGroup: 'Children', groups: ['All Family'], individualIds: [], kind: 'audio', duration: '2:34', createdAgo: '2 minutes ago' },
-  { id: 'm2', title: "For My Daughter's Wedding", recipientGroup: 'Sarah C.', groups: [], individualIds: ['p1'], kind: 'video', duration: '3:34', createdAgo: '3 days ago' },
-  { id: 'm3', title: 'Words of Wisdom', recipientGroup: 'All Family', groups: ['All Family'], individualIds: [], kind: 'written', excerpt: 'To my beloved family,', body: 'To my beloved family, I want you to know how much I love each of you...', createdAgo: '1 week ago' },
-  { id: 'm4', title: "For My Daughter's Wedding", recipientGroup: 'Sarah C.', groups: [], individualIds: ['p1'], kind: 'video', duration: '3:34', createdAgo: '3 days ago' },
-  { id: 'm5', title: 'Message to My Kids', recipientGroup: 'Children', groups: ['All Family'], individualIds: [], kind: 'audio', duration: '2:34', createdAgo: '2 minutes ago' },
-  { id: 'm6', title: 'Words of Wisdom', recipientGroup: 'All Family', groups: ['All Family'], individualIds: [], kind: 'written', excerpt: 'To my beloved family,', body: 'To my beloved family,', createdAgo: '1 week ago' },
-  { id: 'm7', title: 'Message to My Kids', recipientGroup: 'Children', groups: ['All Family'], individualIds: [], kind: 'audio', duration: '2:34', createdAgo: '2 minutes ago' },
-  { id: 'm8', title: "For My Daughter's Wedding", recipientGroup: 'Sarah C.', groups: [], individualIds: ['p1'], kind: 'video', duration: '3:34', createdAgo: '3 days ago' },
-  { id: 'm9', title: 'Message to My Kids', recipientGroup: 'Children', groups: ['All Family'], individualIds: [], kind: 'audio', duration: '2:34', createdAgo: '2 minutes ago' },
-  { id: 'm10', title: 'Words of Wisdom', recipientGroup: 'All Family', groups: ['All Family'], individualIds: [], kind: 'written', excerpt: 'To my beloved family,', body: 'To my beloved family,', createdAgo: '1 week ago' },
-]
-
-const FILTERS: { key: 'all' | MessageKind; label: string; icon?: typeof Mic }[] = [
+const FILTERS: { key: FilterKey; label: string; icon?: typeof Mic }[] = [
   { key: 'all', label: 'All' },
   { key: 'audio', label: 'Audio', icon: Mic },
   { key: 'video', label: 'Video', icon: Video },
-  { key: 'written', label: 'Written', icon: FileText },
+  { key: 'text', label: 'Written', icon: FileText },
 ]
 
+const STATUS_BADGE: Record<
+  Message['processing_status'],
+  { label: string; bg: string; color: string }
+> = {
+  uploading: { label: 'Uploading', bg: '#FEF9C2', color: '#A16207' },
+  processing: { label: 'Processing', bg: '#DBEAFE', color: '#1447E6' },
+  ready: { label: 'Ready', bg: '#DCFCE7', color: '#016630' },
+  failed: { label: 'Failed', bg: '#FEE2E2', color: '#C10007' },
+}
+
+const ASSIGN_GROUP_MAP: Record<string, Assignment> = {
+  'All Recipients': { scope: 'all' },
+  'All Family': { scope: 'group', groupValue: 'family' },
+  'All Friends': { scope: 'group', groupValue: 'friends' },
+  'All Others': { scope: 'group', groupValue: 'others' },
+  'Release Manager': { scope: 'release_manager' },
+}
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+/** Capitalises the first letter so validation errors read in sentence case. */
+function toSentenceCase(message: string): string {
+  if (!message) return message
+  return message.charAt(0).toUpperCase() + message.slice(1)
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  return toSentenceCase(e instanceof Error ? e.message : fallback)
+}
+
+function formatDuration(sec?: number): string | undefined {
+  if (!sec || sec <= 0) return undefined
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m === 0) return `${s} sec`
+  if (s === 0) return `${m} min`
+  return `${m} min ${s} sec`
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function typeLabel(type: Message['type']): string {
+  return type === 'audio'
+    ? 'Audio message'
+    : type === 'video'
+    ? 'Video message'
+    : 'Written message'
+}
+
 export default function MessagesPage() {
-  const [items, setItems] = useState<MessageItem[]>(INITIAL_MESSAGES)
-  const [filter, setFilter] = useState<'all' | MessageKind>('all')
+  const { showToast } = useToast()
 
-  // Edit modal
-  const [editing, setEditing] = useState<MessageItem | null>(null)
+  const [items, setItems] = useState<Message[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<FilterKey>('all')
+
+  // Modals
+  const [editing, setEditing] = useState<Message | null>(null)
   const [creating, setCreating] = useState(false)
+  const [assigning, setAssigning] = useState<Message | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<Message | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [playing, setPlaying] = useState<Message | null>(null)
 
-  // Assign modal
-  const [assigning, setAssigning] = useState<MessageItem | null>(null)
+  const load = useCallback(async () => {
+    const token = await getToken()
+    if (!token) {
+      setLoading(false)
+      return
+    }
+    try {
+      const data = await getMessages(token)
+      setItems(data)
+    } catch (e) {
+      showToast(errorMessage(e, 'Could not load your messages.'), 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
 
-  const visible = items.filter((m) => filter === 'all' || m.kind === filter)
+  useEffect(() => {
+    load()
+  }, [load])
 
-  const handleDelete = (id: string) => setItems((prev) => prev.filter((m) => m.id !== id))
-
-  const handleSaveEdit = (m: EditableMessage) => {
-    if (!m.id) return
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === m.id
-          ? {
-              ...it,
-              title: m.title || it.title,
-              kind: m.messageType === 'write' ? 'written' : m.messageType,
-              body: m.body ?? it.body,
-              notes: m.notes,
-              groups: m.audience,
-              individualIds: m.selectedIndividualId ? [m.selectedIndividualId] : it.individualIds,
-            }
-          : it,
-      ),
+  // Poll messages that are still being processed.
+  const pollRef = useRef<number | null>(null)
+  useEffect(() => {
+    const pending = items.filter(
+      (m) => m.processing_status !== 'ready' && m.processing_status !== 'failed',
     )
-    setEditing(null)
+    if (pending.length === 0) {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+      return
+    }
+    if (pollRef.current) return // already polling
+
+    pollRef.current = window.setInterval(async () => {
+      const token = await getToken()
+      if (!token) return
+      const stillPending = items.filter(
+        (m) => m.processing_status !== 'ready' && m.processing_status !== 'failed',
+      )
+      await Promise.all(
+        stillPending.map(async (m) => {
+          try {
+            const status = await getMessageStatus(token, m.id)
+            setItems((prev) =>
+              prev.map((it) =>
+                it.id === m.id
+                  ? {
+                      ...it,
+                      processing_status:
+                        (status.processingStatus as Message['processing_status']) ??
+                        it.processing_status,
+                      transcription_status:
+                        (status.transcriptionStatus as Message['transcription_status']) ??
+                        it.transcription_status,
+                      transcript: status.transcript ?? it.transcript,
+                    }
+                  : it,
+              ),
+            )
+          } catch {
+            /* transient — try again next tick */
+          }
+        }),
+      )
+    }, 5000)
+
+    return () => {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [items])
+
+  const visible = items.filter((m) => filter === 'all' || m.type === filter)
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return
+    const token = await getToken()
+    if (!token) {
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteMessage(token, confirmDelete.id)
+      setItems((prev) => prev.filter((m) => m.id !== confirmDelete.id))
+      showToast('Message deleted', 'success')
+      setConfirmDelete(null)
+    } catch (e) {
+      showToast(errorMessage(e, 'Could not delete the message.'), 'error')
+    } finally {
+      setDeleting(false)
+    }
   }
 
-  const handleSaveAssign = (groups: string[], individualIds: string[]) => {
+  // Fetch the full message (with assignments) so the edit modal can pre-fill
+  // the audience. Falls back to the list item if the fetch fails.
+  const handleEdit = async (m: Message) => {
+    const token = await getToken()
+    if (!token) {
+      setEditing(m)
+      return
+    }
+    try {
+      const full = await getMessage(token, m.id)
+      setEditing(full)
+    } catch {
+      setEditing(m)
+    }
+  }
+
+  const handleSaveEdit = async (m: EditableMessage) => {
+    if (!m.id) return
+    const token = await getToken()
+    if (!token) {
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    try {
+      await updateMessage(token, m.id, {
+        title: m.title,
+        notes: m.notes || undefined,
+        // Only text messages carry an editable body.
+        body: m.messageType === 'write' ? m.body : undefined,
+        assignments: buildAssignments(m.audience, m.selectedIndividualId ?? ''),
+      })
+      showToast('Message updated', 'success')
+      setEditing(null)
+      load()
+    } catch (e) {
+      showToast(errorMessage(e, 'Could not update the message.'), 'error')
+    }
+  }
+
+  const handleSaveAssign = async (groups: string[], individualIds: string[]) => {
     if (!assigning) return
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === assigning.id ? { ...it, groups, individualIds } : it,
-      ),
-    )
-    setAssigning(null)
+    const token = await getToken()
+    if (!token) {
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    const assignments: Assignment[] = []
+    for (const g of groups) {
+      if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g])
+    }
+    for (const id of individualIds) {
+      assignments.push({ scope: 'individual', recipientId: id })
+    }
+    if (assignments.length === 0) assignments.push({ scope: 'assign_later' })
+    try {
+      await updateMessage(token, assigning.id, { assignments })
+      showToast('Recipients updated', 'success')
+      setAssigning(null)
+    } catch (e) {
+      showToast(errorMessage(e, 'Could not update recipients.'), 'error')
+    }
   }
 
   return (
@@ -185,17 +374,87 @@ export default function MessagesPage() {
       </div>
 
       {/* Cards grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {visible.map((m) => (
-          <MessageCard
-            key={m.id}
-            item={m}
-            onEdit={() => setEditing(m)}
-            onAssign={() => setAssigning(m)}
-            onDelete={() => handleDelete(m.id)}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="animate-pulse flex items-start gap-4"
+              style={{
+                borderRadius: 14,
+                border: '1.25px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
+                padding: 16,
+              }}
+            >
+              <div
+                className="flex-shrink-0"
+                style={{ width: 80, height: 80, borderRadius: 10, background: '#EEF2FF' }}
+              />
+              <div className="flex-1 flex flex-col gap-2 pt-1">
+                <div className="h-4 bg-gray-200 rounded w-2/3" />
+                <div className="h-3 bg-gray-100 rounded w-1/2" />
+                <div className="h-3 bg-gray-100 rounded w-1/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : visible.length === 0 ? (
+        <div
+          className="flex flex-col items-center justify-center text-center gap-3"
+          style={{
+            borderRadius: 14,
+            border: '1.25px dashed rgba(0,0,0,0.12)',
+            background: '#FFFFFF',
+            padding: '48px 24px',
+          }}
+        >
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)',
+            }}
+          >
+            <FileText className="w-7 h-7" color="#4F39F6" strokeWidth={2} />
+          </div>
+          <p
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              fontSize: 16,
+              color: '#101828',
+            }}
+          >
+            No messages yet
+          </p>
+          <p
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 400,
+              fontSize: 14,
+              color: '#4A5565',
+            }}
+          >
+            Create your first message to share your guidance and love.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visible.map((m) => (
+            <MessageCard
+              key={m.id}
+              item={m}
+              onEdit={() => handleEdit(m)}
+              onAssign={() => setAssigning(m)}
+              onDelete={() => setConfirmDelete(m)}
+              onPlay={() => setPlaying(m)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Modals */}
       <CreateMessageModal
@@ -203,6 +462,7 @@ export default function MessagesPage() {
         onClose={() => setCreating(false)}
         headerTitle="New Message"
         headerSubtitle="Create a new message to share with your loved ones"
+        onCreated={() => load()}
       />
       <CreateMessageModal
         open={!!editing}
@@ -213,12 +473,11 @@ export default function MessagesPage() {
           editing
             ? {
                 id: editing.id,
-                audience: editing.groups,
-                selectedIndividualId: editing.individualIds[0],
+                ...assignmentsToAudience(editing.assignments),
                 messageType:
-                  editing.kind === 'written'
+                  editing.type === 'text'
                     ? 'write'
-                    : editing.kind === 'video'
+                    : editing.type === 'video'
                     ? 'video'
                     : 'audio',
                 title: editing.title,
@@ -233,10 +492,21 @@ export default function MessagesPage() {
         open={!!assigning}
         onClose={() => setAssigning(null)}
         messageTitle={assigning?.title ?? ''}
-        initialGroups={assigning?.groups ?? []}
-        initialIndividualIds={assigning?.individualIds ?? []}
         onSave={handleSaveAssign}
       />
+
+      {playing && (
+        <PlaybackModal message={playing} onClose={() => setPlaying(null)} />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDeleteModal
+          title={confirmDelete.title}
+          deleting={deleting}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={handleDelete}
+        />
+      )}
     </div>
   )
 }
@@ -248,11 +518,13 @@ function MessageCard({
   onEdit,
   onAssign,
   onDelete,
+  onPlay,
 }: {
-  item: MessageItem
+  item: Message
   onEdit: () => void
   onAssign: () => void
   onDelete: () => void
+  onPlay: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -265,9 +537,12 @@ function MessageCard({
     return () => document.removeEventListener('mousedown', handle)
   }, [menuOpen])
 
-  const Icon = item.kind === 'audio' ? Mic : item.kind === 'video' ? Video : FileText
-  const typeLabel =
-    item.kind === 'audio' ? 'Audio message' : item.kind === 'video' ? 'Video message' : 'Written message'
+  const Icon = item.type === 'audio' ? Mic : item.type === 'video' ? Video : FileText
+  const duration = formatDuration(item.duration_seconds)
+  const badge = STATUS_BADGE[item.processing_status]
+  const isPlayable =
+    (item.type === 'video' || item.type === 'audio') &&
+    item.processing_status === 'ready'
 
   return (
     <div
@@ -280,8 +555,13 @@ function MessageCard({
       }}
     >
       {/* Icon tile */}
-      <div
-        className="flex items-center justify-center flex-shrink-0"
+      <button
+        type="button"
+        onClick={isPlayable ? onPlay : undefined}
+        aria-label={isPlayable ? 'Play message' : undefined}
+        className={`flex items-center justify-center flex-shrink-0 relative ${
+          isPlayable ? 'cursor-pointer group' : 'cursor-default'
+        }`}
         style={{
           width: 80,
           height: 80,
@@ -290,7 +570,15 @@ function MessageCard({
         }}
       >
         <Icon className="w-8 h-8" color="#4F39F6" strokeWidth={2} />
-      </div>
+        {isPlayable && (
+          <span
+            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ borderRadius: 10, background: 'rgba(79,57,246,0.85)' }}
+          >
+            <Play className="w-7 h-7 text-white fill-white" strokeWidth={2} />
+          </span>
+        )}
+      </button>
 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-2">
@@ -318,24 +606,28 @@ function MessageCard({
             color: '#4A5565',
           }}
         >
-          <span className="flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-[#4A5565]" strokeWidth={2} />
-            {item.recipientGroup}
+          <span>{typeLabel(item.type)}</span>
+          {duration && (
+            <>
+              <span aria-hidden>•</span>
+              <span>{duration}</span>
+            </>
+          )}
+          <span
+            className="flex-shrink-0 px-2 py-[2px] rounded"
+            style={{
+              background: badge.bg,
+              color: badge.color,
+              fontSize: 11.8,
+              fontWeight: 500,
+              lineHeight: '16px',
+            }}
+          >
+            {item.processing_status !== 'ready' && (
+              <Loader2 className="inline w-3 h-3 mr-1 animate-spin align-[-1px]" />
+            )}
+            {badge.label}
           </span>
-          <span aria-hidden>•</span>
-          <span>{typeLabel}</span>
-          {item.duration && (
-            <>
-              <span aria-hidden>•</span>
-              <span>{item.duration}</span>
-            </>
-          )}
-          {item.excerpt && (
-            <>
-              <span aria-hidden>•</span>
-              <span className="truncate max-w-[200px]">{item.excerpt}</span>
-            </>
-          )}
         </div>
         <p
           style={{
@@ -346,7 +638,7 @@ function MessageCard({
             color: '#6A7282',
           }}
         >
-          Created {item.createdAgo}
+          Created {formatDate(item.created_at)}
         </p>
       </div>
 
@@ -379,6 +671,16 @@ function MessageCard({
                 '0px 4px 6px -4px rgba(0,0,0,0.1), 0px 10px 15px -3px rgba(0,0,0,0.1)',
             }}
           >
+            {isPlayable && (
+              <MenuItem
+                icon={<Play className="w-4 h-4 text-[#364153]" strokeWidth={2} />}
+                label="Play message"
+                onClick={() => {
+                  setMenuOpen(false)
+                  onPlay()
+                }}
+              />
+            )}
             <MenuItem
               icon={<Pencil className="w-4 h-4 text-[#364153]" strokeWidth={2} />}
               label="Edit message"
@@ -440,5 +742,326 @@ function MenuItem({
       {icon}
       {label}
     </button>
+  )
+}
+
+/* ---------------------- Playback modal ---------------------- */
+
+function PlaybackModal({
+  message,
+  onClose,
+}: {
+  message: Message
+  onClose: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [video, setVideo] = useState<{ playbackId: string; token: string } | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) {
+        if (active) {
+          setError('Your session has expired. Please sign in again.')
+          setLoading(false)
+        }
+        return
+      }
+      try {
+        if (message.type === 'video') {
+          const { token: playbackToken, playbackId } = await getPlaybackToken(
+            token,
+            message.id,
+          )
+          if (active) setVideo({ playbackId, token: playbackToken })
+        } else {
+          const { signedUrl } = await getAudioUrl(token, message.id)
+          if (active) setAudioUrl(signedUrl)
+        }
+      } catch (e) {
+        if (active) setError(errorMessage(e, 'Could not load playback.'))
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [message.id, message.type])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 768,
+            borderRadius: 16,
+            paddingBottom: 24,
+            boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.25)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6 z-10"
+            style={{ width: 22, height: 22, opacity: 0.7 }}
+          >
+            <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
+          </button>
+
+          <div
+            className="px-6 py-6 pr-12 sm:pr-14"
+            style={{ borderBottom: '0.8px solid #E5E7EB' }}
+          >
+            <h2
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 700,
+                fontSize: 23,
+                lineHeight: '32px',
+                color: '#101828',
+              }}
+            >
+              {message.title}
+            </h2>
+            <p
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 12.9,
+                lineHeight: '20px',
+                color: '#4A5565',
+              }}
+            >
+              {typeLabel(message.type)}
+            </p>
+          </div>
+
+          <div className="px-6 pt-6">
+            {loading ? (
+              <div
+                className="w-full flex items-center justify-center"
+                style={{ minHeight: 240 }}
+              >
+                <Loader2 className="w-8 h-8 text-[#4F46E5] animate-spin" />
+              </div>
+            ) : error ? (
+              <p className="text-sm text-red-600 text-center py-10">{error}</p>
+            ) : message.type === 'video' && video ? (
+              <div className="w-full overflow-hidden" style={{ borderRadius: 10 }}>
+                <MuxPlayer
+                  playbackId={video.playbackId}
+                  tokens={{ playback: video.token }}
+                  style={{ width: '100%', aspectRatio: '16 / 9' }}
+                  accentColor="#4F46E5"
+                />
+              </div>
+            ) : audioUrl ? (
+              <div
+                className="w-full flex flex-col items-center justify-center gap-4"
+                style={{
+                  minHeight: 200,
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #615FFF 0%, #9810FA 100%)',
+                  padding: 32,
+                }}
+              >
+                <Mic className="w-16 h-16 text-white" strokeWidth={1.5} />
+                <audio src={audioUrl} controls autoPlay className="w-full" />
+              </div>
+            ) : null}
+
+            {message.transcript && (
+              <div className="mt-5">
+                <h3
+                  className="mb-2"
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    color: '#101828',
+                  }}
+                >
+                  Transcript
+                </h3>
+                <p
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    lineHeight: '22px',
+                    color: '#4A5565',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {message.transcript}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------- Confirm delete modal ---------------------- */
+
+function ConfirmDeleteModal({
+  title,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  title: string
+  deleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onCancel])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onCancel()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 420,
+            borderRadius: 10,
+            boxShadow:
+              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <div className="px-6 pt-6 pb-2">
+            <h2
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 19,
+                lineHeight: '28px',
+                color: '#101828',
+              }}
+            >
+              Delete this message?
+            </h2>
+            <p
+              className="mt-2"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 14,
+                lineHeight: '20px',
+                color: '#717182',
+              }}
+            >
+              &ldquo;{title}&rdquo; will be permanently removed. This cannot be undone.
+            </p>
+          </div>
+          <div
+            className="flex items-center justify-end gap-3 px-6 py-4 mt-4"
+            style={{
+              background: '#F9FAFB',
+              borderTop: '0.8px solid #E5E7EB',
+              borderBottomLeftRadius: 10,
+              borderBottomRightRadius: 10,
+            }}
+          >
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={deleting}
+              className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+              style={{
+                height: 36,
+                padding: '7.8px 15.8px',
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 13.2,
+                lineHeight: '20px',
+                color: '#0A0A0A',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+              style={{
+                height: 36,
+                padding: '8px 16px',
+                borderRadius: 8,
+                background: '#E7000B',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 14,
+                lineHeight: '20px',
+                color: '#FFFFFF',
+              }}
+            >
+              {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

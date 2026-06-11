@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
+import { notifyActivityChanged } from '@/lib/activity-helpers'
 import FinishProfileModal from './FinishProfileModal'
 import AddReleaseManagerModal from './AddReleaseManagerModal'
 import AddRecipientsModal from './AddRecipientsModal'
@@ -26,8 +27,14 @@ const STEP_DEFS: { key: StepKey; label: string; cta: string; index: number }[] =
 ]
 
 export default function SetupSteps() {
-  const { profile, profileLoading } = useAuth()
+  const { profile, profileLoading, refreshProfile } = useAuth()
   const [openStep, setOpenStep] = useState<StepKey | null>(null)
+
+  // Refresh onboarding state AND the activity feed after any successful action.
+  const refreshAll = () => {
+    refreshProfile()
+    notifyActivityChanged()
+  }
 
   if (profileLoading && !profile) {
     return (
@@ -106,22 +113,27 @@ export default function SetupSteps() {
       <FinishProfileModal
         open={openStep === 'finish_account'}
         onClose={() => setOpenStep(null)}
+        onCompleted={refreshAll}
       />
       <AddReleaseManagerModal
         open={openStep === 'add_release_manager'}
         onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
       />
       <AddRecipientsModal
         open={openStep === 'add_recipients'}
         onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
       />
       <AddPhotosModal
         open={openStep === 'add_photos'}
         onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
       />
       <CreateMessageModal
         open={openStep === 'create_message'}
         onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
       />
       {activeStepDef &&
         activeStepDef.key !== 'finish_account' &&
