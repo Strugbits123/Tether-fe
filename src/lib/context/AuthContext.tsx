@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { api } from '@/lib/api/client'
 import type { Session, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 export interface UserProfile {
   id: string
@@ -51,17 +51,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const supabase = createClient()
 
-  const fetchProfile = useCallback(async (token: string) => {
+  // Retry state for the profile fetch — the backend may be cold-starting or the
+  // user may not be provisioned yet on first load.
+  const retryRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempt: number }>({
+    timer: null,
+    attempt: 0,
+  })
+
+  const stopRetry = useCallback(() => {
+    if (retryRef.current.timer) clearTimeout(retryRef.current.timer)
+    retryRef.current = { timer: null, attempt: 0 }
+  }, [])
+
+  // Loads /users/me, reading a fresh token each time. On failure it keeps
+  // retrying with backoff (capped at 30s) so the UI auto-recovers once the
+  // backend is reachable — no page reload needed.
+  const loadProfile = useCallback(async () => {
+    const {
+      data: { session: current },
+    } = await supabase.auth.getSession()
+    const token = current?.access_token
+    if (!token) {
+      stopRetry()
+      return
+    }
     setProfileLoading(true)
     try {
       const data = await api.get<UserProfile>('/users/me', token)
       setProfile(data)
+      stopRetry()
     } catch {
-      // Non-fatal — profile unavailable
+      const delays = [2000, 4000, 8000, 15000, 30000]
+      const attempt = retryRef.current.attempt
+      const delay = delays[Math.min(attempt, delays.length - 1)]
+      if (retryRef.current.timer) clearTimeout(retryRef.current.timer)
+      retryRef.current.attempt = attempt + 1
+      retryRef.current.timer = setTimeout(() => {
+        loadProfile()
+      }, delay)
     } finally {
       setProfileLoading(false)
     }
-  }, [])
+  }, [supabase, stopRetry])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.access_token) {
-        fetchProfile(session.access_token)
+        loadProfile()
       }
     })
 
@@ -78,23 +109,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.access_token) {
-        fetchProfile(session.access_token)
+        loadProfile()
       } else {
+        stopRetry()
         setProfile(null)
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      stopRetry()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshProfile = useCallback(async () => {
-    const { data: { session: current } } = await supabase.auth.getSession()
-    if (current?.access_token) {
-      await fetchProfile(current.access_token)
-    }
-  }, [supabase, fetchProfile])
+    await loadProfile()
+  }, [loadProfile])
 
   const signOut = async () => {
+    stopRetry()
     await supabase.auth.signOut()
     setProfile(null)
     router.push('/signin')
