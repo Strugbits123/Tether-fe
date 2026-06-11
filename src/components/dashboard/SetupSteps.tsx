@@ -20,10 +20,10 @@ type StepKey =
 
 const STEP_DEFS: { key: StepKey; label: string; cta: string; index: number }[] = [
   { key: 'finish_account',      label: 'Finish Your Profile',   cta: 'Finish', index: 1 },
-  { key: 'add_release_manager', label: 'Add a Release Manager', cta: 'Add',    index: 2 },
-  { key: 'add_recipients',      label: 'Add Recipients',        cta: 'Add',    index: 3 },
-  { key: 'add_photos',          label: 'Add Photos',            cta: 'Upload', index: 4 },
-  { key: 'create_message',      label: 'Create a Message',      cta: 'Start',  index: 5 },
+  { key: 'add_recipients',      label: 'Add Recipients',        cta: 'Add',    index: 2 },
+  { key: 'add_release_manager', label: 'Add a Release Manager', cta: 'Add',    index: 3 },
+  { key: 'create_message',      label: 'Create a Message',      cta: 'Start',  index: 4 },
+  { key: 'add_photos',          label: 'Add a Document',        cta: 'Upload', index: 5 },
 ]
 
 export default function SetupSteps() {
@@ -113,27 +113,38 @@ export default function SetupSteps() {
       <FinishProfileModal
         open={openStep === 'finish_account'}
         onClose={() => setOpenStep(null)}
-        onCompleted={refreshAll}
-      />
-      <AddReleaseManagerModal
-        open={openStep === 'add_release_manager'}
-        onClose={() => setOpenStep(null)}
-        onCreated={refreshAll}
+        onSkip={() => setOpenStep(null)}
+        onCompleted={() => { refreshAll(); setOpenStep(null) }}
       />
       <AddRecipientsModal
         open={openStep === 'add_recipients'}
         onClose={() => setOpenStep(null)}
-        onCreated={refreshAll}
+        onSkip={() => setOpenStep(null)}
+        onCreated={() => { refreshAll(); setOpenStep(null) }}
+        isOnboarding
       />
-      <AddPhotosModal
-        open={openStep === 'add_photos'}
+      <AddReleaseManagerModal
+        open={openStep === 'add_release_manager'}
         onClose={() => setOpenStep(null)}
-        onCreated={refreshAll}
+        onSkip={() => setOpenStep(null)}
+        onCreated={() => { refreshAll(); setOpenStep(null) }}
+        isOnboarding
       />
       <CreateMessageModal
         open={openStep === 'create_message'}
         onClose={() => setOpenStep(null)}
-        onCreated={refreshAll}
+        onSkip={() => setOpenStep(null)}
+        onCreated={() => { refreshAll(); setOpenStep(null) }}
+      />
+      <AddPhotosModal
+        open={openStep === 'add_photos'}
+        onClose={() => setOpenStep(null)}
+        onSkip={() => setOpenStep(null)}
+        onCreated={() => { refreshAll(); setOpenStep(null) }}
+        kind="document"
+        title="Add a Document"
+        subtitle="Upload a document or a video/audio file. Audio and video files will be saved as messages."
+        isOnboarding
       />
       {activeStepDef &&
         activeStepDef.key !== 'finish_account' &&

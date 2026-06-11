@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, ApiError } from './client'
 
 export interface ReleaseManager {
   id: string
@@ -23,5 +23,11 @@ export const createReleaseManager = (
   },
 ) => api.post<ReleaseManager>('/release-managers', body, token)
 
-export const getReleaseManager = (token: string) =>
-  api.get<ReleaseManager | null>('/release-managers', token)
+export const getReleaseManager = async (token: string): Promise<ReleaseManager | null> => {
+  try {
+    return await api.get<ReleaseManager>('/release-managers', token)
+  } catch (e) {
+    if (e instanceof ApiError && (e.statusCode === 404 || e.statusCode === 204)) return null
+    throw e
+  }
+}
