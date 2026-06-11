@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
 import { createClient } from '@/lib/supabase/client'
 import { api } from '@/lib/api/client'
+import { createRecipient, getRecipients } from '@/lib/api/recipients'
+import { createReleaseManager, getReleaseManager } from '@/lib/api/release-managers'
+import { toRecipientRelationship, toReleaseManagerRelationship } from '@/lib/relationship'
 import Step1 from '@/components/onboarding/Step1'
 import Step2 from '@/components/onboarding/Step2'
 import Step3 from '@/components/onboarding/Step3'
@@ -24,9 +27,12 @@ export default function OnboardingPage() {
 
   // Step 2: Recipients
   const [recipients, setRecipients] = useState<any[]>([])
+  const [fetchedRecipients, setFetchedRecipients] = useState<any[]>([])
 
   // Step 3: Release Manager
   const [releaseManager, setReleaseManager] = useState<any>(null)
+  const [fetchedManager, setFetchedManager] = useState<any>(null)
+  const [releaseManagerSaved, setReleaseManagerSaved] = useState(false)
 
   // Step 4: Message
 
@@ -57,11 +63,12 @@ export default function OnboardingPage() {
       if (token && recips.length > 0) {
         await Promise.allSettled(
           recips.map((r) =>
-            api.post('/recipients', {
-              name: `${r.firstName} ${r.lastName}`,
+            createRecipient(token, {
+              firstName: r.firstName,
+              lastName: r.lastName,
               email: r.email,
-              relationship: r.relationship.toLowerCase(),
-            }, token)
+              relationship: toRecipientRelationship(r.relationship),
+            })
           )
         )
       }
@@ -84,13 +91,15 @@ export default function OnboardingPage() {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
-      if (token && manager) {
-        await api.post('/release-managers', {
-          name: `${manager.firstName} ${manager.lastName}`,
+      if (token && manager && !releaseManagerSaved) {
+        await createReleaseManager(token, {
+          firstName: manager.firstName,
+          lastName: manager.lastName,
           email: manager.email,
-          relationship: manager.relationship.toLowerCase(),
-          phone_number: manager.phone || undefined,
-        }, token)
+          phone: manager.phone || undefined,
+          relationship: toReleaseManagerRelationship(manager.relationship),
+        })
+        setReleaseManagerSaved(true)
       }
     } catch {
       // Non-blocking — proceed regardless
@@ -100,16 +109,44 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleStep3Back = () => {
-    setCurrentStep(2)
+  const handleStep3Back = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (token) {
+        const fetched = await getRecipients(token)
+        setFetchedRecipients(fetched)
+      }
+    } catch {
+      // Non-blocking — show step 2 regardless
+    } finally {
+      setRecipients([])
+      setCurrentStep(2)
+    }
   }
 
   const handleStep4Next = () => {
     setCurrentStep(5)
   }
 
-  const handleStep4Back = () => {
-    setCurrentStep(3)
+  const handleStep4Back = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (token) {
+        const fetched = await getReleaseManager(token)
+        if (fetched) {
+          setFetchedManager(fetched)
+          setReleaseManagerSaved(true)
+        }
+      }
+    } catch {
+      // Non-blocking — show step 3 regardless
+    } finally {
+      setCurrentStep(3)
+    }
   }
 
   const handleStep5Next = async () => {
@@ -152,11 +189,21 @@ export default function OnboardingPage() {
       )}
 
       {currentStep === 2 && (
-        <Step2 onNext={handleStep2Next} onBack={handleStep2Back} loading={stepLoading} />
+        <Step2
+          onNext={handleStep2Next}
+          onBack={handleStep2Back}
+          loading={stepLoading}
+          initialRecipients={fetchedRecipients}
+        />
       )}
 
       {currentStep === 3 && (
-        <Step3 onNext={handleStep3Next} onBack={handleStep3Back} loading={stepLoading} />
+        <Step3
+          onNext={handleStep3Next}
+          onBack={handleStep3Back}
+          loading={stepLoading}
+          initialManager={fetchedManager}
+        />
       )}
 
       {currentStep === 4 && (
