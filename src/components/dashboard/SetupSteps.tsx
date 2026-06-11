@@ -1,18 +1,40 @@
 'use client'
 
+import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
+import { notifyActivityChanged } from '@/lib/activity-helpers'
+import FinishProfileModal from './FinishProfileModal'
+import AddReleaseManagerModal from './AddReleaseManagerModal'
+import AddRecipientsModal from './AddRecipientsModal'
+import AddPhotosModal from './AddPhotosModal'
+import CreateMessageModal from './CreateMessageModal'
+import PlaceholderStepModal from './PlaceholderStepModal'
 
-const STEP_DEFS = [
-  { key: 'finish_account',        label: 'Finish Your Profile',       cta: 'Finish',  index: 1 },
-  { key: 'add_release_manager',   label: 'Add a Release Manager',     cta: 'Add',     index: 2 },
-  { key: 'add_recipients',        label: 'Add Recipients',            cta: 'Add',     index: 3 },
-  { key: 'add_photos',            label: 'Add Photos',                cta: 'Upload',  index: 4 },
-  { key: 'create_message',        label: 'Create a Message',          cta: 'Start',   index: 5 },
+type StepKey =
+  | 'finish_account'
+  | 'add_release_manager'
+  | 'add_recipients'
+  | 'add_photos'
+  | 'create_message'
+
+const STEP_DEFS: { key: StepKey; label: string; cta: string; index: number }[] = [
+  { key: 'finish_account',      label: 'Finish Your Profile',   cta: 'Finish', index: 1 },
+  { key: 'add_release_manager', label: 'Add a Release Manager', cta: 'Add',    index: 2 },
+  { key: 'add_recipients',      label: 'Add Recipients',        cta: 'Add',    index: 3 },
+  { key: 'add_photos',          label: 'Add Photos',            cta: 'Upload', index: 4 },
+  { key: 'create_message',      label: 'Create a Message',      cta: 'Start',  index: 5 },
 ]
 
 export default function SetupSteps() {
-  const { profile, profileLoading } = useAuth()
+  const { profile, profileLoading, refreshProfile } = useAuth()
+  const [openStep, setOpenStep] = useState<StepKey | null>(null)
+
+  // Refresh onboarding state AND the activity feed after any successful action.
+  const refreshAll = () => {
+    refreshProfile()
+    notifyActivityChanged()
+  }
 
   if (profileLoading && !profile) {
     return (
@@ -40,6 +62,8 @@ export default function SetupSteps() {
   const completed = steps.filter((s) => s.done).length
   const total = steps.length
   const percent = (completed / total) * 100
+
+  const activeStepDef = openStep ? STEP_DEFS.find((s) => s.key === openStep) : null
 
   return (
     <div
@@ -77,16 +101,59 @@ export default function SetupSteps() {
       {/* Steps */}
       <div className="flex flex-col gap-3">
         {steps.map((step) => (
-          <StepRow key={step.index} step={step} />
+          <StepRow
+            key={step.index}
+            step={step}
+            onClick={() => setOpenStep(step.key)}
+          />
         ))}
       </div>
+
+      {/* Modals */}
+      <FinishProfileModal
+        open={openStep === 'finish_account'}
+        onClose={() => setOpenStep(null)}
+        onCompleted={refreshAll}
+      />
+      <AddReleaseManagerModal
+        open={openStep === 'add_release_manager'}
+        onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
+      />
+      <AddRecipientsModal
+        open={openStep === 'add_recipients'}
+        onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
+      />
+      <AddPhotosModal
+        open={openStep === 'add_photos'}
+        onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
+      />
+      <CreateMessageModal
+        open={openStep === 'create_message'}
+        onClose={() => setOpenStep(null)}
+        onCreated={refreshAll}
+      />
+      {activeStepDef &&
+        activeStepDef.key !== 'finish_account' &&
+        activeStepDef.key !== 'add_release_manager' &&
+        activeStepDef.key !== 'add_recipients' &&
+        activeStepDef.key !== 'add_photos' &&
+        activeStepDef.key !== 'create_message' && (
+          <PlaceholderStepModal
+            open
+            title={activeStepDef.label}
+            onClose={() => setOpenStep(null)}
+          />
+        )}
     </div>
   )
 }
 
 type StepItem = { label: string; cta: string; done: boolean; index: number }
 
-function StepRow({ step }: { step: StepItem }) {
+function StepRow({ step, onClick }: { step: StepItem; onClick: () => void }) {
   const isDone = step.done
 
   return (
@@ -125,7 +192,8 @@ function StepRow({ step }: { step: StepItem }) {
       {/* CTA */}
       <button
         type="button"
-        className="flex-shrink-0 px-3 h-8 rounded-lg text-white text-[13px] font-semibold leading-none transition-opacity hover:opacity-90"
+        onClick={onClick}
+        className="flex-shrink-0 px-3 h-8 rounded-lg text-white text-[13px] font-semibold leading-none transition-opacity hover:opacity-90 cursor-pointer"
         style={{
           background: isDone ? 'rgba(79,70,229,0.5)' : '#4F46E5',
           minWidth: 75,
