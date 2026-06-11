@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
 import { getRecentActivity, type ActivityItem } from '@/lib/api/activity'
+import { withRetry } from '@/lib/utils/retry'
 import {
   ACTIVITY_REFRESH_EVENT,
   formatActivityTime,
@@ -29,7 +30,7 @@ export default function RecentActivity() {
       return
     }
     try {
-      const data = await getRecentActivity(token, 5)
+      const data = await withRetry(() => getRecentActivity(token, 5))
       setActivities(data)
     } catch {
       // Non-critical — silently ignore.
