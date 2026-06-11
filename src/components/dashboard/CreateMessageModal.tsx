@@ -43,7 +43,7 @@ interface CreateMessageModalProps {
   headerSubtitle?: string
   /** Optional initial values for edit mode. */
   initialMessage?: EditableMessage
-  onSave?: (message: EditableMessage) => void
+  onSave?: (message: EditableMessage) => void | Promise<void>
   /** Called after a message is successfully created on the backend. */
   onCreated?: () => void
 }
@@ -51,7 +51,7 @@ interface CreateMessageModalProps {
 export interface EditableMessage {
   id?: string
   audience: string[]
-  selectedIndividualId?: string
+  selectedIndividualIds?: string[]
   messageType: 'write' | 'video' | 'audio'
   title: string
   notes: string
@@ -81,13 +81,13 @@ const RECIPIENT_OPTIONS: Record<string, Assignment> = {
 
 export function buildAssignments(
   audience: string[],
-  selectedIndividualId: string,
+  selectedIndividualIds: string[],
 ): Assignment[] {
   const result: Assignment[] = []
   for (const chip of audience) {
     if (chip === 'Choose individuals') {
-      if (selectedIndividualId) {
-        result.push({ scope: 'individual', recipientId: selectedIndividualId })
+      for (const id of selectedIndividualIds) {
+        if (id) result.push({ scope: 'individual', recipientId: id })
       }
     } else if (RECIPIENT_OPTIONS[chip]) {
       result.push(RECIPIENT_OPTIONS[chip])
@@ -133,8 +133,8 @@ export default function CreateMessageModal({
   const [audience, setAudience] = useState<string[]>(
     initialMessage?.audience ?? ['All recipients'],
   )
-  const [selectedIndividualId, setSelectedIndividualId] = useState<string>(
-    initialMessage?.selectedIndividualId ?? '',
+  const [selectedIndividualIds, setSelectedIndividualIds] = useState<string[]>(
+    initialMessage?.selectedIndividualIds ?? [],
   )
   const [messageType, setMessageType] = useState<MessageType>(
     initialMessage?.messageType ?? 'video',
@@ -153,7 +153,7 @@ export default function CreateMessageModal({
   useEffect(() => {
     if (!open) return
     setAudience(initialMessage?.audience ?? ['All recipients'])
-    setSelectedIndividualId(initialMessage?.selectedIndividualId ?? '')
+    setSelectedIndividualIds(initialMessage?.selectedIndividualIds ?? [])
     setMessageType(initialMessage?.messageType ?? 'video')
     setTitle(initialMessage?.title ?? '')
     setNotes(initialMessage?.notes ?? '')
@@ -181,9 +181,16 @@ export default function CreateMessageModal({
     }
   }, [open])
 
-  const recipientLabel = audience.includes('Choose individuals')
-    ? recipients.find((r) => r.id === selectedIndividualId)?.name ?? 'someone special'
-    : audience[0] ?? 'someone special'
+  const recipientLabel = (() => {
+    if (audience.includes('Choose individuals')) {
+      if (selectedIndividualIds.length === 1) {
+        return recipients.find((r) => r.id === selectedIndividualIds[0])?.name ?? 'someone special'
+      }
+      if (selectedIndividualIds.length > 1) return `${selectedIndividualIds.length} people`
+      return 'someone special'
+    }
+    return audience[0] ?? 'someone special'
+  })()
 
   useEffect(() => {
     if (!open) return
@@ -210,6 +217,33 @@ export default function CreateMessageModal({
     else setStep('record')
   }
 
+  // Edit-mode save: awaits the parent's async onSave, keeps the modal open with a
+  // loading state, and only closes once the API call resolves.
+  const handleEditSave = async (overrides?: {
+    title?: string
+    notes?: string
+    body?: string
+  }) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await onSave?.({
+        id: initialMessage?.id,
+        audience,
+        selectedIndividualIds,
+        messageType,
+        title: overrides?.title ?? title,
+        notes: overrides?.notes ?? notes,
+        body: overrides?.body ?? body,
+      })
+      handleClose()
+    } catch {
+      /* parent surfaces the error toast — keep the modal open so input is preserved */
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   // Create a text message (or fall back to the edit callback in edit mode).
   const handleSubmitText = async (data: {
     title: string
@@ -218,16 +252,7 @@ export default function CreateMessageModal({
   }) => {
     if (initialMessage) {
       setBody(data.body)
-      onSave?.({
-        id: initialMessage.id,
-        audience,
-        selectedIndividualId,
-        messageType,
-        title: data.title,
-        notes: data.notes,
-        body: data.body,
-      })
-      handleClose()
+      await handleEditSave({ title: data.title, notes: data.notes, body: data.body })
       return
     }
 
@@ -242,7 +267,7 @@ export default function CreateMessageModal({
         title: data.title,
         body: data.body,
         notes: data.notes || undefined,
-        assignments: buildAssignments(audience, selectedIndividualId),
+        assignments: buildAssignments(audience, selectedIndividualIds),
       })
       showToast('Message saved', 'success')
       onCreated?.()
@@ -302,8 +327,8 @@ export default function CreateMessageModal({
               headerSubtitle={headerSubtitle}
               audience={audience}
               setAudience={setAudience}
-              selectedIndividualId={selectedIndividualId}
-              setSelectedIndividualId={setSelectedIndividualId}
+              selectedIndividualIds={selectedIndividualIds}
+              setSelectedIndividualIds={setSelectedIndividualIds}
               messageType={messageType}
               setMessageType={setMessageType}
               title={title}
@@ -312,19 +337,9 @@ export default function CreateMessageModal({
               setNotes={setNotes}
               recipients={recipients}
               isEditMode={!!initialMessage}
+              saving={submitting}
               onOpenRecorder={handleOpenRecorder}
-              onSaveEdits={() => {
-                onSave?.({
-                  id: initialMessage?.id,
-                  audience,
-                  selectedIndividualId,
-                  messageType,
-                  title,
-                  notes,
-                  body,
-                })
-                handleClose()
-              }}
+              onSaveEdits={() => handleEditSave()}
             />
           )}
 
@@ -334,7 +349,7 @@ export default function CreateMessageModal({
               recipient={recipientLabel}
               title={title}
               notes={notes}
-              assignments={buildAssignments(audience, selectedIndividualId)}
+              assignments={buildAssignments(audience, selectedIndividualIds)}
               onBack={() => setStep('setup')}
               onDone={() => {
                 onCreated?.()
@@ -367,8 +382,8 @@ function SetupStep({
   headerSubtitle,
   audience,
   setAudience,
-  selectedIndividualId,
-  setSelectedIndividualId,
+  selectedIndividualIds,
+  setSelectedIndividualIds,
   messageType,
   setMessageType,
   title,
@@ -377,6 +392,7 @@ function SetupStep({
   setNotes,
   recipients,
   isEditMode,
+  saving,
   onOpenRecorder,
   onSaveEdits,
 }: {
@@ -384,8 +400,8 @@ function SetupStep({
   headerSubtitle: string
   audience: string[]
   setAudience: (v: string[] | ((prev: string[]) => string[])) => void
-  selectedIndividualId: string
-  setSelectedIndividualId: (v: string) => void
+  selectedIndividualIds: string[]
+  setSelectedIndividualIds: (v: string[] | ((prev: string[]) => string[])) => void
   messageType: MessageType
   setMessageType: (v: MessageType) => void
   title: string
@@ -394,6 +410,7 @@ function SetupStep({
   setNotes: (v: string) => void
   recipients: Recipient[]
   isEditMode: boolean
+  saving: boolean
   onOpenRecorder: () => void
   onSaveEdits: () => void
 }) {
@@ -507,8 +524,12 @@ function SetupStep({
           {audience.includes('Choose individuals') && (
             <IndividualPicker
               recipients={recipients}
-              value={selectedIndividualId}
-              onChange={setSelectedIndividualId}
+              selectedIds={selectedIndividualIds}
+              onToggle={(id) =>
+                setSelectedIndividualIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                )
+              }
             />
           )}
         </div>
@@ -643,7 +664,8 @@ function SetupStep({
             <button
               type="button"
               onClick={handleSaveEdits}
-              className="flex-1 flex items-center justify-center cursor-pointer hover:bg-gray-50"
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed"
               style={{
                 height: 48,
                 borderRadius: 8,
@@ -656,7 +678,8 @@ function SetupStep({
                 color: '#0A0A0A',
               }}
             >
-              Save changes
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           )}
           <button
@@ -755,12 +778,12 @@ function TypeCard({
 
 function IndividualPicker({
   recipients,
-  value,
-  onChange,
+  selectedIds,
+  onToggle,
 }: {
   recipients: Recipient[]
-  value: string
-  onChange: (id: string) => void
+  selectedIds: string[]
+  onToggle: (id: string) => void
 }) {
   const [search, setSearch] = useState('')
 
@@ -821,12 +844,12 @@ function IndividualPicker({
           </p>
         ) : (
           filtered.map((p) => {
-            const selected = value === p.id
+            const selected = selectedIds.includes(p.id)
             return (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => onChange(p.id)}
+                onClick={() => onToggle(p.id)}
                 className="w-full flex items-center gap-2 cursor-pointer"
                 style={{
                   borderRadius: 8,
@@ -1448,44 +1471,54 @@ function WriteMessageStep({
     refreshActive()
   }
 
-  // Resolve the top-level block (direct child of the editor) holding the caret,
-  // wrapping a bare text line in a <div> if needed so indent has something to act on.
+  // Resolve the block holding the caret: the nearest block-level ancestor inside
+  // the editor, falling back to the direct child. Wraps a bare text line in a
+  // <div> only when there's genuinely no block to act on.
   const getCaretBlock = (): HTMLElement | null => {
     const editor = editorRef.current
     if (!editor || typeof window === 'undefined') return null
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0) return null
-    const climb = (start: Node | null): HTMLElement | null => {
+    const resolve = (start: Node | null): HTMLElement | null => {
       let el: HTMLElement | null =
         start && start.nodeType === Node.TEXT_NODE
           ? start.parentElement
           : (start as HTMLElement | null)
-      while (el && el !== editor && el.parentElement !== editor) {
+      let directChild: HTMLElement | null = null
+      while (el && el !== editor) {
+        if (el.parentElement === editor) directChild = el
+        const display = window.getComputedStyle(el).display
+        if (display === 'block' || display === 'list-item' || display === 'flex') {
+          return el
+        }
         el = el.parentElement
       }
-      return el && el !== editor ? el : null
+      return directChild
     }
-    let block = climb(sel.getRangeAt(0).startContainer)
+    let block = resolve(sel.getRangeAt(0).startContainer)
     if (!block) {
-      // Caret sits directly in the editor (bare text / empty line) — wrap it.
+      // No block at all (bare text directly in the editor) — wrap it.
       try {
         document.execCommand('formatBlock', false, 'div')
       } catch {
         /* ignore */
       }
       const sel2 = window.getSelection()
-      block = sel2 && sel2.rangeCount ? climb(sel2.getRangeAt(0).startContainer) : null
+      block = sel2 && sel2.rangeCount ? resolve(sel2.getRangeAt(0).startContainer) : null
     }
     return block
   }
 
   const INDENT_STEP = 40 // px
 
+  const indentOf = (el: HTMLElement) => parseInt(el.style.marginLeft || '0', 10) || 0
+
   // Indent/outdent in place: nests within lists, otherwise shifts the block's
   // left margin so the line stays put instead of jumping to a new line.
   const adjustIndent = (direction: 1 | -1) => {
     if (typeof document === 'undefined') return
-    editorRef.current?.focus()
+    const editor = editorRef.current
+    editor?.focus()
     const inList = (() => {
       try {
         return (
@@ -1503,10 +1536,18 @@ function WriteMessageStep({
         /* ignore */
       }
     } else {
-      const block = getCaretBlock()
-      if (block) {
-        const current = parseInt(block.style.marginLeft || '0', 10) || 0
-        const next = Math.max(0, current + direction * INDENT_STEP)
+      let block = getCaretBlock()
+      if (block && editor) {
+        // When reducing, target whichever ancestor (or self) actually carries the
+        // indentation — the saved HTML may nest the margin on an outer block.
+        if (direction < 0 && indentOf(block) === 0) {
+          let anc: HTMLElement | null = block
+          while (anc && anc !== editor && indentOf(anc) === 0) {
+            anc = anc.parentElement
+          }
+          if (anc && anc !== editor && indentOf(anc) > 0) block = anc
+        }
+        const next = Math.max(0, indentOf(block) + direction * INDENT_STEP)
         block.style.marginLeft = next > 0 ? `${next}px` : ''
       }
     }
