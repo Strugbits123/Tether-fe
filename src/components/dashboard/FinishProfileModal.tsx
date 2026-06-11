@@ -11,6 +11,8 @@ interface FinishProfileModalProps {
   onClose: () => void
   /** Called after the profile is successfully saved on the backend. */
   onCompleted?: () => void
+  /** Skip this onboarding step without saving. */
+  onSkip?: () => void
 }
 
 // State display name <-> 2-letter code (the API stores/returns the code).
@@ -71,7 +73,7 @@ const HEAR_OPTIONS = [
   'Other',
 ]
 
-export default function FinishProfileModal({ open, onClose, onCompleted }: FinishProfileModalProps) {
+export default function FinishProfileModal({ open, onClose, onCompleted, onSkip }: FinishProfileModalProps) {
   const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -667,7 +669,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
           <div className="flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={onSkip ?? onClose}
               disabled={submitting}
               className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
               style={{
@@ -683,13 +685,13 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
                 color: '#0A0A0A',
               }}
             >
-              Cancel
+              {onSkip ? 'Skip' : 'Cancel'}
             </button>
             <button
               type="button"
               onClick={handleSave}
-              disabled={submitting}
-              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+              disabled={submitting || !firstName.trim() || !lastName.trim()}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 minWidth: 158,
                 height: 36,

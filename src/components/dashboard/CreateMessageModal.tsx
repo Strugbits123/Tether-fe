@@ -46,6 +46,8 @@ interface CreateMessageModalProps {
   onSave?: (message: EditableMessage) => void | Promise<void>
   /** Called after a message is successfully created on the backend. */
   onCreated?: () => void
+  /** Skip this onboarding step without creating a message. */
+  onSkip?: () => void
 }
 
 export interface EditableMessage {
@@ -123,6 +125,7 @@ export default function CreateMessageModal({
   initialMessage,
   onSave,
   onCreated,
+  onSkip,
 }: CreateMessageModalProps) {
   const { showToast } = useToast()
 
@@ -340,6 +343,7 @@ export default function CreateMessageModal({
               saving={submitting}
               onOpenRecorder={handleOpenRecorder}
               onSaveEdits={() => handleEditSave()}
+              onSkip={onSkip}
             />
           )}
 
@@ -395,6 +399,7 @@ function SetupStep({
   saving,
   onOpenRecorder,
   onSaveEdits,
+  onSkip,
 }: {
   headerTitle: string
   headerSubtitle: string
@@ -413,6 +418,7 @@ function SetupStep({
   saving: boolean
   onOpenRecorder: () => void
   onSaveEdits: () => void
+  onSkip?: () => void
 }) {
   const [titleError, setTitleError] = useState<string | null>(null)
 
@@ -660,6 +666,27 @@ function SetupStep({
 
         {/* CTA */}
         <div className="flex flex-col sm:flex-row gap-3 mt-1">
+          {onSkip && (
+            <button
+              type="button"
+              onClick={onSkip}
+              className="flex items-center justify-center cursor-pointer hover:bg-gray-50"
+              style={{
+                height: 48,
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
+                padding: '12px 16px',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 15.3,
+                lineHeight: '24px',
+                color: '#0A0A0A',
+              }}
+            >
+              Skip
+            </button>
+          )}
           {isEditMode && messageType !== 'write' && (
             <button
               type="button"
