@@ -23,7 +23,7 @@ const CARDS: Card[] = [
   },
   {
     Icon: FiBookOpen,
-    title: 'Share memoir',
+    title: 'Share story',
     desc: 'Tell your story in your own words, organized by chapters',
   },
   {
