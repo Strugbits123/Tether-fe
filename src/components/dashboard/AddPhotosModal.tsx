@@ -1,21 +1,32 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronUp, FileImage, Search, Upload, X } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  FileImage,
+  Loader2,
+  Search,
+  Upload,
+  X,
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import { buildAssignments, formatFileSize } from '@/lib/utils/assignments'
+import { getRecipients, type Recipient } from '@/lib/api/recipients'
+import { requestPhotoUploadUrls, createPhotosBatch } from '@/lib/api/photos'
+import { requestDocUploadUrls, createDocumentsBatch } from '@/lib/api/documents'
 
 interface AddPhotosModalProps {
   open: boolean
   onClose: () => void
-  onSave?: (data: PhotosFormData) => void
+  /** Called after files are successfully uploaded + recorded on the backend. */
+  onCreated?: () => void
+  /** 'photo' (default) or 'document' — switches accepted types, limits, and endpoints. */
+  kind?: 'photo' | 'document'
   title?: string
   subtitle?: string
-}
-
-export interface PhotosFormData {
-  files: File[]
-  notes: string
-  recipientGroups: string[]
-  selectedIndividuals: string[]
 }
 
 const GROUP_OPTIONS = [
@@ -27,35 +38,104 @@ const GROUP_OPTIONS = [
   'Release Manager',
 ]
 
-interface Individual {
-  id: string
-  name: string
-  relationship: string
+const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic'
+const DOC_ACCEPT = '.pdf,.docx,.doc,.jpg,.jpeg,.png,.heic'
+const MAX_FILES = 10
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024
+const DOC_MAX_BYTES = 25 * 1024 * 1024
+
+function deriveDocFileType(mimeType: string): string {
+  const map: Record<string, string> = {
+    'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/msword': 'doc',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/heic': 'heic',
+  }
+  return map[mimeType] || 'pdf'
 }
 
-const INDIVIDUALS: Individual[] = [
-  { id: 'i1', name: 'Michael Chen', relationship: 'Family' },
-  { id: 'i2', name: 'Emma Rodriguez', relationship: 'Family' },
-  { id: 'i3', name: 'David Thompson', relationship: 'Friend' },
-  { id: 'i4', name: 'Sophie Martin', relationship: 'Friend' },
-  { id: 'i5', name: 'James Wilson', relationship: 'Colleague' },
-]
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+      URL.revokeObjectURL(img.src)
+    }
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 })
+      URL.revokeObjectURL(img.src)
+    }
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export default function AddPhotosModal({
   open,
   onClose,
-  onSave,
+  onCreated,
+  kind = 'photo',
   title = 'Add Photos',
   subtitle = "Upload your most cherished photos — moments you want your family to see and keep forever. They'll be safely stored and shared when your Tether is released.",
 }: AddPhotosModalProps) {
+  const { showToast } = useToast()
+  const isDoc = kind === 'document'
+  const maxBytes = isDoc ? DOC_MAX_BYTES : PHOTO_MAX_BYTES
+  const sizeLabel = isDoc ? '25 MB' : '10 MB'
+  const noun = isDoc ? 'document' : 'photo'
+
   const [files, setFiles] = useState<File[]>([])
   const [notes, setNotes] = useState('')
-  const [selectedGroups, setSelectedGroups] = useState<string[]>(['All Friends', 'All Others'])
-  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>(['i2'])
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([])
+  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([])
   const [showIndividuals, setShowIndividuals] = useState(true)
   const [search, setSearch] = useState('')
+  const [errors, setErrors] = useState<string[]>([])
+  const [recipients, setRecipients] = useState<Recipient[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Reset the form ONLY when the modal transitions to open — never on a
+  // re-render or after an upload error, so the user's selection is preserved.
+  useEffect(() => {
+    if (!open) return
+    setFiles([])
+    setNotes('')
+    setSelectedGroups([])
+    setSelectedIndividuals([])
+    setShowIndividuals(true)
+    setSearch('')
+    setErrors([])
+    setUploading(false)
+    setProgress({ current: 0, total: 0 })
+  }, [open])
+
+  // Load real recipients for the "Search by name…" picker.
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    ;(async () => {
+      const supabase = createClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch {
+        /* non-fatal — picker stays empty */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [open])
+
+  // Escape-to-close + scroll lock.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -72,22 +152,55 @@ export default function AddPhotosModal({
 
   if (!open) return null
 
-  const toggleGroup = (g: string) =>
-    setSelectedGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
+  // Assign Later, groups, and individuals are mutually exclusive modes.
+  const toggleGroup = (g: string) => {
+    if (g === 'Assign Later') {
+      // Assign Later stands alone — selecting it clears everything else.
+      setSelectedIndividuals([])
+      setSelectedGroups((prev) => (prev.includes('Assign Later') ? [] : ['Assign Later']))
+      return
+    }
+    // Selecting a real group clears individuals and Assign Later.
+    setSelectedIndividuals([])
+    setSelectedGroups((prev) => {
+      const withoutLater = prev.filter((x) => x !== 'Assign Later')
+      return withoutLater.includes(g)
+        ? withoutLater.filter((x) => x !== g)
+        : [...withoutLater, g]
+    })
+  }
 
-  const toggleIndividual = (id: string) =>
+  const toggleIndividual = (id: string) => {
+    // Selecting an individual clears all groups (including Assign Later).
+    setSelectedGroups([])
     setSelectedIndividuals((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
+  }
 
-  const mergeFiles = (incoming: File[]) =>
+  const mergeFiles = (incoming: File[]) => {
+    const errs: string[] = []
     setFiles((prev) => {
       const seen = new Set(prev.map((f) => `${f.name}::${f.size}::${f.lastModified}`))
-      const fresh = incoming.filter(
-        (f) => !seen.has(`${f.name}::${f.size}::${f.lastModified}`),
-      )
-      return [...prev, ...fresh]
+      const next = [...prev]
+      for (const f of incoming) {
+        const key = `${f.name}::${f.size}::${f.lastModified}`
+        if (seen.has(key)) continue
+        if (f.size > maxBytes) {
+          errs.push(`${f.name} exceeds ${sizeLabel} limit`)
+          continue
+        }
+        if (next.length >= MAX_FILES) {
+          errs.push(`Maximum ${MAX_FILES} ${isDoc ? 'documents' : 'photos'} per upload`)
+          break
+        }
+        seen.add(key)
+        next.push(f)
+      }
+      return next
     })
+    setErrors(errs)
+  }
 
   const handlePickFiles = () => fileInputRef.current?.click()
   const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,26 +215,115 @@ export default function AddPhotosModal({
     if (!list) return
     mergeFiles(Array.from(list))
   }
-  const removeFile = (idx: number) =>
-    setFiles((prev) => prev.filter((_, i) => i !== idx))
+  const removeFile = (idx: number) => setFiles((prev) => prev.filter((_, i) => i !== idx))
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  const handleUpload = async () => {
+    if (uploading) return
+    setErrors([])
+    if (files.length === 0) {
+      setErrors([`Please select at least one ${noun} to upload.`])
+      return
+    }
+
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) {
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+
+    setUploading(true)
+    setProgress({ current: 0, total: files.length })
+
+    try {
+      const reqFiles = files.map((f) => ({
+        fileName: f.name,
+        fileType: f.type,
+        fileSizeBytes: f.size,
+      }))
+
+      // Step 1 — signed upload URLs.
+      const uploadUrls = isDoc
+        ? await requestDocUploadUrls(token, reqFiles)
+        : await requestPhotoUploadUrls(token, reqFiles)
+
+      // Step 2 — upload each file directly to Supabase Storage.
+      const results = await Promise.allSettled(
+        uploadUrls.map(async (urlInfo) => {
+          const file = files[urlInfo.fileIndex]
+          const response = await fetch(urlInfo.signedUploadUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type },
+          })
+          if (!response.ok) throw new Error(`Upload failed for ${file.name}`)
+          let dims = { width: 0, height: 0 }
+          if (!isDoc) dims = await getImageDimensions(file)
+          setProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+          return { urlInfo, file, dims }
+        }),
+      )
+
+      const succeeded = results.flatMap((r) =>
+        r.status === 'fulfilled' ? [r.value] : [],
+      )
+      const failed = results.filter((r) => r.status === 'rejected')
+
+      if (succeeded.length === 0) {
+        throw new Error('All uploads failed. Please try again.')
+      }
+
+      const assignments = buildAssignments(selectedGroups, selectedIndividuals)
+
+      // Step 3 — create records in the DB.
+      if (isDoc) {
+        await createDocumentsBatch(token, {
+          documents: succeeded.map((s) => ({
+            storagePath: s.urlInfo.storagePath,
+            originalFilename: s.file.name,
+            fileType: deriveDocFileType(s.file.type),
+            fileSizeBytes: s.file.size,
+          })),
+          note: notes || undefined,
+          assignments,
+        })
+      } else {
+        await createPhotosBatch(token, {
+          photos: succeeded.map((s) => ({
+            storagePath: s.urlInfo.storagePath,
+            fileType: s.file.type.replace('image/', ''),
+            fileSizeBytes: s.file.size,
+            width: s.dims.width || undefined,
+            height: s.dims.height || undefined,
+          })),
+          caption: notes || undefined,
+          assignments,
+        })
+      }
+
+      showToast(
+        `${succeeded.length} ${noun}${succeeded.length > 1 ? 's' : ''} uploaded`,
+        'success',
+      )
+      if (failed.length > 0) {
+        showToast(
+          `${failed.length} file${failed.length > 1 ? 's' : ''} failed to upload`,
+          'error',
+        )
+      }
+      onCreated?.()
+      onClose()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Upload failed', 'error')
+    } finally {
+      setUploading(false)
+    }
   }
 
-  const handleUpload = () => {
-    onSave?.({
-      files,
-      notes,
-      recipientGroups: selectedGroups,
-      selectedIndividuals,
-    })
-    onClose()
-  }
-
-  const filteredIndividuals = INDIVIDUALS.filter((i) =>
+  const filteredIndividuals = recipients.filter((i) =>
     i.name.toLowerCase().includes(search.trim().toLowerCase()),
   )
 
@@ -136,7 +338,7 @@ export default function AddPhotosModal({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={isDoc ? DOC_ACCEPT : PHOTO_ACCEPT}
         multiple
         onChange={handleFilesChange}
         className="hidden"
@@ -247,9 +449,30 @@ export default function AddPhotosModal({
                     color: '#99A1AF',
                   }}
                 >
-                  You can select multiple images at once
+                  {isDoc
+                    ? `Up to ${MAX_FILES} files · ${sizeLabel} each`
+                    : 'You can select multiple images at once'}
                 </span>
               </div>
+
+              {errors.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  {errors.map((err, i) => (
+                    <p
+                      key={i}
+                      style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 400,
+                        fontSize: 13,
+                        lineHeight: '18px',
+                        color: '#FB2C36',
+                      }}
+                    >
+                      {err}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {files.length > 0 && (
                 <div
@@ -294,7 +517,7 @@ export default function AddPhotosModal({
                             color: '#717182',
                           }}
                         >
-                          {formatSize(f.size)}
+                          {formatFileSize(f.size)}
                         </span>
                       </div>
                       <button
@@ -452,7 +675,7 @@ export default function AddPhotosModal({
                           color: '#717182',
                         }}
                       >
-                        No matches.
+                        {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
                       </p>
                     ) : (
                       filteredIndividuals.map((p) => {
@@ -519,7 +742,8 @@ export default function AddPhotosModal({
             <button
               type="button"
               onClick={onClose}
-              className="cursor-pointer hover:bg-gray-50"
+              disabled={uploading}
+              className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
               style={{
                 width: 77.6,
                 height: 36,
@@ -539,7 +763,8 @@ export default function AddPhotosModal({
             <button
               type="button"
               onClick={handleUpload}
-              className="cursor-pointer hover:opacity-90"
+              disabled={uploading}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
               style={{
                 height: 36,
                 padding: '8px 16px',
@@ -552,7 +777,10 @@ export default function AddPhotosModal({
                 color: '#FFFFFF',
               }}
             >
-              Upload
+              {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {uploading
+                ? `Uploading ${progress.current} of ${progress.total}…`
+                : 'Upload'}
             </button>
           </div>
         </div>

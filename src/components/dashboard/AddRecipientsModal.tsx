@@ -1,25 +1,21 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, ShieldCheck, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, ShieldCheck, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { ApiError } from '@/lib/api/client'
+import { useToast } from '@/lib/context/ToastContext'
+import { createRecipient } from '@/lib/api/recipients'
+import { toRecipientRelationship } from '@/lib/relationship'
 
 interface AddRecipientsModalProps {
   open: boolean
   onClose: () => void
-  onSave?: (data: RecipientData) => void
+  /** Called after a recipient is successfully created on the backend. */
+  onCreated?: () => void
   title?: string
   subtitle?: string | null
   bottomVariant?: 'note' | 'guardian'
-}
-
-export interface RecipientData {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  relationship: string
-  note: string
-  isGuardian?: boolean
 }
 
 const RELATIONSHIP_OPTIONS = [
@@ -37,11 +33,12 @@ const RELATIONSHIP_OPTIONS = [
 export default function AddRecipientsModal({
   open,
   onClose,
-  onSave,
+  onCreated,
   title = 'Add a Recipients',
   subtitle = 'Recipients are the people who will receive access to your messages, photos, and documents when your Tether is released. You can add more in the Access page.',
   bottomVariant = 'note',
 }: AddRecipientsModalProps) {
+  const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -50,6 +47,27 @@ export default function AddRecipientsModal({
   const [note, setNote] = useState('')
   const [isGuardian, setIsGuardian] = useState(false)
 
+  const [loading, setLoading] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
+  // Reset the form ONLY when the modal transitions to open — never on a
+  // re-render or after an API error, so the user's input is preserved on failure.
+  useEffect(() => {
+    if (!open) return
+    setFirstName('')
+    setLastName('')
+    setEmail('')
+    setPhone('')
+    setRelationship('Family')
+    setNote('')
+    setIsGuardian(false)
+    setFormError(null)
+    setEmailError(null)
+    setLoading(false)
+  }, [open])
+
+  // Escape-to-close + scroll lock.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -66,9 +84,50 @@ export default function AddRecipientsModal({
 
   if (!open) return null
 
-  const handleAdd = () => {
-    onSave?.({ firstName, lastName, email, phone, relationship, note, isGuardian })
-    onClose()
+  const handleAdd = async () => {
+    setFormError(null)
+    setEmailError(null)
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      setFormError('Please fill in the required fields.')
+      return
+    }
+
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) {
+      setFormError('Your session has expired. Please sign in again.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await createRecipient(token, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim() || undefined,
+        relationship: toRecipientRelationship(relationship),
+        note: note.trim() || undefined,
+      })
+      showToast('Recipient added successfully', 'success')
+      onCreated?.()
+      onClose()
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 409) {
+        setEmailError(
+          'A recipient with this email address already exists on your account.',
+        )
+      } else {
+        setFormError(
+          error instanceof Error ? error.message : 'Could not add the recipient.',
+        )
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -155,10 +214,15 @@ export default function AddRecipientsModal({
           <Field label="Email" required>
             <TextInput
               value={email}
-              onChange={setEmail}
+              onChange={(v) => {
+                setEmail(v)
+                if (emailError) setEmailError(null)
+              }}
               placeholder="email@example.com"
               type="email"
+              invalid={!!emailError}
             />
+            {emailError && <FieldError message={emailError} />}
           </Field>
 
           {/* Phone Number — no asterisk */}
@@ -221,7 +285,7 @@ export default function AddRecipientsModal({
 
         {/* Footer */}
         <div
-          className="flex flex-wrap items-center justify-end gap-3 px-5 sm:px-6 py-[15px]"
+          className="flex flex-col gap-2 px-5 sm:px-6 py-[15px]"
           style={{
             background: '#F9FAFB',
             borderTop: '0.8px solid #E5E7EB',
@@ -229,44 +293,50 @@ export default function AddRecipientsModal({
             borderBottomRightRadius: 10,
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer hover:bg-gray-50"
-            style={{
-              width: 77.6,
-              height: 36,
-              padding: '7.8px 15.8px',
-              borderRadius: 8,
-              border: '1px solid rgba(0,0,0,0.1)',
-              background: '#FFFFFF',
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 500,
-              fontSize: 13.2,
-              lineHeight: '20px',
-              color: '#0A0A0A',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="cursor-pointer hover:opacity-90"
-            style={{
-              height: 36,
-              padding: '8px 16px',
-              borderRadius: 8,
-              background: '#4F46E5',
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 500,
-              fontSize: 14,
-              lineHeight: '20px',
-              color: '#FFFFFF',
-            }}
-          >
-            Add Recipients
-          </button>
+          {formError && <FieldError message={formError} />}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+              style={{
+                width: 77.6,
+                height: 36,
+                padding: '7.8px 15.8px',
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 13.2,
+                lineHeight: '20px',
+                color: '#0A0A0A',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+              style={{
+                height: 36,
+                padding: '8px 16px',
+                borderRadius: 8,
+                background: '#4F46E5',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 14,
+                lineHeight: '20px',
+                color: '#FFFFFF',
+              }}
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading ? 'Adding…' : 'Add Recipients'}
+            </button>
+          </div>
         </div>
       </div>
       </div>
@@ -391,16 +461,34 @@ function GuardianBox({
   )
 }
 
+function FieldError({ message }: { message: string }) {
+  return (
+    <p
+      style={{
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 400,
+        fontSize: 13,
+        lineHeight: '18px',
+        color: '#FB2C36',
+      }}
+    >
+      {message}
+    </p>
+  )
+}
+
 function TextInput({
   value,
   onChange,
   placeholder,
   type = 'text',
+  invalid,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder: string
   type?: string
+  invalid?: boolean
 }) {
   return (
     <input
@@ -412,7 +500,7 @@ function TextInput({
       style={{
         height: 36,
         borderRadius: 8,
-        border: '1px solid rgba(0,0,0,0.1)',
+        border: invalid ? '1px solid #FB2C36' : '1px solid rgba(0,0,0,0.1)',
         background: '#F3F3F5',
         padding: '4px 12px',
         fontFamily: 'Inter, sans-serif',

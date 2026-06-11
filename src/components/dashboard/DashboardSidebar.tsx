@@ -218,13 +218,22 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
             onClick={() => setMenuOpen((prev) => !prev)}
             className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 transition-colors w-full cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-              <span
-                className="text-white font-semibold text-[13px] leading-5"
-                style={{ fontFamily: 'Inter, sans-serif' }}
-              >
-                {initials}
-              </span>
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {profile?.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profile.avatar_url}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span
+                  className="text-white font-semibold text-[13px] leading-5"
+                  style={{ fontFamily: 'Inter, sans-serif' }}
+                >
+                  {initials}
+                </span>
+              )}
             </div>
             <span
               className="flex-1 text-left text-white font-semibold text-[14px] leading-5 truncate"

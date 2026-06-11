@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { MessageSquare, FileText, Users, UserCheck, LucideIcon } from 'lucide-react'
+import { useAuth } from '@/lib/context/AuthContext'
+import { notifyActivityChanged } from '@/lib/activity-helpers'
 import CreateMessageModal from './CreateMessageModal'
 import AddPhotosModal from './AddPhotosModal'
 import AddRecipientsModal from './AddRecipientsModal'
@@ -45,7 +47,13 @@ const actions: Action[] = [
 ]
 
 export default function QuickActions() {
+  const { refreshProfile } = useAuth()
   const [openAction, setOpenAction] = useState<ActionKey | null>(null)
+
+  const refreshAll = () => {
+    refreshProfile()
+    notifyActivityChanged()
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -137,12 +145,15 @@ export default function QuickActions() {
       <AddPhotosModal
         open={openAction === 'upload_document'}
         onClose={() => setOpenAction(null)}
+        onCreated={refreshAll}
+        kind="document"
         title="Upload Document"
         subtitle="Add a new document to your secure vault"
       />
       <AddRecipientsModal
         open={openAction === 'add_recipients'}
         onClose={() => setOpenAction(null)}
+        onCreated={refreshAll}
         title="Add Recipients"
         subtitle={null}
         bottomVariant="guardian"

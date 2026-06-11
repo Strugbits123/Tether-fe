@@ -14,6 +14,7 @@ import {
   Indent,
   List,
   ListOrdered,
+  Loader2,
   Outdent,
   Palette,
   PenLine,
@@ -23,6 +24,17 @@ import {
   Underline,
   X,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import {
+  type Assignment,
+  createTextMessage,
+  createVideoUploadUrl,
+  createAudioUploadUrl,
+  confirmAudioUpload,
+  getMessageStatus,
+} from '@/lib/api/messages'
+import { getRecipients, type Recipient } from '@/lib/api/recipients'
 
 interface CreateMessageModalProps {
   open: boolean
@@ -32,6 +44,8 @@ interface CreateMessageModalProps {
   /** Optional initial values for edit mode. */
   initialMessage?: EditableMessage
   onSave?: (message: EditableMessage) => void
+  /** Called after a message is successfully created on the backend. */
+  onCreated?: () => void
 }
 
 export interface EditableMessage {
@@ -56,49 +70,49 @@ const AUDIENCE_CHIPS = [
   'Choose individuals',
 ]
 
-interface Individual {
-  id: string
-  name: string
-  relationship: string
+/** Maps an audience chip label to its backend Assignment shape. */
+const RECIPIENT_OPTIONS: Record<string, Assignment> = {
+  'All recipients': { scope: 'all' },
+  'All family': { scope: 'group', groupValue: 'family' },
+  'All friends': { scope: 'group', groupValue: 'friends' },
+  'Release Manager': { scope: 'release_manager' },
+  'All Others': { scope: 'group', groupValue: 'others' },
 }
 
-const INDIVIDUALS: Individual[] = [
-  { id: 'p1', name: 'Sarah Chen', relationship: 'Family' },
-  { id: 'p2', name: 'Michael Chen', relationship: 'Family' },
-  { id: 'p3', name: 'Emma Rodriguez', relationship: 'Family' },
-  { id: 'p4', name: 'David Thompson', relationship: 'Friend' },
-  { id: 'p5', name: 'Sophie Martin', relationship: 'Friend' },
-  { id: 'p6', name: 'James Wilson', relationship: 'Colleague' },
-]
-
-const STORAGE_KEY = 'tether_recorded_messages'
-
-interface StoredRecording {
-  id: string
-  kind: 'video' | 'audio'
-  recipient: string
-  title: string
-  mimeType: string
-  dataUrl: string
-  createdAt: number
-}
-
-function readStored(): StoredRecording[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    return JSON.parse(raw) as StoredRecording[]
-  } catch {
-    return []
+export function buildAssignments(
+  audience: string[],
+  selectedIndividualId: string,
+): Assignment[] {
+  const result: Assignment[] = []
+  for (const chip of audience) {
+    if (chip === 'Choose individuals') {
+      if (selectedIndividualId) {
+        result.push({ scope: 'individual', recipientId: selectedIndividualId })
+      }
+    } else if (RECIPIENT_OPTIONS[chip]) {
+      result.push(RECIPIENT_OPTIONS[chip])
+    }
   }
+  if (result.length === 0) result.push({ scope: 'all' })
+  return result
 }
-function writeStored(items: StoredRecording[]) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch {
-    /* ignore quota errors */
-  }
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+/** Capitalises the first letter so validation errors read in sentence case. */
+function toSentenceCase(message: string): string {
+  if (!message) return message
+  return message.charAt(0).toUpperCase() + message.slice(1)
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  return toSentenceCase(e instanceof Error ? e.message : fallback)
 }
 
 export default function CreateMessageModal({
@@ -108,7 +122,10 @@ export default function CreateMessageModal({
   headerSubtitle = 'This is the heart of your Tether',
   initialMessage,
   onSave,
+  onCreated,
 }: CreateMessageModalProps) {
+  const { showToast } = useToast()
+
   // step state
   const [step, setStep] = useState<Step>('setup')
 
@@ -117,7 +134,7 @@ export default function CreateMessageModal({
     initialMessage?.audience ?? ['All recipients'],
   )
   const [selectedIndividualId, setSelectedIndividualId] = useState<string>(
-    initialMessage?.selectedIndividualId ?? 'p1',
+    initialMessage?.selectedIndividualId ?? '',
   )
   const [messageType, setMessageType] = useState<MessageType>(
     initialMessage?.messageType ?? 'video',
@@ -126,11 +143,17 @@ export default function CreateMessageModal({
   const [notes, setNotes] = useState(initialMessage?.notes ?? '')
   const [body, setBody] = useState(initialMessage?.body ?? '')
 
+  // recipients (for the "Choose individuals" picker)
+  const [recipients, setRecipients] = useState<Recipient[]>([])
+
+  // submit state for the text flow
+  const [submitting, setSubmitting] = useState(false)
+
   // Resync if a different message is opened for editing
   useEffect(() => {
     if (!open) return
     setAudience(initialMessage?.audience ?? ['All recipients'])
-    setSelectedIndividualId(initialMessage?.selectedIndividualId ?? 'p1')
+    setSelectedIndividualId(initialMessage?.selectedIndividualId ?? '')
     setMessageType(initialMessage?.messageType ?? 'video')
     setTitle(initialMessage?.title ?? '')
     setNotes(initialMessage?.notes ?? '')
@@ -139,10 +162,28 @@ export default function CreateMessageModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialMessage?.id])
 
-  const recipientLabel =
-    audience.includes('Choose individuals')
-      ? INDIVIDUALS.find((p) => p.id === selectedIndividualId)?.name ?? 'someone special'
-      : audience[0] ?? 'someone special'
+  // Load real recipients when the modal opens.
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch {
+        /* non-fatal — picker just stays empty */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [open])
+
+  const recipientLabel = audience.includes('Choose individuals')
+    ? recipients.find((r) => r.id === selectedIndividualId)?.name ?? 'someone special'
+    : audience[0] ?? 'someone special'
 
   useEffect(() => {
     if (!open) return
@@ -167,6 +208,50 @@ export default function CreateMessageModal({
   const handleOpenRecorder = () => {
     if (messageType === 'write') setStep('write')
     else setStep('record')
+  }
+
+  // Create a text message (or fall back to the edit callback in edit mode).
+  const handleSubmitText = async (data: {
+    title: string
+    notes: string
+    body: string
+  }) => {
+    if (initialMessage) {
+      setBody(data.body)
+      onSave?.({
+        id: initialMessage.id,
+        audience,
+        selectedIndividualId,
+        messageType,
+        title: data.title,
+        notes: data.notes,
+        body: data.body,
+      })
+      handleClose()
+      return
+    }
+
+    const token = await getToken()
+    if (!token) {
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await createTextMessage(token, {
+        title: data.title,
+        body: data.body,
+        notes: data.notes || undefined,
+        assignments: buildAssignments(audience, selectedIndividualId),
+      })
+      showToast('Message saved', 'success')
+      onCreated?.()
+      handleClose()
+    } catch (e) {
+      showToast(errorMessage(e, 'Could not save your message.'), 'error')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (!open) return null
@@ -225,23 +310,9 @@ export default function CreateMessageModal({
               setTitle={setTitle}
               notes={notes}
               setNotes={setNotes}
+              recipients={recipients}
               isEditMode={!!initialMessage}
-              onOpenRecorder={() => {
-                if (initialMessage && messageType === 'write') {
-                  onSave?.({
-                    id: initialMessage.id,
-                    audience,
-                    selectedIndividualId,
-                    messageType,
-                    title,
-                    notes,
-                    body,
-                  })
-                  handleClose()
-                  return
-                }
-                handleOpenRecorder()
-              }}
+              onOpenRecorder={handleOpenRecorder}
               onSaveEdits={() => {
                 onSave?.({
                   id: initialMessage?.id,
@@ -262,7 +333,13 @@ export default function CreateMessageModal({
               kind={messageType === 'audio' ? 'audio' : 'video'}
               recipient={recipientLabel}
               title={title}
+              notes={notes}
+              assignments={buildAssignments(audience, selectedIndividualId)}
               onBack={() => setStep('setup')}
+              onDone={() => {
+                onCreated?.()
+                handleClose()
+              }}
             />
           )}
 
@@ -272,20 +349,9 @@ export default function CreateMessageModal({
               initialTitle={title}
               initialNotes={notes}
               initialBody={body}
+              saving={submitting}
               onCancel={handleClose}
-              onSave={(text) => {
-                setBody(text)
-                onSave?.({
-                  id: initialMessage?.id,
-                  audience,
-                  selectedIndividualId,
-                  messageType,
-                  title,
-                  notes,
-                  body: text,
-                })
-                handleClose()
-              }}
+              onSave={handleSubmitText}
             />
           )}
         </div>
@@ -309,6 +375,7 @@ function SetupStep({
   setTitle,
   notes,
   setNotes,
+  recipients,
   isEditMode,
   onOpenRecorder,
   onSaveEdits,
@@ -325,14 +392,45 @@ function SetupStep({
   setTitle: (v: string) => void
   notes: string
   setNotes: (v: string) => void
+  recipients: Recipient[]
   isEditMode: boolean
   onOpenRecorder: () => void
   onSaveEdits: () => void
 }) {
+  const [titleError, setTitleError] = useState<string | null>(null)
+
   const toggleAudience = (chip: string) =>
-    setAudience((prev) =>
-      prev.includes(chip) ? prev.filter((c) => c !== chip) : [...prev, chip],
-    )
+    setAudience((prev) => {
+      // "Choose individuals" is exclusive — picking it clears every group, and
+      // picking any group clears it.
+      if (chip === 'Choose individuals') {
+        return prev.includes(chip) ? prev.filter((c) => c !== chip) : ['Choose individuals']
+      }
+      const withoutIndividuals = prev.filter((c) => c !== 'Choose individuals')
+      return withoutIndividuals.includes(chip)
+        ? withoutIndividuals.filter((c) => c !== chip)
+        : [...withoutIndividuals, chip]
+    })
+
+  const validateTitle = () => {
+    if (!title.trim()) {
+      setTitleError('Title should not be empty')
+      return false
+    }
+    setTitleError(null)
+    return true
+  }
+
+  const handleCta = () => {
+    if (!validateTitle()) return
+    onOpenRecorder()
+  }
+
+  const handleSaveEdits = () => {
+    if (!validateTitle()) return
+    onSaveEdits()
+  }
+
   return (
     <>
       {/* Header */}
@@ -408,6 +506,7 @@ function SetupStep({
 
           {audience.includes('Choose individuals') && (
             <IndividualPicker
+              recipients={recipients}
               value={selectedIndividualId}
               onChange={setSelectedIndividualId}
             />
@@ -433,6 +532,7 @@ function SetupStep({
               title="Write Message"
               subtitle="Type a letter for someone"
               selected={messageType === 'write'}
+              disabled={isEditMode}
               onClick={() => setMessageType('write')}
             />
             <TypeCard
@@ -440,6 +540,7 @@ function SetupStep({
               title="Video message"
               subtitle="Record face-to-face · Up to 5 minutes"
               selected={messageType === 'video'}
+              disabled={isEditMode}
               onClick={() => setMessageType('video')}
             />
             <TypeCard
@@ -447,6 +548,7 @@ function SetupStep({
               title="Audio message"
               subtitle="Voice only · Up to 10 minutes"
               selected={messageType === 'audio'}
+              disabled={isEditMode}
               onClick={() => setMessageType('audio')}
             />
           </div>
@@ -468,7 +570,10 @@ function SetupStep({
           <input
             type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              if (titleError) setTitleError(null)
+            }}
             placeholder="Write Your title here"
             className="w-full focus:outline-none"
             style={{
@@ -481,8 +586,22 @@ function SetupStep({
               fontSize: 13,
               lineHeight: '20px',
               color: '#0A0A0A',
+              border: titleError ? '1px solid #FB2C36' : undefined,
             }}
           />
+          {titleError && (
+            <p
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                lineHeight: '18px',
+                color: '#FB2C36',
+              }}
+            >
+              {titleError}
+            </p>
+          )}
         </div>
 
         {/* Notes (optional) */}
@@ -523,7 +642,7 @@ function SetupStep({
           {isEditMode && messageType !== 'write' && (
             <button
               type="button"
-              onClick={onSaveEdits}
+              onClick={handleSaveEdits}
               className="flex-1 flex items-center justify-center cursor-pointer hover:bg-gray-50"
               style={{
                 height: 48,
@@ -542,7 +661,7 @@ function SetupStep({
           )}
           <button
             type="button"
-            onClick={onOpenRecorder}
+            onClick={handleCta}
             className="flex-1 flex items-center justify-center cursor-pointer hover:opacity-90"
             style={{
               height: 48,
@@ -575,19 +694,28 @@ function TypeCard({
   title,
   subtitle,
   selected,
+  disabled,
   onClick,
 }: {
   icon: React.ReactNode
   title: string
   subtitle: string
   selected: boolean
+  disabled?: boolean
   onClick: () => void
 }) {
+  // The message type can't be changed once a message is created, so disabled
+  // (edit mode) cards are non-interactive. The selected card keeps its styling;
+  // the others dim slightly to signal they're locked.
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="flex flex-col items-center justify-center text-center cursor-pointer transition-colors"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+      className={`flex flex-col items-center justify-center text-center transition-colors ${
+        disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+      }`}
       style={{
         minHeight: 159,
         borderRadius: 14,
@@ -595,6 +723,7 @@ function TypeCard({
         background: selected ? '#EEF2FF' : '#FFFFFF',
         padding: 20,
         gap: 10,
+        opacity: disabled && !selected ? 0.55 : 1,
       }}
     >
       {icon}
@@ -625,15 +754,17 @@ function TypeCard({
 }
 
 function IndividualPicker({
+  recipients,
   value,
   onChange,
 }: {
+  recipients: Recipient[]
   value: string
   onChange: (id: string) => void
 }) {
   const [search, setSearch] = useState('')
 
-  const filtered = INDIVIDUALS.filter((p) =>
+  const filtered = recipients.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   )
 
@@ -686,7 +817,7 @@ function IndividualPicker({
               color: '#717182',
             }}
           >
-            No matches.
+            {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
           </p>
         ) : (
           filtered.map((p) => {
@@ -755,49 +886,117 @@ function IndividualPicker({
 
 /* ===================== Record Step ===================== */
 
+function pickRecorderMime(kind: 'video' | 'audio'): string | undefined {
+  const candidates =
+    kind === 'video'
+      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      : ['audio/webm;codecs=opus', 'audio/webm']
+  if (typeof MediaRecorder === 'undefined') return undefined
+  for (const c of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(c)) return c
+    } catch {
+      /* ignore */
+    }
+  }
+  return undefined
+}
+
+type RecordPhase = 'record' | 'recording' | 'preview' | 'uploading'
+
 function RecordStep({
   kind,
   recipient,
   title,
+  notes,
+  assignments,
   onBack,
+  onDone,
 }: {
   kind: 'video' | 'audio'
   recipient: string
   title: string
+  notes: string
+  assignments: Assignment[]
   onBack: () => void
+  onDone: () => void
 }) {
+  const { showToast } = useToast()
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const timerRef = useRef<number | null>(null)
+  const pollRef = useRef<number | null>(null)
+  const blobRef = useRef<Blob | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
 
-  const [recording, setRecording] = useState(false)
+  const [phase, setPhase] = useState<RecordPhase>('record')
   const [elapsed, setElapsed] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState<StoredRecording[]>([])
+  const [uploadStatus, setUploadStatus] = useState('')
 
   const maxSeconds = kind === 'video' ? 5 * 60 : 10 * 60
 
+  // Start the camera preview as soon as the video recorder opens.
   useEffect(() => {
-    setSaved(readStored().filter((r) => r.kind === kind))
-    return () => {
-      stopStream()
-      if (timerRef.current) window.clearInterval(timerRef.current)
-    }
+    if (kind === 'video') initStream()
+    return () => cleanup()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const stopStream = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop() } catch {}
-    }
+  const stopTracks = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop())
       streamRef.current = null
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
+    if (videoRef.current) videoRef.current.srcObject = null
+  }
+
+  const cleanup = () => {
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+    stopTracks()
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+  }
+
+  const initStream = async () => {
+    setError(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(
+        kind === 'video' ? { video: { width: 1280, height: 720 }, audio: true } : { audio: true },
+      )
+      streamRef.current = stream
+      if (kind === 'video' && videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.muted = true
+        await videoRef.current.play().catch(() => {})
+      }
+    } catch {
+      setError(
+        kind === 'video'
+          ? 'Camera access is required to record video. Please allow access in your browser settings.'
+          : 'Microphone access is required to record audio. Please allow access in your browser settings.',
+      )
     }
   }
 
@@ -805,64 +1004,52 @@ function RecordStep({
     setError(null)
     chunksRef.current = []
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(
-        kind === 'video' ? { video: true, audio: true } : { audio: true },
-      )
-      streamRef.current = stream
-
-      if (kind === 'video' && videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.muted = true
-        await videoRef.current.play().catch(() => {})
+      if (!streamRef.current) {
+        await initStream()
       }
+      const stream = streamRef.current
+      if (!stream) return // initStream surfaced an error
 
-      const mr = new MediaRecorder(stream)
+      const mimeType = pickRecorderMime(kind)
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       mediaRecorderRef.current = mr
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
-      mr.onstop = async () => {
+      mr.onstop = () => {
         const blob = new Blob(chunksRef.current, {
           type: kind === 'video' ? 'video/webm' : 'audio/webm',
         })
-        const dataUrl = await blobToDataUrl(blob)
-        const entry: StoredRecording = {
-          id: `${Date.now()}`,
-          kind,
-          recipient,
-          title: title || 'Untitled',
-          mimeType: blob.type,
-          dataUrl,
-          createdAt: Date.now(),
-        }
-        try {
-          const next = [entry, ...readStored()]
-          writeStored(next)
-          setSaved(next.filter((r) => r.kind === kind))
-        } catch (err) {
-          setError('Recording too large to save to local storage.')
-        }
-        stopStream()
+        blobRef.current = blob
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+        const url = URL.createObjectURL(blob)
+        previewUrlRef.current = url
+        setPreviewUrl(url)
+        // Release the live camera/mic while previewing.
+        stopTracks()
+        setPhase('preview')
       }
-      mr.start()
-      setRecording(true)
+      mr.start(1000)
+      setPhase('recording')
       setElapsed(0)
       timerRef.current = window.setInterval(() => {
         setElapsed((s) => {
-          if (s + 1 >= maxSeconds) {
-            stopRecording()
-          }
-          return s + 1
+          const next = s + 1
+          if (next >= maxSeconds) stopRecording()
+          return next
         })
       }, 1000)
-    } catch (e) {
-      console.error(e)
-      setError('Unable to access camera/microphone.')
+    } catch {
+      setError(
+        kind === 'video'
+          ? 'Camera access is required to record video. Please allow access in your browser settings.'
+          : 'Microphone access is required to record audio. Please allow access in your browser settings.',
+      )
     }
   }
 
   const stopRecording = () => {
-    setRecording(false)
+    setDuration(elapsed)
     if (timerRef.current) {
       window.clearInterval(timerRef.current)
       timerRef.current = null
@@ -872,11 +1059,111 @@ function RecordStep({
     }
   }
 
-  const removeSaved = (id: string) => {
-    const next = readStored().filter((r) => r.id !== id)
-    writeStored(next)
-    setSaved(next.filter((r) => r.kind === kind))
+  const reRecord = () => {
+    blobRef.current = null
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+    setPreviewUrl(null)
+    setElapsed(0)
+    setDuration(0)
+    setError(null)
+    setPhase('record')
+    if (kind === 'video') initStream()
   }
+
+  const pollProcessing = (token: string, messageId: string) =>
+    new Promise<void>((resolve, reject) => {
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const status = await getMessageStatus(token, messageId)
+          if (status.processingStatus === 'ready') {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+            pollRef.current = null
+            resolve()
+          } else if (status.processingStatus === 'failed') {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+            pollRef.current = null
+            reject(new Error('Processing failed'))
+          }
+        } catch {
+          /* transient — keep polling */
+        }
+      }, 3000)
+    })
+
+  const handleSave = async () => {
+    const blob = blobRef.current
+    if (!blob) return
+
+    // Offline guard — keep the recording and retry on reconnect.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setError(
+        'You appear to be offline. Your recording is saved locally and will upload when you reconnect.',
+      )
+      window.addEventListener('online', () => handleSave(), { once: true })
+      return
+    }
+
+    setError(null)
+    setPhase('uploading')
+
+    const token = await getToken()
+    if (!token) {
+      setError('Your session has expired. Please sign in again.')
+      setPhase('preview')
+      return
+    }
+
+    try {
+      if (kind === 'video') {
+        setUploadStatus('Uploading…')
+        const { messageId, uploadUrl } = await createVideoUploadUrl(token, {
+          title,
+          notes: notes || undefined,
+          assignments,
+        })
+        const res = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: blob,
+          headers: { 'Content-Type': 'video/webm' },
+        })
+        if (!res.ok) throw new Error('Upload failed. Please try again.')
+        setUploadStatus('Processing…')
+        await pollProcessing(token, messageId)
+      } else {
+        setUploadStatus('Uploading…')
+        const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
+          title,
+          notes: notes || undefined,
+          assignments,
+          fileType: 'audio/webm',
+        })
+        const res = await fetch(signedUploadUrl, {
+          method: 'PUT',
+          body: blob,
+          headers: { 'Content-Type': 'audio/webm' },
+        })
+        if (!res.ok) throw new Error('Upload failed. Please try again.')
+        setUploadStatus('Processing…')
+        await confirmAudioUpload(token, messageId, {
+          durationSeconds: Math.round(duration),
+          fileSizeBytes: blob.size,
+        })
+      }
+      setUploadStatus('Ready!')
+      showToast('Message saved', 'success')
+      cleanup()
+      onDone()
+    } catch (e) {
+      setError(errorMessage(e, 'Upload failed. Please try again.'))
+      setPhase('preview')
+    }
+  }
+
+  const recording = phase === 'recording'
+  const uploading = phase === 'uploading'
 
   return (
     <>
@@ -922,11 +1209,19 @@ function RecordStep({
               maxHeight: 425,
             }}
           >
-            <video
-              ref={videoRef}
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            {phase === 'preview' || phase === 'uploading' ? (
+              <video
+                src={previewUrl ?? undefined}
+                controls
+                className="w-full h-full object-contain bg-black"
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            )}
             {recording && (
               <div
                 className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 rounded-full"
@@ -961,12 +1256,21 @@ function RecordStep({
                 textAlign: 'center',
               }}
             >
-              {recording ? `Recording… ${formatTime(elapsed)}` : 'Ready to record'}
+              {recording
+                ? `Recording… ${formatTime(elapsed)}`
+                : phase === 'preview' || phase === 'uploading'
+                ? 'Recording complete'
+                : 'Ready to record'}
             </span>
           </div>
         )}
 
-        {kind === 'video' && (
+        {/* Audio playback in preview/upload */}
+        {kind === 'audio' && (phase === 'preview' || phase === 'uploading') && previewUrl && (
+          <audio src={previewUrl} controls className="w-full" />
+        )}
+
+        {kind === 'video' && phase !== 'preview' && phase !== 'uploading' && (
           <p
             className="text-center"
             style={{
@@ -977,113 +1281,90 @@ function RecordStep({
             }}
           >
             Maximum recording time:{' '}
-            <span style={{ fontWeight: 600, color: '#4F46E5' }}>
-              {kind === 'video' ? '5 minutes' : '10 minutes'}
-            </span>
+            <span style={{ fontWeight: 600, color: '#4F46E5' }}>5 minutes</span>
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={recording ? stopRecording : startRecording}
-          className="w-full flex items-center justify-center gap-3 cursor-pointer hover:opacity-90"
-          style={{
-            height: 48,
-            borderRadius: 8,
-            background: '#E7000B',
-            padding: '12px 16px',
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 600,
-            fontSize: 15.1,
-            lineHeight: '24px',
-            color: '#FFFFFF',
-          }}
-        >
-          {recording ? (
-            <span
-              className="w-4 h-4 bg-white"
-              style={{ borderRadius: 2 }}
-              aria-hidden
-            />
-          ) : (
-            <span className="w-4 h-4 rounded-full bg-white" aria-hidden />
-          )}
-          {recording ? 'Stop Recording' : 'Start Recording'}
-        </button>
-
-        {error && (
-          <p className="text-sm text-red-600 text-center">{error}</p>
-        )}
-
-        {/* Saved recordings */}
-        {saved.length > 0 && (
-          <div className="flex flex-col gap-2 mt-2">
-            <p
+        {/* Action buttons */}
+        {phase === 'preview' || phase === 'uploading' ? (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={reRecord}
+              disabled={uploading}
+              className="flex-1 flex items-center justify-center cursor-pointer hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{
+                height: 48,
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
                 fontFamily: 'Inter, sans-serif',
                 fontWeight: 600,
-                fontSize: 14,
-                color: '#101828',
+                fontSize: 15.1,
+                lineHeight: '24px',
+                color: '#0A0A0A',
               }}
             >
-              Saved {kind === 'video' ? 'videos' : 'recordings'}
-            </p>
-            <div className="flex flex-col gap-2">
-              {saved.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex flex-col gap-2 p-3"
-                  style={{
-                    border: '1px solid rgba(0,0,0,0.08)',
-                    borderRadius: 10,
-                    background: '#F9FAFB',
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span
-                      className="truncate"
-                      style={{
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: 500,
-                        fontSize: 14,
-                        color: '#0A0A0A',
-                      }}
-                    >
-                      {r.title} — {new Date(r.createdAt).toLocaleString()}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeSaved(r.id)}
-                      className="text-xs text-red-600 cursor-pointer hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  {r.kind === 'video' ? (
-                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <video
-                      src={r.dataUrl}
-                      controls
-                      className="w-full"
-                      style={{ borderRadius: 8, background: '#000', maxHeight: 240 }}
-                    />
-                  ) : (
-                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <audio src={r.dataUrl} controls className="w-full" />
-                  )}
-                </div>
-              ))}
-            </div>
+              Re-record
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={uploading}
+              className="flex-1 flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+              style={{
+                height: 48,
+                borderRadius: 8,
+                background: '#4F46E5',
+                padding: '12px 16px',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 15.1,
+                lineHeight: '24px',
+                color: '#FFFFFF',
+              }}
+            >
+              {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {uploading ? uploadStatus || 'Uploading…' : error ? 'Try Again' : 'Save'}
+            </button>
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            className="w-full flex items-center justify-center gap-3 cursor-pointer hover:opacity-90"
+            style={{
+              height: 48,
+              borderRadius: 8,
+              background: '#E7000B',
+              padding: '12px 16px',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              fontSize: 15.1,
+              lineHeight: '24px',
+              color: '#FFFFFF',
+            }}
+          >
+            {recording ? (
+              <span className="w-4 h-4 bg-white" style={{ borderRadius: 2 }} aria-hidden />
+            ) : (
+              <span className="w-4 h-4 rounded-full bg-white" aria-hidden />
+            )}
+            {recording ? 'Stop Recording' : 'Start Recording'}
+          </button>
         )}
 
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-sm text-[#4F46E5] hover:underline cursor-pointer self-start"
-        >
-          ← Back
-        </button>
+        {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+
+        {!uploading && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-sm text-[#4F46E5] hover:underline cursor-pointer self-start"
+          >
+            ← Back
+          </button>
+        )}
       </div>
     </>
   )
@@ -1096,6 +1377,7 @@ function WriteMessageStep({
   initialTitle,
   initialNotes,
   initialBody,
+  saving,
   onCancel,
   onSave,
 }: {
@@ -1103,8 +1385,9 @@ function WriteMessageStep({
   initialTitle?: string
   initialNotes?: string
   initialBody?: string
+  saving?: boolean
   onCancel: () => void
-  onSave: (body: string) => void
+  onSave: (data: { title: string; notes: string; body: string }) => void
 }) {
   const [messageTitle, setMessageTitle] = useState(initialTitle ?? '')
   const [messageNotes, setMessageNotes] = useState(initialNotes ?? '')
@@ -1113,8 +1396,16 @@ function WriteMessageStep({
 
   // Seed the contenteditable with initial body once.
   useEffect(() => {
-    if (editorRef.current && initialBody && editorRef.current.innerText.length === 0) {
-      editorRef.current.innerText = initialBody
+    // Use <div> blocks for new lines so indent/outdent act on a real block
+    // rather than spawning a stray line.
+    try {
+      document.execCommand('defaultParagraphSeparator', false, 'div')
+    } catch {
+      /* not supported everywhere — harmless */
+    }
+    if (editorRef.current && initialBody && editorRef.current.innerHTML.length === 0) {
+      editorRef.current.innerHTML = initialBody
+      setBodyText(editorRef.current.innerText)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1157,6 +1448,72 @@ function WriteMessageStep({
     refreshActive()
   }
 
+  // Resolve the top-level block (direct child of the editor) holding the caret,
+  // wrapping a bare text line in a <div> if needed so indent has something to act on.
+  const getCaretBlock = (): HTMLElement | null => {
+    const editor = editorRef.current
+    if (!editor || typeof window === 'undefined') return null
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return null
+    const climb = (start: Node | null): HTMLElement | null => {
+      let el: HTMLElement | null =
+        start && start.nodeType === Node.TEXT_NODE
+          ? start.parentElement
+          : (start as HTMLElement | null)
+      while (el && el !== editor && el.parentElement !== editor) {
+        el = el.parentElement
+      }
+      return el && el !== editor ? el : null
+    }
+    let block = climb(sel.getRangeAt(0).startContainer)
+    if (!block) {
+      // Caret sits directly in the editor (bare text / empty line) — wrap it.
+      try {
+        document.execCommand('formatBlock', false, 'div')
+      } catch {
+        /* ignore */
+      }
+      const sel2 = window.getSelection()
+      block = sel2 && sel2.rangeCount ? climb(sel2.getRangeAt(0).startContainer) : null
+    }
+    return block
+  }
+
+  const INDENT_STEP = 40 // px
+
+  // Indent/outdent in place: nests within lists, otherwise shifts the block's
+  // left margin so the line stays put instead of jumping to a new line.
+  const adjustIndent = (direction: 1 | -1) => {
+    if (typeof document === 'undefined') return
+    editorRef.current?.focus()
+    const inList = (() => {
+      try {
+        return (
+          document.queryCommandState('insertUnorderedList') ||
+          document.queryCommandState('insertOrderedList')
+        )
+      } catch {
+        return false
+      }
+    })()
+    if (inList) {
+      try {
+        document.execCommand(direction > 0 ? 'indent' : 'outdent')
+      } catch {
+        /* ignore */
+      }
+    } else {
+      const block = getCaretBlock()
+      if (block) {
+        const current = parseInt(block.style.marginLeft || '0', 10) || 0
+        const next = Math.max(0, current + direction * INDENT_STEP)
+        block.style.marginLeft = next > 0 ? `${next}px` : ''
+      }
+    }
+    if (editorRef.current) setBodyText(editorRef.current.innerText)
+    refreshActive()
+  }
+
   const handleInput = () => {
     if (editorRef.current) {
       setBodyText(editorRef.current.innerText)
@@ -1188,6 +1545,26 @@ function WriteMessageStep({
     }, 600)
     return () => window.clearTimeout(t)
   }, [bodyText, messageTitle, messageNotes])
+
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const handleSaveClick = () => {
+    if (saving) return
+    const text = (editorRef.current?.innerText ?? bodyText).trim()
+    const errors: string[] = []
+    if (!messageTitle.trim()) errors.push('Title should not be empty')
+    if (!text) errors.push('Body should not be empty')
+    if (errors.length > 0) {
+      setFormError(errors.join(', '))
+      return
+    }
+    setFormError(null)
+    onSave({
+      title: messageTitle,
+      notes: messageNotes,
+      body: editorRef.current?.innerHTML ?? bodyText,
+    })
+  }
 
   return (
     <>
@@ -1333,18 +1710,16 @@ function WriteMessageStep({
 
           <Divider />
 
-          <ToolbarBtn onClick={() => exec('outdent')} label="Decrease indent">
+          <ToolbarBtn onClick={() => adjustIndent(-1)} label="Decrease indent">
             <Outdent className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => exec('indent')} label="Increase indent">
+          <ToolbarBtn onClick={() => adjustIndent(1)} label="Increase indent">
             <Indent className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
           </ToolbarBtn>
 
           <Divider />
 
-          <ColorPicker
-            onPick={(color) => exec('foreColor', color)}
-          />
+          <ColorPicker onPick={(color) => exec('foreColor', color)} />
         </div>
 
         {/* Editor */}
@@ -1355,7 +1730,7 @@ function WriteMessageStep({
           onInput={handleInput}
           onKeyUp={refreshActive}
           onMouseUp={refreshActive}
-          className="w-full focus:outline-none whitespace-pre-wrap overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
+          className="w-full focus:outline-none overflow-y-auto [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-2 [&_li]:mb-1 [&_blockquote]:ml-10 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
           data-placeholder="Growing up in Chicago during the 1960s and 70s was an experience that shaped everything I became…"
           style={{
             minHeight: 274,
@@ -1409,6 +1784,20 @@ function WriteMessageStep({
             </span>
           </div>
         </div>
+
+        {formError && (
+          <p
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 400,
+              fontSize: 13,
+              lineHeight: '18px',
+              color: '#FB2C36',
+            }}
+          >
+            {formError}
+          </p>
+        )}
       </div>
 
       {/* Footer */}
@@ -1444,8 +1833,9 @@ function WriteMessageStep({
         </button>
         <button
           type="button"
-          onClick={() => onSave(bodyText)}
-          className="cursor-pointer hover:opacity-90"
+          onClick={handleSaveClick}
+          disabled={saving}
+          className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
           style={{
             height: 36,
             padding: '8px 16px',
@@ -1458,7 +1848,8 @@ function WriteMessageStep({
             color: '#FFFFFF',
           }}
         >
-          Save and Continue
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+          {saving ? 'Saving…' : 'Save and Continue'}
         </button>
       </div>
     </>
@@ -1594,13 +1985,4 @@ function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0')
   const s = (seconds % 60).toString().padStart(2, '0')
   return `${m}:${s}`
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
 }

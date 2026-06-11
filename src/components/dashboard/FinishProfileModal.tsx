@@ -1,49 +1,67 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Info, Upload, User, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Info, Loader2, Upload, User, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import { getMe, updateProfile, getAvatarUploadUrl } from '@/lib/api/users'
 
 interface FinishProfileModalProps {
   open: boolean
   onClose: () => void
-  onSave?: (data: ProfileFormData) => void
+  /** Called after the profile is successfully saved on the backend. */
+  onCompleted?: () => void
 }
 
-export interface ProfileFormData {
-  firstName: string
-  lastName: string
-  zipCode: string
-  state: string
-  ageGroup: string
-  gender: string
-  status: string
-  phone: string
-  hearAbout: string
-  photo: string | null
+// State display name <-> 2-letter code (the API stores/returns the code).
+const STATE_TO_CODE: Record<string, string> = {
+  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
+  Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
+  Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA',
+  Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
+  Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS',
+  Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV',
+  'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+  'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK',
+  Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+  'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT',
+  Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI',
+  Wyoming: 'WY', 'American Samoa': 'AS', Guam: 'GU',
+  'Northern Mariana Islands': 'MP', 'Puerto Rico': 'PR',
+  'U.S. Virgin Islands': 'VI', 'Washington D.C.': 'DC',
 }
-
-const STATES = [
-  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
-  'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho',
-  'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana',
-  'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi',
-  'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey',
-  'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
-  'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
-  'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia',
-  'Washington', 'West Virginia', 'Wisconsin', 'Wyoming',
-  'American Samoa', 'Guam', 'Northern Mariana Islands', 'Puerto Rico',
-  'U.S. Virgin Islands', 'Washington D.C.',
-]
+const CODE_TO_STATE: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_TO_CODE).map(([name, code]) => [code, name]),
+)
+const STATES = Object.keys(STATE_TO_CODE)
 
 const AGE_GROUPS = ['18-29', '30-44', '45-59', '60+']
+
 const GENDERS = ['Woman', 'Man', 'Non-binary']
+const GENDER_TO_VALUE: Record<string, string> = {
+  Woman: 'woman',
+  Man: 'man',
+  'Non-binary': 'non-binary',
+}
+const GENDER_TO_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(GENDER_TO_VALUE).map(([label, value]) => [value, label]),
+)
+
 const STATUSES = [
   'Single',
   'Married or partnered',
   'Married/partnered with children',
   'Single parent',
 ]
+const STATUS_TO_VALUE: Record<string, string> = {
+  Single: 'single',
+  'Married or partnered': 'married_partnered',
+  'Married/partnered with children': 'married_partnered_children',
+  'Single parent': 'single_parent',
+}
+const STATUS_TO_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(STATUS_TO_VALUE).map(([label, value]) => [value, label]),
+)
 const HEAR_OPTIONS = [
   'From a friend or family member',
   'Online search',
@@ -53,32 +71,84 @@ const HEAR_OPTIONS = [
   'Other',
 ]
 
-export default function FinishProfileModal({ open, onClose, onSave }: FinishProfileModalProps) {
+export default function FinishProfileModal({ open, onClose, onCompleted }: FinishProfileModalProps) {
+  const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [zipCode, setZipCode] = useState('')
   const [state, setState] = useState('')
-  const [ageGroup, setAgeGroup] = useState('18-29')
-  const [gender, setGender] = useState('Man')
-  const [status, setStatus] = useState('Single')
-  const [phone, setPhone] = useState('+1 5165321112')
+  const [ageGroup, setAgeGroup] = useState('')
+  const [gender, setGender] = useState('')
+  const [status, setStatus] = useState('')
+  const [phone, setPhone] = useState('')
   const [hearAbout, setHearAbout] = useState('From a friend or family member')
   const [photo, setPhoto] = useState<string | null>(null)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [statusText, setStatusText] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const getToken = async () => {
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    return session?.access_token ?? null
+  }
 
   const handlePickPhoto = () => fileInputRef.current?.click()
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const result = ev.target?.result
-      if (typeof result === 'string') setPhoto(result)
-    }
-    reader.readAsDataURL(file)
     e.target.value = ''
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image must be under 5 MB', 'error')
+      return
+    }
+    setAvatarFile(file)
+    setPhoto((prev) => {
+      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
   }
 
+  // Pre-populate from the current user when the modal opens (works as both
+  // first-time setup and an edit form). Resets transient state too.
+  useEffect(() => {
+    if (!open) return
+    setError(null)
+    setSubmitting(false)
+    setStatusText('')
+    setAvatarFile(null)
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const user = await getMe(token)
+        if (!active) return
+        setFirstName(user.first_name || '')
+        setLastName(user.last_name || '')
+        setZipCode(user.zip_code || '')
+        setState(user.state ? CODE_TO_STATE[user.state] || '' : '')
+        setAgeGroup(user.age_group || '')
+        setGender(user.gender ? GENDER_TO_LABEL[user.gender] || '' : '')
+        setStatus(
+          user.relationship_status ? STATUS_TO_LABEL[user.relationship_status] || '' : '',
+        )
+        setPhone(user.phone_number || '')
+        if (user.avatar_url) setPhoto(user.avatar_url)
+      } catch {
+        /* ignore — form starts empty */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [open])
+
+  // Escape-to-close + scroll lock.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -93,11 +163,69 @@ export default function FinishProfileModal({ open, onClose, onSave }: FinishProf
     }
   }, [open, onClose])
 
+  // Revoke object URLs to avoid memory leaks.
+  useEffect(() => {
+    return () => {
+      if (photo && photo.startsWith('blob:')) URL.revokeObjectURL(photo)
+    }
+  }, [photo])
+
   if (!open) return null
 
-  const handleSave = () => {
-    onSave?.({ firstName, lastName, zipCode, state, ageGroup, gender, status, phone, hearAbout, photo })
-    onClose()
+  const handleSave = async () => {
+    if (submitting) return
+    setError(null)
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First name and last name are required.')
+      return
+    }
+    const token = await getToken()
+    if (!token) {
+      setError('Session expired. Please sign in again.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      let avatarUrl: string | undefined
+      if (avatarFile) {
+        setStatusText('Uploading photo…')
+        const { signedUploadUrl, publicUrl } = await getAvatarUploadUrl(token, avatarFile.type)
+        const uploadRes = await fetch(signedUploadUrl, {
+          method: 'PUT',
+          body: avatarFile,
+          headers: { 'Content-Type': avatarFile.type },
+        })
+        if (!uploadRes.ok) {
+          throw new Error('Failed to upload profile photo. Please try again.')
+        }
+        avatarUrl = publicUrl
+      }
+
+      setStatusText('Saving profile…')
+      await updateProfile(token, {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        zip_code: zipCode.trim() || undefined,
+        state: state ? STATE_TO_CODE[state] || undefined : undefined,
+        age_group: ageGroup || undefined,
+        gender: gender ? GENDER_TO_VALUE[gender] || undefined : undefined,
+        relationship_status: status ? STATUS_TO_VALUE[status] || undefined : undefined,
+        phone_number: phone.trim() || undefined,
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      })
+
+      showToast('Profile updated!', 'success')
+      onCompleted?.()
+      onClose()
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
+      )
+    } finally {
+      setSubmitting(false)
+      setStatusText('')
+    }
   }
 
   return (
@@ -111,7 +239,7 @@ export default function FinishProfileModal({ open, onClose, onSave }: FinishProf
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/heic"
         onChange={handlePhotoChange}
         className="hidden"
       />
@@ -426,7 +554,7 @@ export default function FinishProfileModal({ open, onClose, onSave }: FinishProf
 
         {/* Footer */}
         <div
-          className="flex flex-wrap items-center justify-end gap-3 px-4 sm:px-10 py-[15px]"
+          className="flex flex-col gap-2 px-4 sm:px-10 py-[15px]"
           style={{
             background: '#F9FAFB',
             borderTop: '0.8px solid #E5E7EB',
@@ -434,44 +562,63 @@ export default function FinishProfileModal({ open, onClose, onSave }: FinishProf
             borderBottomRightRadius: 10,
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer hover:bg-gray-50"
-            style={{
-              height: 36,
-              padding: '7.8px 15.8px',
-              borderRadius: 8,
-              border: '1px solid rgba(0,0,0,0.1)',
-              background: '#FFFFFF',
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 500,
-              fontSize: 13.2,
-              lineHeight: '20px',
-              color: '#0A0A0A',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="cursor-pointer hover:opacity-90"
-            style={{
-              width: 158,
-              height: 36,
-              padding: '8px 16px',
-              borderRadius: 8,
-              background: '#4F46E5',
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 500,
-              fontSize: 14,
-              lineHeight: '20px',
-              color: '#FFFFFF',
-            }}
-          >
-            Save and Continue
-          </button>
+          {error && (
+            <p
+              className="text-right"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                lineHeight: '18px',
+                color: '#FB2C36',
+              }}
+            >
+              {error}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+              style={{
+                height: 36,
+                padding: '7.8px 15.8px',
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 13.2,
+                lineHeight: '20px',
+                color: '#0A0A0A',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={submitting}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+              style={{
+                minWidth: 158,
+                height: 36,
+                padding: '8px 16px',
+                borderRadius: 8,
+                background: '#4F46E5',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 14,
+                lineHeight: '20px',
+                color: '#FFFFFF',
+              }}
+            >
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {submitting ? statusText || 'Saving…' : 'Save and Continue'}
+            </button>
+          </div>
         </div>
       </div>
       </div>
