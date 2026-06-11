@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { getRecipients, type Recipient } from '@/lib/api/recipients'
 
 interface AssignRecipientsModalProps {
   open: boolean
@@ -20,26 +22,11 @@ const GROUPS = [
   'Release Manager',
 ]
 
-interface Individual {
-  id: string
-  name: string
-  relationship: string
-}
-
-const INDIVIDUALS: Individual[] = [
-  { id: 'p1', name: 'Sarah Chen', relationship: 'Family' },
-  { id: 'p2', name: 'Michael Chen', relationship: 'Family' },
-  { id: 'p3', name: 'Emma Rodriguez', relationship: 'Family' },
-  { id: 'p4', name: 'David Thompson', relationship: 'Friend' },
-  { id: 'p5', name: 'Sophie Martin', relationship: 'Friend' },
-  { id: 'p6', name: 'James Wilson', relationship: 'Colleague' },
-]
-
 export default function AssignRecipientsModal({
   open,
   onClose,
   messageTitle,
-  initialGroups = ['All Friends', 'All Others'],
+  initialGroups = [],
   initialIndividualIds = [],
   onSave,
 }: AssignRecipientsModalProps) {
@@ -47,6 +34,7 @@ export default function AssignRecipientsModal({
   const [individualIds, setIndividualIds] = useState<string[]>(initialIndividualIds)
   const [showIndividuals, setShowIndividuals] = useState(false)
   const [search, setSearch] = useState('')
+  const [recipients, setRecipients] = useState<Recipient[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -55,6 +43,29 @@ export default function AssignRecipientsModal({
     setShowIndividuals(false)
     setSearch('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Load real recipients for the individual picker.
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    ;(async () => {
+      const supabase = createClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch {
+        /* non-fatal — picker stays empty */
+      }
+    })()
+    return () => {
+      active = false
+    }
   }, [open])
 
   useEffect(() => {
@@ -80,7 +91,7 @@ export default function AssignRecipientsModal({
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
 
-  const filtered = INDIVIDUALS.filter((p) =>
+  const filtered = recipients.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   )
 
@@ -257,7 +268,7 @@ export default function AssignRecipientsModal({
                         color: '#717182',
                       }}
                     >
-                      No matches.
+                      {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
                     </p>
                   ) : (
                     filtered.map((p) => {

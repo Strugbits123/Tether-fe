@@ -39,10 +39,10 @@ export interface MessageAssignment {
  */
 export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
   audience: string[]
-  selectedIndividualId?: string
+  selectedIndividualIds: string[]
 } {
   const audience: string[] = []
-  let selectedIndividualId: string | undefined
+  const selectedIndividualIds: string[] = []
   for (const a of assignments) {
     switch (a.assignment_scope) {
       case 'all':
@@ -58,12 +58,14 @@ export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
         break
       case 'individual':
         if (!audience.includes('Choose individuals')) audience.push('Choose individuals')
-        if (!selectedIndividualId && a.recipient_id) selectedIndividualId = a.recipient_id
+        if (a.recipient_id && !selectedIndividualIds.includes(a.recipient_id)) {
+          selectedIndividualIds.push(a.recipient_id)
+        }
         break
       // 'assign_later' → nothing selected
     }
   }
-  return { audience, selectedIndividualId }
+  return { audience, selectedIndividualIds }
 }
 
 // Text message

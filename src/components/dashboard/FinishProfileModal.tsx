@@ -87,7 +87,16 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
   const [submitting, setSubmitting] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const clearFieldError = (field: string) =>
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
 
   const getToken = async () => {
     const supabase = createClient()
@@ -118,6 +127,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
   useEffect(() => {
     if (!open) return
     setError(null)
+    setFieldErrors({})
     setSubmitting(false)
     setStatusText('')
     setAvatarFile(null)
@@ -172,13 +182,27 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
 
   if (!open) return null
 
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!firstName.trim()) errs.firstName = 'First name is required.'
+    if (!lastName.trim()) errs.lastName = 'Last name is required.'
+    if (!zipCode.trim()) errs.zipCode = 'Zip code is required.'
+    else if (!/^\d{5}(-\d{4})?$/.test(zipCode.trim()))
+      errs.zipCode = 'Enter a valid US zip code (e.g. 10001).'
+    if (!state) errs.state = 'Please select your state.'
+    if (!ageGroup) errs.ageGroup = 'Please select an age group.'
+    if (!gender) errs.gender = 'Please select a gender identity.'
+    if (!status) errs.status = 'Please select a status.'
+    if (phone.trim() && !/^\+?[\d\s()-]{7,20}$/.test(phone.trim()))
+      errs.phone = 'Enter a valid phone number.'
+    setFieldErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const handleSave = async () => {
     if (submitting) return
     setError(null)
-    if (!firstName.trim() || !lastName.trim()) {
-      setError('First name and last name are required.')
-      return
-    }
+    if (!validate()) return
     const token = await getToken()
     if (!token) {
       setError('Session expired. Please sign in again.')
@@ -400,20 +424,51 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FieldLabel label="First Name" required>
-                <TextInput value={firstName} onChange={setFirstName} placeholder="Enter first name" />
+              <FieldLabel label="First Name" required error={fieldErrors.firstName}>
+                <TextInput
+                  value={firstName}
+                  onChange={(v) => {
+                    setFirstName(v)
+                    clearFieldError('firstName')
+                  }}
+                  placeholder="Enter first name"
+                  invalid={!!fieldErrors.firstName}
+                />
               </FieldLabel>
-              <FieldLabel label="Last Name" required>
-                <TextInput value={lastName} onChange={setLastName} placeholder="Enter last name" />
+              <FieldLabel label="Last Name" required error={fieldErrors.lastName}>
+                <TextInput
+                  value={lastName}
+                  onChange={(v) => {
+                    setLastName(v)
+                    clearFieldError('lastName')
+                  }}
+                  placeholder="Enter last name"
+                  invalid={!!fieldErrors.lastName}
+                />
               </FieldLabel>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FieldLabel label="Zip Code" required>
-                <TextInput value={zipCode} onChange={setZipCode} placeholder="Enter zip code" />
+              <FieldLabel label="Zip Code" required error={fieldErrors.zipCode}>
+                <TextInput
+                  value={zipCode}
+                  onChange={(v) => {
+                    setZipCode(v)
+                    clearFieldError('zipCode')
+                  }}
+                  placeholder="Enter zip code"
+                  invalid={!!fieldErrors.zipCode}
+                />
               </FieldLabel>
-              <FieldLabel label="State" required>
-                <StateDropdown value={state} onChange={setState} />
+              <FieldLabel label="State" required error={fieldErrors.state}>
+                <StateDropdown
+                  value={state}
+                  onChange={(v) => {
+                    setState(v)
+                    clearFieldError('state')
+                  }}
+                  invalid={!!fieldErrors.state}
+                />
               </FieldLabel>
             </div>
           </div>
@@ -426,9 +481,18 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
             <FieldLabelInline label="Age Group" required />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {AGE_GROUPS.map((g) => (
-                <RadioPill key={g} label={g} selected={ageGroup === g} onClick={() => setAgeGroup(g)} />
+                <RadioPill
+                  key={g}
+                  label={g}
+                  selected={ageGroup === g}
+                  onClick={() => {
+                    setAgeGroup(g)
+                    clearFieldError('ageGroup')
+                  }}
+                />
               ))}
             </div>
+            {fieldErrors.ageGroup && <FieldError message={fieldErrors.ageGroup} />}
           </div>
 
           {/* Gender Identity */}
@@ -439,9 +503,18 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
             <FieldLabelInline label="Gender Identity" required />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {GENDERS.map((g) => (
-                <RadioPill key={g} label={g} selected={gender === g} onClick={() => setGender(g)} />
+                <RadioPill
+                  key={g}
+                  label={g}
+                  selected={gender === g}
+                  onClick={() => {
+                    setGender(g)
+                    clearFieldError('gender')
+                  }}
+                />
               ))}
             </div>
+            {fieldErrors.gender && <FieldError message={fieldErrors.gender} />}
           </div>
 
           {/* Status */}
@@ -455,9 +528,18 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {STATUSES.map((s) => (
-                <RadioPill key={s} label={s} selected={status === s} onClick={() => setStatus(s)} />
+                <RadioPill
+                  key={s}
+                  label={s}
+                  selected={status === s}
+                  onClick={() => {
+                    setStatus(s)
+                    clearFieldError('status')
+                  }}
+                />
               ))}
             </div>
+            {fieldErrors.status && <FieldError message={fieldErrors.status} />}
           </div>
 
           {/* Contact Information */}
@@ -501,13 +583,18 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  setPhone(e.target.value)
+                  clearFieldError('phone')
+                }}
                 placeholder="+1 555 000 0000"
                 className="w-full focus:outline-none"
                 style={{
                   height: 36,
                   borderRadius: 8,
-                  border: '1px solid rgba(0,0,0,0.1)',
+                  border: fieldErrors.phone
+                    ? '1px solid #FB2C36'
+                    : '1px solid rgba(0,0,0,0.1)',
                   background: '#F3F3F5',
                   padding: '4px 12px',
                   fontFamily: 'Inter, sans-serif',
@@ -517,6 +604,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
                   color: '#0A0A0A',
                 }}
               />
+              {fieldErrors.phone && <FieldError message={fieldErrors.phone} />}
               <p
                 className="mt-2"
                 style={{
@@ -628,13 +716,31 @@ export default function FinishProfileModal({ open, onClose, onCompleted }: Finis
 
 /* ------------------------ Sub-components ------------------------ */
 
+function FieldError({ message }: { message: string }) {
+  return (
+    <p
+      style={{
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 400,
+        fontSize: 12.5,
+        lineHeight: '16px',
+        color: '#FB2C36',
+      }}
+    >
+      {message}
+    </p>
+  )
+}
+
 function FieldLabel({
   label,
   required,
+  error,
   children,
 }: {
   label: string
   required?: boolean
+  error?: string
   children: React.ReactNode
 }) {
   return (
@@ -656,6 +762,7 @@ function FieldLabel({
         )}
       </div>
       {children}
+      {error && <FieldError message={error} />}
     </div>
   )
 }
@@ -685,10 +792,12 @@ function TextInput({
   value,
   onChange,
   placeholder,
+  invalid,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder: string
+  invalid?: boolean
 }) {
   return (
     <input
@@ -700,7 +809,7 @@ function TextInput({
       style={{
         height: 36,
         borderRadius: 8,
-        border: '1px solid rgba(0,0,0,0.1)',
+        border: invalid ? '1px solid #FB2C36' : '1px solid rgba(0,0,0,0.1)',
         background: '#F3F3F5',
         padding: '4px 12px',
         fontFamily: 'Inter, sans-serif',
@@ -772,7 +881,15 @@ function RadioPill({
   )
 }
 
-function StateDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StateDropdown({
+  value,
+  onChange,
+  invalid,
+}: {
+  value: string
+  onChange: (v: string) => void
+  invalid?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -793,7 +910,7 @@ function StateDropdown({ value, onChange }: { value: string; onChange: (v: strin
         style={{
           height: 36,
           borderRadius: 8,
-          border: '1px solid rgba(0,0,0,0.1)',
+          border: invalid ? '1px solid #FB2C36' : '1px solid rgba(0,0,0,0.1)',
           background: '#F3F3F5',
           padding: '4px 12px',
           fontFamily: 'Inter, sans-serif',
