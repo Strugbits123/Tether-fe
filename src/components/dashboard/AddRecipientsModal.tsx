@@ -54,7 +54,7 @@ export default function AddRecipientsModal({
   onSkip,
   isOnboarding = false,
   cancelLabel,
-  title = "Add a Recipients",
+  title = "Add a Recipient",
   subtitle = "Recipients are the people who will receive access to your messages, photos, and documents when your Tether is released. You can add more in the Access page.",
   bottomVariant = "note",
   readOnly = false,
@@ -445,84 +445,84 @@ export default function AddRecipientsModal({
                 </button>
               ) : (
                 <>
-              <button
-                type="button"
-                onClick={onSkip ?? onClose}
-                disabled={loading}
-                className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
-                style={{
-                  height: 36,
-                  padding: "7.8px 15.8px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(0,0,0,0.1)",
-                  background: "#FFFFFF",
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                  fontSize: 13.2,
-                  lineHeight: "20px",
-                  color: "#0A0A0A",
-                }}
-              >
-                {cancelLabel ?? (isOnboarding ? "Skip" : "Cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={handleAdd}
-                disabled={loading}
-                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
-                style={{
-                  height: 36,
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  background:
-                    isOnboarding && addedThisSession > 0
-                      ? "#FFFFFF"
-                      : "#4F46E5",
-                  border:
-                    isOnboarding && addedThisSession > 0
-                      ? "1px solid rgba(0,0,0,0.1)"
-                      : "none",
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  lineHeight: "20px",
-                  color:
-                    isOnboarding && addedThisSession > 0
-                      ? "#0A0A0A"
-                      : "#FFFFFF",
-                }}
-              >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading
-                  ? "Adding…"
-                  : isOnboarding && addedThisSession > 0
-                    ? "Add Another"
-                    : "Add Recipient"}
-              </button>
-              {isOnboarding && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onCreated?.();
-                    onClose();
-                  }}
-                  disabled={addedThisSession === 0}
-                  className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{
-                    height: 36,
-                    padding: "8px 16px",
-                    borderRadius: 8,
-                    background: "#4F46E5",
-                    fontFamily: "Inter, sans-serif",
-                    fontWeight: 500,
-                    fontSize: 14,
-                    lineHeight: "20px",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  Cancel
-                </button>
-              )}
+                  <button
+                    type="button"
+                    onClick={onSkip ?? onClose}
+                    disabled={loading}
+                    className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                    style={{
+                      height: 36,
+                      padding: "7.8px 15.8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(0,0,0,0.1)",
+                      background: "#FFFFFF",
+                      fontFamily: "Inter, sans-serif",
+                      fontWeight: 500,
+                      fontSize: 13.2,
+                      lineHeight: "20px",
+                      color: "#0A0A0A",
+                    }}
+                  >
+                    {cancelLabel ?? (isOnboarding ? "Skip" : "Cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAdd}
+                    disabled={loading}
+                    className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+                    style={{
+                      height: 36,
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      background:
+                        isOnboarding && addedThisSession > 0
+                          ? "#FFFFFF"
+                          : "#4F46E5",
+                      border:
+                        isOnboarding && addedThisSession > 0
+                          ? "1px solid rgba(0,0,0,0.1)"
+                          : "none",
+                      fontFamily: "Inter, sans-serif",
+                      fontWeight: 500,
+                      fontSize: 14,
+                      lineHeight: "20px",
+                      color:
+                        isOnboarding && addedThisSession > 0
+                          ? "#0A0A0A"
+                          : "#FFFFFF",
+                    }}
+                  >
+                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {loading
+                      ? "Adding…"
+                      : isOnboarding && addedThisSession > 0
+                        ? "Add Another"
+                        : "Add Recipient"}
+                  </button>
+                  {isOnboarding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCreated?.();
+                        onClose();
+                      }}
+                      disabled={addedThisSession === 0}
+                      className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{
+                        height: 36,
+                        padding: "8px 16px",
+                        borderRadius: 8,
+                        background: "#4F46E5",
+                        fontFamily: "Inter, sans-serif",
+                        fontWeight: 500,
+                        fontSize: 14,
+                        lineHeight: "20px",
+                        color: "#FFFFFF",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </>
               )}
             </div>
