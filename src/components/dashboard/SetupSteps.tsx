@@ -8,12 +8,19 @@ import { createClient } from "@/lib/supabase/client";
 import { getRecipients } from "@/lib/api/recipients";
 import { getReleaseManager } from "@/lib/api/release-managers";
 import { getPhotos } from "@/lib/api/photos";
+import {
+  getMessages,
+  getMessage,
+  assignmentsToAudience,
+} from "@/lib/api/messages";
 import { displayRelationship } from "@/lib/relationship";
 import FinishProfileModal from "./FinishProfileModal";
 import AddReleaseManagerModal from "./AddReleaseManagerModal";
 import AddRecipientsModal from "./AddRecipientsModal";
 import AddPhotosModal from "./AddPhotosModal";
-import CreateMessageModal from "./CreateMessageModal";
+import CreateMessageModal, {
+  type EditableMessage,
+} from "./CreateMessageModal";
 import PlaceholderStepModal from "./PlaceholderStepModal";
 
 type PersonView = {
@@ -91,6 +98,8 @@ export default function SetupSteps() {
   const [rmView, setRmView] = useState<PersonView | null>(null);
   // First uploaded photo's URL for the read-only photos view (null = create mode).
   const [photoView, setPhotoView] = useState<string[] | null>(null);
+  // First-ever message for the read-only message view (null = create mode).
+  const [messageView, setMessageView] = useState<EditableMessage | null>(null);
   // 'visible' → showing; 'fading' → playing the fade-out; 'gone' → unmounted.
   const [phase, setPhase] = useState<"visible" | "fading" | "gone">("visible");
   // Tracks whether we ever saw an incomplete state this session. Only then do we
@@ -108,19 +117,23 @@ export default function SetupSteps() {
     setRecipientView(null);
     setRmView(null);
     setPhotoView(null);
+    setMessageView(null);
   };
 
-  // Opening a step: completed recipients / release-manager / photos steps open
-  // read-only, pre-filled with the existing record(s); else the create form.
+  // Opening a step: completed recipients / release-manager / photos / message
+  // steps open read-only, pre-filled with the existing record(s); else the
+  // create form. (Finish-profile reads its own data, gated by the onboarding flag.)
   const openStepFor = async (key: StepKey, done: boolean) => {
     setRecipientView(null);
     setRmView(null);
     setPhotoView(null);
+    setMessageView(null);
     if (
       done &&
       (key === "add_recipients" ||
         key === "add_release_manager" ||
-        key === "add_photos")
+        key === "add_photos" ||
+        key === "create_message")
     ) {
       const token = await getToken();
       if (token) {
@@ -131,11 +144,32 @@ export default function SetupSteps() {
           } else if (key === "add_release_manager") {
             const rm = await getReleaseManager(token);
             if (rm) setRmView(toPersonView(rm));
-          } else {
+          } else if (key === "add_photos") {
             const photos = await getPhotos(token);
             // Show the first uploaded photo.
             const first = photos.find((p) => p.signedUrl);
             if (first?.signedUrl) setPhotoView([first.signedUrl]);
+          } else {
+            // First-ever message (earliest created), with full body/assignments.
+            const messages = await getMessages(token);
+            const earliest = [...messages].sort((a, b) =>
+              a.created_at.localeCompare(b.created_at),
+            )[0];
+            if (earliest) {
+              const full = await getMessage(token, earliest.id);
+              const { audience, selectedIndividualIds } = assignmentsToAudience(
+                full.assignments,
+              );
+              setMessageView({
+                id: full.id,
+                audience,
+                selectedIndividualIds,
+                messageType: full.type === "text" ? "write" : full.type,
+                title: full.title,
+                notes: full.notes ?? "",
+                body: full.body ?? "",
+              });
+            }
           }
         } catch {
           /* fall back to the create form if the record can't be loaded */
@@ -257,12 +291,13 @@ export default function SetupSteps() {
       {/* Modals */}
       <FinishProfileModal
         open={openStep === "finish_account"}
-        onClose={() => setOpenStep(null)}
-        onSkip={() => setOpenStep(null)}
+        onClose={closeModal}
+        onSkip={closeModal}
         cancelLabel="Cancel"
+        readOnly={!!onboarding?.finish_account}
         onCompleted={() => {
           refreshAll();
-          setOpenStep(null);
+          closeModal();
         }}
       />
       <AddRecipientsModal
@@ -302,10 +337,13 @@ export default function SetupSteps() {
       />
       <CreateMessageModal
         open={openStep === "create_message"}
-        onClose={() => setOpenStep(null)}
+        onClose={closeModal}
+        readOnly={!!messageView}
+        initialMessage={messageView ?? undefined}
+        headerTitle={messageView ? "Your Message" : undefined}
         onCreated={() => {
           refreshAll();
-          setOpenStep(null);
+          closeModal();
         }}
       />
       {activeStepDef &&
