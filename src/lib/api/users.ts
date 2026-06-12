@@ -56,6 +56,7 @@ export const updateProfile = (
     relationship_status?: string
     phone_number?: string
     avatar_url?: string
+    sms_opted_in?: boolean
   },
 ) => api.patch<UserProfile>('/users/profile', body, token)
 

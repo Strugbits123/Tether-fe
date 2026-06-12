@@ -85,6 +85,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState('')
   const [phone, setPhone] = useState('')
+  const [smsOptedIn, setSmsOptedIn] = useState(false)
   const [hearAbout, setHearAbout] = useState('From a friend or family member')
   const [photo, setPhoto] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -152,6 +153,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
           user.relationship_status ? STATUS_TO_LABEL[user.relationship_status] || '' : '',
         )
         setPhone(user.phone_number || '')
+        setSmsOptedIn(!!user.sms_opted_in)
         if (user.avatar_url) setPhoto(user.avatar_url)
       } catch {
         /* ignore — form starts empty */
@@ -240,6 +242,8 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
         gender: gender ? GENDER_TO_VALUE[gender] || undefined : undefined,
         relationship_status: status ? STATUS_TO_VALUE[status] || undefined : undefined,
         phone_number: phone.trim() || undefined,
+        // Can only opt into SMS with a phone number on file.
+        sms_opted_in: phone.trim() ? smsOptedIn : false,
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       })
 
@@ -621,6 +625,30 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
               >
                 We&apos;ll use this for important account notifications. See our Privacy Policy for additional details.
               </p>
+
+              {/* SMS opt-in — only relevant once a mobile number is entered. */}
+              {phone.trim().length > 0 && (
+                <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smsOptedIn}
+                    onChange={(e) => setSmsOptedIn(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-[#4F46E5] cursor-pointer flex-shrink-0"
+                  />
+                  <span
+                    style={{
+                      fontFamily: 'Inter, sans-serif',
+                      fontWeight: 400,
+                      fontSize: 13,
+                      lineHeight: '18px',
+                      color: '#4A5565',
+                    }}
+                  >
+                    Send me important account updates by text — including Release Plan
+                    notifications
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
