@@ -53,4 +53,4 @@ export const getDocDownloadUrl = (token: string, id: string) =>
   )
 
 export const deleteDocument = (token: string, id: string) =>
-  api.delete<{ success: boolean }>(`/documents/${id}`, token)
+  api.delete<{ message: string }>(`/documents/${id}`, token)

@@ -48,6 +48,12 @@ interface CreateMessageModalProps {
   onCreated?: () => void
   /** Skip this onboarding step without creating a message. */
   onSkip?: () => void
+  /** Open directly on a specific step instead of 'setup'. */
+  initialStep?: Step
+  /** Pre-select the message type (used with initialStep). */
+  initialMessageType?: MessageType
+  /** Pre-fill the title (used with initialStep). */
+  initialTitle?: string
 }
 
 export interface EditableMessage {
@@ -126,11 +132,14 @@ export default function CreateMessageModal({
   onSave,
   onCreated,
   onSkip,
+  initialStep,
+  initialMessageType,
+  initialTitle,
 }: CreateMessageModalProps) {
   const { showToast } = useToast()
 
   // step state
-  const [step, setStep] = useState<Step>('setup')
+  const [step, setStep] = useState<Step>(initialStep ?? 'setup')
 
   // setup state — multi-select audience
   const [audience, setAudience] = useState<string[]>(
@@ -140,9 +149,9 @@ export default function CreateMessageModal({
     initialMessage?.selectedIndividualIds ?? [],
   )
   const [messageType, setMessageType] = useState<MessageType>(
-    initialMessage?.messageType ?? 'video',
+    initialMessageType ?? initialMessage?.messageType ?? 'video',
   )
-  const [title, setTitle] = useState(initialMessage?.title ?? '')
+  const [title, setTitle] = useState(initialTitle ?? initialMessage?.title ?? '')
   const [notes, setNotes] = useState(initialMessage?.notes ?? '')
   const [body, setBody] = useState(initialMessage?.body ?? '')
 
@@ -157,11 +166,11 @@ export default function CreateMessageModal({
     if (!open) return
     setAudience(initialMessage?.audience ?? ['All recipients'])
     setSelectedIndividualIds(initialMessage?.selectedIndividualIds ?? [])
-    setMessageType(initialMessage?.messageType ?? 'video')
-    setTitle(initialMessage?.title ?? '')
+    setMessageType(initialMessageType ?? initialMessage?.messageType ?? 'video')
+    setTitle(initialTitle ?? initialMessage?.title ?? '')
     setNotes(initialMessage?.notes ?? '')
     setBody(initialMessage?.body ?? '')
-    setStep('setup')
+    setStep(initialStep ?? 'setup')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialMessage?.id])
 
