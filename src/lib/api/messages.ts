@@ -168,8 +168,8 @@ export const updateMessage = (
 export const reorderMessages = (
   token: string,
   order: { messageId: string; displayOrder: number }[],
-) => api.patch<{ success: boolean }>('/messages/reorder', { order }, token)
+) => api.patch<{ message: string }>('/messages/reorder', { order }, token)
 
 // Delete
 export const deleteMessage = (token: string, id: string) =>
-  api.delete<{ success: boolean }>(`/messages/${id}`, token)
+  api.delete<{ message: string }>(`/messages/${id}`, token)
