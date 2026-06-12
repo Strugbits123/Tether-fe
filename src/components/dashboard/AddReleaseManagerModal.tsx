@@ -19,6 +19,17 @@ interface AddReleaseManagerModalProps {
   isOnboarding?: boolean;
   /** Overrides the secondary (left) button label. Defaults to Skip/Cancel. */
   cancelLabel?: string;
+  /** Read-only view of an existing Release Manager (inputs locked, no Add). */
+  readOnly?: boolean;
+  /** Values to display in read-only mode. */
+  initialData?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    relationship: string;
+    note: string;
+  } | null;
 }
 
 const RELATIONSHIP_OPTIONS = [
@@ -40,6 +51,8 @@ export default function AddReleaseManagerModal({
   onSkip,
   isOnboarding = false,
   cancelLabel,
+  readOnly = false,
+  initialData,
 }: AddReleaseManagerModalProps) {
   const { showToast } = useToast();
   const [firstName, setFirstName] = useState("");
@@ -59,17 +72,27 @@ export default function AddReleaseManagerModal({
   // re-render or after an API error, so the user's input is preserved on failure.
   useEffect(() => {
     if (!open) return;
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setPhone("");
-    setRelationship("Family");
-    setNote("");
+    if (readOnly && initialData) {
+      setFirstName(initialData.firstName);
+      setLastName(initialData.lastName);
+      setEmail(initialData.email);
+      setPhone(initialData.phone);
+      setRelationship(initialData.relationship);
+      setNote(initialData.note);
+    } else {
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setPhone("");
+      setRelationship("Family");
+      setNote("");
+    }
     setFormError(null);
     setEmailError(null);
     setFieldErrors({});
     setLoading(false);
     setAddedThisSession(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Escape-to-close + scroll lock.
@@ -213,7 +236,7 @@ export default function AddReleaseManagerModal({
                 color: "#101828",
               }}
             >
-              Add a Release Manager
+              {readOnly ? "Release Manager" : "Add a Release Manager"}
             </h2>
             <p
               className="mt-[7px]"
@@ -226,8 +249,9 @@ export default function AddReleaseManagerModal({
                 color: "#717182",
               }}
             >
-              Your Release Manager is the trusted person who activates your
-              Release Plan when the time comes.
+              {readOnly
+                ? "Your designated Release Manager. Manage them on the Access page."
+                : "Your Release Manager is the trusted person who activates your Release Plan when the time comes."}
             </p>
           </div>
 
@@ -245,6 +269,7 @@ export default function AddReleaseManagerModal({
                   }}
                   placeholder="Enter first Name"
                   invalid={!!fieldErrors.firstName}
+                  readOnly={readOnly}
                 />
                 {fieldErrors.firstName && (
                   <FieldError message={fieldErrors.firstName} />
@@ -260,6 +285,7 @@ export default function AddReleaseManagerModal({
                   }}
                   placeholder="Enter last name"
                   invalid={!!fieldErrors.lastName}
+                  readOnly={readOnly}
                 />
                 {fieldErrors.lastName && (
                   <FieldError message={fieldErrors.lastName} />
@@ -280,6 +306,7 @@ export default function AddReleaseManagerModal({
                 placeholder="email@example.com"
                 type="email"
                 invalid={!!emailError || !!fieldErrors.email}
+                readOnly={readOnly}
               />
               {(emailError || fieldErrors.email) && (
                 <FieldError message={emailError ?? fieldErrors.email!} />
@@ -298,6 +325,7 @@ export default function AddReleaseManagerModal({
                 placeholder="+1 (555) 123-4567"
                 type="tel"
                 invalid={!!fieldErrors.phone}
+                readOnly={readOnly}
               />
               {fieldErrors.phone && <FieldError message={fieldErrors.phone} />}
             </Field>
@@ -307,6 +335,7 @@ export default function AddReleaseManagerModal({
               <RelationshipDropdown
                 value={relationship}
                 onChange={setRelationship}
+                disabled={readOnly}
               />
             </Field>
 
@@ -332,6 +361,7 @@ export default function AddReleaseManagerModal({
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="short message to the recipient"
                 rows={3}
+                readOnly={readOnly}
                 className="w-full focus:outline-none resize-none"
                 style={{
                   minHeight: 68,
@@ -351,6 +381,7 @@ export default function AddReleaseManagerModal({
             </div>
 
             {/* Tip box */}
+            {!readOnly && (
             <div
               style={{
                 borderRadius: 10,
@@ -369,12 +400,13 @@ export default function AddReleaseManagerModal({
                   fontWeight: 400,
                 }}
               >
-                <span style={{ fontWeight: 700 }}>Tip:</span> Tip: Choose
-                someone reliable, such as a close friend, attorney, or trusted
-                family member. This person will receive an email invitation and
-                must accept the role before it becomes active.
+                <span style={{ fontWeight: 700 }}>Tip:</span> Choose someone
+                reliable, such as a close friend, attorney, or trusted family
+                member. This person will receive an email invitation and must
+                accept the role before it becomes active.
               </p>
             </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -401,6 +433,27 @@ export default function AddReleaseManagerModal({
               </p>
             )}
             <div className="flex flex-wrap items-center justify-end gap-3">
+              {readOnly ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="cursor-pointer hover:opacity-90"
+                  style={{
+                    height: 36,
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    background: "#4F46E5",
+                    fontFamily: "Inter, sans-serif",
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: "20px",
+                    color: "#FFFFFF",
+                  }}
+                >
+                  Close
+                </button>
+              ) : (
+                <>
               <button
                 type="button"
                 onClick={onSkip ?? onClose}
@@ -467,6 +520,8 @@ export default function AddReleaseManagerModal({
                 >
                   Cancel
                 </button>
+              )}
+                </>
               )}
             </div>
           </div>
@@ -535,12 +590,14 @@ function TextInput({
   placeholder,
   type = "text",
   invalid,
+  readOnly,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   type?: string;
   invalid?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <input
@@ -548,19 +605,21 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
+      readOnly={readOnly}
       className="w-full focus:outline-none"
       style={{
         height: 36,
         borderRadius: 8,
         border: invalid ? "1px solid #FB2C36" : "1px solid rgba(0,0,0,0.1)",
-        background: "#F3F3F5",
+        background: readOnly ? "#ECECEF" : "#F3F3F5",
         padding: "4px 12px",
         fontFamily: "Inter, sans-serif",
         fontWeight: 400,
         fontSize: 14,
         lineHeight: "20px",
         letterSpacing: "-0.15px",
-        color: "#0A0A0A",
+        color: readOnly ? "#4A5565" : "#0A0A0A",
+        cursor: readOnly ? "default" : "text",
       }}
     />
   );
@@ -569,9 +628,11 @@ function TextInput({
 function RelationshipDropdown({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -589,9 +650,12 @@ function RelationshipDropdown({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between focus:outline-none bg-white"
+        onClick={disabled ? undefined : () => setOpen((o) => !o)}
+        disabled={disabled}
+        className="w-full flex items-center justify-between focus:outline-none"
         style={{
+          cursor: disabled ? "default" : "pointer",
+          background: disabled ? "#ECECEF" : "#FFFFFF",
           height: 41.2,
           borderRadius: 8,
           border: "1px solid #D1D5DC",
