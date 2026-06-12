@@ -22,6 +22,17 @@ interface AddRecipientsModalProps {
   title?: string;
   subtitle?: string | null;
   bottomVariant?: "note" | "guardian";
+  /** Read-only view of an existing recipient (inputs locked, no Add). */
+  readOnly?: boolean;
+  /** Values to display in read-only mode. */
+  initialData?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    relationship: string;
+    note: string;
+  } | null;
 }
 
 const RELATIONSHIP_OPTIONS = [
@@ -46,6 +57,8 @@ export default function AddRecipientsModal({
   title = "Add a Recipients",
   subtitle = "Recipients are the people who will receive access to your messages, photos, and documents when your Tether is released. You can add more in the Access page.",
   bottomVariant = "note",
+  readOnly = false,
+  initialData,
 }: AddRecipientsModalProps) {
   const { showToast } = useToast();
   const [firstName, setFirstName] = useState("");
@@ -66,18 +79,28 @@ export default function AddRecipientsModal({
   // re-render or after an API error, so the user's input is preserved on failure.
   useEffect(() => {
     if (!open) return;
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setPhone("");
-    setRelationship("Family");
-    setNote("");
+    if (readOnly && initialData) {
+      setFirstName(initialData.firstName);
+      setLastName(initialData.lastName);
+      setEmail(initialData.email);
+      setPhone(initialData.phone);
+      setRelationship(initialData.relationship);
+      setNote(initialData.note);
+    } else {
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setPhone("");
+      setRelationship("Family");
+      setNote("");
+    }
     setIsGuardian(false);
     setFormError(null);
     setEmailError(null);
     setFieldErrors({});
     setLoading(false);
     setAddedThisSession(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Escape-to-close + scroll lock.
@@ -222,9 +245,9 @@ export default function AddRecipientsModal({
                 color: "#101828",
               }}
             >
-              {title}
+              {readOnly ? "Recipient" : title}
             </h2>
-            {subtitle && (
+            {(readOnly || subtitle) && (
               <p
                 className="mt-[7px]"
                 style={{
@@ -236,7 +259,9 @@ export default function AddRecipientsModal({
                   color: "#717182",
                 }}
               >
-                {subtitle}
+                {readOnly
+                  ? "A person who will receive your Tether. Manage recipients on the Access page."
+                  : subtitle}
               </p>
             )}
           </div>
@@ -255,6 +280,7 @@ export default function AddRecipientsModal({
                   }}
                   placeholder="Enter first Name"
                   invalid={!!fieldErrors.firstName}
+                  readOnly={readOnly}
                 />
                 {fieldErrors.firstName && (
                   <FieldError message={fieldErrors.firstName} />
@@ -270,6 +296,7 @@ export default function AddRecipientsModal({
                   }}
                   placeholder="Enter last name"
                   invalid={!!fieldErrors.lastName}
+                  readOnly={readOnly}
                 />
                 {fieldErrors.lastName && (
                   <FieldError message={fieldErrors.lastName} />
@@ -290,6 +317,7 @@ export default function AddRecipientsModal({
                 placeholder="email@example.com"
                 type="email"
                 invalid={!!emailError || !!fieldErrors.email}
+                readOnly={readOnly}
               />
               {(emailError || fieldErrors.email) && (
                 <FieldError message={emailError ?? fieldErrors.email!} />
@@ -308,6 +336,7 @@ export default function AddRecipientsModal({
                 placeholder="+1 (555) 123-4567"
                 type="tel"
                 invalid={!!fieldErrors.phone}
+                readOnly={readOnly}
               />
               {fieldErrors.phone && <FieldError message={fieldErrors.phone} />}
             </Field>
@@ -317,10 +346,11 @@ export default function AddRecipientsModal({
               <RelationshipDropdown
                 value={relationship}
                 onChange={setRelationship}
+                disabled={readOnly}
               />
             </Field>
 
-            {bottomVariant === "note" ? (
+            {bottomVariant === "note" || readOnly ? (
               /* Note */
               <div className="flex flex-col gap-1">
                 <label
@@ -343,6 +373,7 @@ export default function AddRecipientsModal({
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="short message to the recipient"
                   rows={3}
+                  readOnly={readOnly}
                   className="w-full focus:outline-none resize-none"
                   style={{
                     minHeight: 68,
@@ -393,6 +424,27 @@ export default function AddRecipientsModal({
               </p>
             )}
             <div className="flex flex-wrap items-center justify-end gap-3">
+              {readOnly ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="cursor-pointer hover:opacity-90"
+                  style={{
+                    height: 36,
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    background: "#4F46E5",
+                    fontFamily: "Inter, sans-serif",
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: "20px",
+                    color: "#FFFFFF",
+                  }}
+                >
+                  Close
+                </button>
+              ) : (
+                <>
               <button
                 type="button"
                 onClick={onSkip ?? onClose}
@@ -470,6 +522,8 @@ export default function AddRecipientsModal({
                 >
                   Cancel
                 </button>
+              )}
+                </>
               )}
             </div>
           </div>
@@ -632,12 +686,14 @@ function TextInput({
   placeholder,
   type = "text",
   invalid,
+  readOnly,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   type?: string;
   invalid?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <input
@@ -645,19 +701,21 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
+      readOnly={readOnly}
       className="w-full focus:outline-none"
       style={{
         height: 36,
         borderRadius: 8,
         border: invalid ? "1px solid #FB2C36" : "1px solid rgba(0,0,0,0.1)",
-        background: "#F3F3F5",
+        background: readOnly ? "#ECECEF" : "#F3F3F5",
         padding: "4px 12px",
         fontFamily: "Inter, sans-serif",
         fontWeight: 400,
         fontSize: 14,
         lineHeight: "20px",
         letterSpacing: "-0.15px",
-        color: "#0A0A0A",
+        color: readOnly ? "#4A5565" : "#0A0A0A",
+        cursor: readOnly ? "default" : "text",
       }}
     />
   );
@@ -666,9 +724,11 @@ function TextInput({
 function RelationshipDropdown({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -686,8 +746,9 @@ function RelationshipDropdown({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between focus:outline-none bg-white"
+        onClick={disabled ? undefined : () => setOpen((o) => !o)}
+        disabled={disabled}
+        className="w-full flex items-center justify-between focus:outline-none"
         style={{
           height: 41.2,
           borderRadius: 8,
@@ -698,6 +759,8 @@ function RelationshipDropdown({
           fontSize: 14,
           lineHeight: "20px",
           color: value ? "#101828" : "#717182",
+          background: disabled ? "#ECECEF" : "#FFFFFF",
+          cursor: disabled ? "default" : "pointer",
         }}
       >
         <span className="truncate">{value || "Select relationship"}</span>
