@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
@@ -36,6 +36,10 @@ interface AddPhotosModalProps {
   subtitle?: string
   /** Onboarding mode: 1-file limit, audio/video → video message, Skip button. */
   isOnboarding?: boolean
+  /** Read-only view of already-uploaded photos (no dropzone/recipients, no upload). */
+  readOnly?: boolean
+  /** Signed URLs of existing photos to show in read-only mode. */
+  initialPhotos?: string[]
 }
 
 const GROUP_OPTIONS = [
@@ -92,6 +96,8 @@ export default function AddPhotosModal({
   title = 'Add Photos',
   subtitle = "Upload your most cherished photos — moments you want your family to see and keep forever. They'll be safely stored and shared when your Tether is released.",
   isOnboarding = false,
+  readOnly = false,
+  initialPhotos = [],
 }: AddPhotosModalProps) {
   const { showToast } = useToast()
   const isDoc = kind === 'document'
@@ -111,6 +117,18 @@ export default function AddPhotosModal({
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Object URLs for image previews (null for non-image files). Revoked when the
+  // selection changes or the modal unmounts.
+  const previews = useMemo(
+    () => files.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)),
+    [files],
+  )
+  useEffect(() => {
+    return () => {
+      previews.forEach((u) => u && URL.revokeObjectURL(u))
+    }
+  }, [previews])
+
   // Reset the form ONLY when the modal transitions to open — never on a
   // re-render or after an upload error, so the user's selection is preserved.
   useEffect(() => {
@@ -128,7 +146,7 @@ export default function AddPhotosModal({
 
   // Load real recipients for the "Search by name…" picker.
   useEffect(() => {
-    if (!open) return
+    if (!open || readOnly) return
     let active = true
     ;(async () => {
       const supabase = createClient()
@@ -446,9 +464,9 @@ export default function AddPhotosModal({
                 color: '#101828',
               }}
             >
-              {title}
+              {readOnly ? 'Your Photos' : title}
             </h2>
-            {subtitle && (
+            {!readOnly && subtitle && (
               <p
                 className="mt-[7px]"
                 style={{
@@ -467,6 +485,10 @@ export default function AddPhotosModal({
 
           {/* Body */}
           <div className="flex flex-col gap-5 px-5 sm:px-6 pt-5 pb-5">
+            {readOnly ? (
+              <ReadOnlyPhotos urls={initialPhotos} />
+            ) : (
+              <>
             {/* Dropzone */}
             <div className="flex flex-col gap-3">
               <div
@@ -543,60 +565,71 @@ export default function AddPhotosModal({
 
               {files.length > 0 && (
                 <div
-                  className="flex flex-col gap-2 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
+                  className="flex flex-wrap gap-2 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
                   style={{
-                    maxHeight: 160,
+                    maxHeight: 180,
                     scrollbarWidth: 'thin',
                     scrollbarColor: '#D1D5DC transparent',
                   }}
                 >
-                  {files.map((f, idx) => (
-                    <div
-                      key={`${f.name}-${f.size}-${idx}`}
-                      className="flex items-center gap-2"
-                      style={{
-                        borderRadius: 8,
-                        border: '1px solid rgba(0,0,0,0.08)',
-                        background: '#F9FAFB',
-                        padding: '8px 10px',
-                      }}
-                    >
-                      <FileImage className="w-4 h-4 text-[#4F46E5] flex-shrink-0" strokeWidth={2} />
-                      <div className="flex flex-col flex-1 min-w-0">
-                        <span
-                          className="truncate"
-                          style={{
-                            fontFamily: 'Inter, sans-serif',
-                            fontWeight: 500,
-                            fontSize: 13,
-                            lineHeight: '18px',
-                            color: '#0A0A0A',
-                          }}
-                        >
-                          {f.name}
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: 'Inter, sans-serif',
-                            fontWeight: 400,
-                            fontSize: 12,
-                            lineHeight: '16px',
-                            color: '#717182',
-                          }}
-                        >
-                          {formatFileSize(f.size)}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(idx)}
-                        aria-label={`Remove ${f.name}`}
-                        className="cursor-pointer text-[#717182] hover:text-[#0A0A0A] flex-shrink-0"
+                  {files.map((f, idx) => {
+                    const preview = previews[idx]
+                    return (
+                      <div
+                        key={`${f.name}-${f.size}-${idx}`}
+                        className="relative flex-shrink-0"
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          border: '1px solid rgba(0,0,0,0.08)',
+                          background: '#F9FAFB',
+                        }}
+                        title={`${f.name} · ${formatFileSize(f.size)}`}
                       >
-                        <X className="w-4 h-4" strokeWidth={2} />
-                      </button>
-                    </div>
-                  ))}
+                        {preview ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={preview}
+                            alt={f.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center px-1 gap-1">
+                            <FileImage className="w-5 h-5 text-[#4F46E5]" strokeWidth={2} />
+                            <span
+                              className="truncate w-full text-center"
+                              style={{
+                                fontFamily: 'Inter, sans-serif',
+                                fontSize: 9,
+                                lineHeight: '12px',
+                                color: '#717182',
+                              }}
+                            >
+                              {f.name}
+                            </span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeFile(idx)}
+                          aria-label={`Remove ${f.name}`}
+                          className="absolute flex items-center justify-center cursor-pointer hover:opacity-90"
+                          style={{
+                            top: 3,
+                            right: 3,
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9999,
+                            background: 'rgba(0,0,0,0.55)',
+                          }}
+                        >
+                          <X className="w-3 h-3 text-white" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -794,6 +827,8 @@ export default function AddPhotosModal({
                 </div>
               )}
             </div>
+              </>
+            )}
           </div>
 
           {/* Footer */}
@@ -806,6 +841,27 @@ export default function AddPhotosModal({
               borderBottomRightRadius: 10,
             }}
           >
+            {readOnly ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="cursor-pointer hover:opacity-90"
+                style={{
+                  height: 36,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#4F46E5',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#FFFFFF',
+                }}
+              >
+                Close
+              </button>
+            ) : (
+              <>
             <button
               type="button"
               onClick={onSkip ?? onClose}
@@ -848,6 +904,8 @@ export default function AddPhotosModal({
                 ? `Uploading…`
                 : isOnboarding ? 'Continue →' : 'Upload'}
             </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -856,6 +914,39 @@ export default function AddPhotosModal({
 }
 
 /* ------------------- Sub components ------------------- */
+
+function ReadOnlyPhotos({ urls }: { urls: string[] }) {
+  if (urls.length === 0) {
+    return (
+      <p
+        className="text-center py-6"
+        style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#717182' }}
+      >
+        No photos uploaded yet.
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-wrap gap-3">
+      {urls.map((url, i) => (
+        <div
+          key={i}
+          style={{
+            width: 120,
+            height: 120,
+            borderRadius: 10,
+            overflow: 'hidden',
+            border: '1px solid rgba(0,0,0,0.08)',
+            background: '#F9FAFB',
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="Uploaded photo" className="w-full h-full object-cover" />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function CheckBox({ checked }: { checked: boolean }) {
   return (

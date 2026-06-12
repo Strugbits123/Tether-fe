@@ -55,6 +55,8 @@ interface CreateMessageModalProps {
   initialMessageType?: MessageType
   /** Pre-fill the title (used with initialStep). */
   initialTitle?: string
+  /** Read-only view of an existing message (no editing/recording). */
+  readOnly?: boolean
 }
 
 export interface EditableMessage {
@@ -144,6 +146,7 @@ export default function CreateMessageModal({
   initialStep,
   initialMessageType,
   initialTitle,
+  readOnly = false,
 }: CreateMessageModalProps) {
   const { showToast } = useToast()
 
@@ -302,6 +305,17 @@ export default function CreateMessageModal({
 
   if (!open) return null
 
+  // Read-only view of an existing message — bypasses the create/record/write steps.
+  if (readOnly && initialMessage) {
+    return (
+      <ReadOnlyMessage
+        message={initialMessage}
+        headerTitle={headerTitle}
+        onClose={handleClose}
+      />
+    )
+  }
+
   /* ---------------------- Step routing ---------------------- */
   let maxWidth = 672
   if (step === 'record') maxWidth = 896
@@ -393,6 +407,181 @@ export default function CreateMessageModal({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ===================== Read-only view ===================== */
+
+function ReadOnlyMessage({
+  message,
+  headerTitle,
+  onClose,
+}: {
+  message: EditableMessage
+  headerTitle: string
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const typeLabel =
+    message.messageType === 'write'
+      ? 'Written message'
+      : message.messageType === 'video'
+      ? 'Video message'
+      : 'Audio message'
+
+  const audience = message.audience.length > 0 ? message.audience : ['Assign later']
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 672,
+            borderRadius: 16,
+            paddingBottom: 24,
+            boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.25)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6 z-10"
+            style={{ width: 22, height: 22, opacity: 0.7 }}
+          >
+            <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
+          </button>
+
+          {/* Header */}
+          <div className="px-6 py-6 pr-12 sm:pr-14" style={{ borderBottom: '0.8px solid #E5E7EB' }}>
+            <h2 style={{ fontWeight: 700, fontSize: 23, lineHeight: '32px', color: '#101828' }}>
+              {headerTitle}
+            </h2>
+            <p style={{ fontWeight: 400, fontSize: 12.9, lineHeight: '20px', color: '#4A5565' }}>
+              {typeLabel}
+            </p>
+          </div>
+
+          {/* Body */}
+          <div className="px-6 pt-6 flex flex-col gap-5">
+            <Detail label="Title">{message.title || '—'}</Detail>
+
+            <div className="flex flex-col gap-2">
+              <span style={{ fontWeight: 500, fontSize: 14, lineHeight: '20px', color: '#0A0A0A' }}>
+                Recipients
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {audience.map((a) => (
+                  <span
+                    key={a}
+                    style={{
+                      height: 30,
+                      borderRadius: 9999,
+                      padding: '4px 14px',
+                      background: '#EEF2FF',
+                      color: '#4F46E5',
+                      fontWeight: 500,
+                      fontSize: 13,
+                      lineHeight: '22px',
+                    }}
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {message.notes?.trim() && <Detail label="Notes">{message.notes}</Detail>}
+
+            {message.messageType === 'write' ? (
+              <div className="flex flex-col gap-2">
+                <span style={{ fontWeight: 500, fontSize: 14, lineHeight: '20px', color: '#0A0A0A' }}>
+                  Message
+                </span>
+                <div
+                  className="[&_ul]:list-disc [&_ul]:pl-7 [&_ol]:list-decimal [&_ol]:pl-7 overflow-y-auto"
+                  style={{
+                    maxHeight: 320,
+                    borderRadius: 10,
+                    border: '1.25px solid #E5E7EB',
+                    background: '#FFFFFF',
+                    padding: 16,
+                    fontFamily: 'Georgia, serif',
+                    fontSize: 16,
+                    lineHeight: '26px',
+                    color: '#101828',
+                  }}
+                  dangerouslySetInnerHTML={{ __html: message.body || '<em>(empty)</em>' }}
+                />
+              </div>
+            ) : (
+              <p style={{ fontSize: 14, lineHeight: '22px', color: '#4A5565' }}>
+                This is a {message.messageType} message. Play it from the Messages page.
+              </p>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end px-6 pt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center cursor-pointer hover:opacity-90"
+              style={{
+                height: 40,
+                padding: '8px 20px',
+                borderRadius: 8,
+                background: '#4F46E5',
+                fontWeight: 600,
+                fontSize: 15,
+                lineHeight: '24px',
+                color: '#FFFFFF',
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span style={{ fontWeight: 500, fontSize: 14, lineHeight: '20px', color: '#0A0A0A' }}>
+        {label}
+      </span>
+      <span style={{ fontWeight: 400, fontSize: 14, lineHeight: '22px', color: '#4A5565' }}>
+        {children}
+      </span>
     </div>
   )
 }
