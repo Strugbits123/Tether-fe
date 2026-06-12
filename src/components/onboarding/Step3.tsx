@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import CustomSelect from './CustomSelect'
 
@@ -12,29 +12,49 @@ interface ReleaseManager {
   relationship: string
 }
 
+interface FetchedManager {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  relationship: string
+}
+
 interface Step3Props {
   onNext: (manager: ReleaseManager | null) => void
   onBack: () => void
   loading?: boolean
+  initialManager?: FetchedManager | null
 }
 
 const relationshipOptions = [
-  'Spouse',
-  'Child',
-  'Parent',
-  'Sibling',
+  'Family',
   'Friend',
+  'Partner',
+  'Attorney',
   'Colleague',
-  'Lawyer',
   'Other',
 ]
 
-export default function Step3({ onNext, onBack, loading }: Step3Props) {
+export default function Step3({ onNext, onBack, loading, initialManager }: Step3Props) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [relationship, setRelationship] = useState('')
+
+  // Pre-fill form when returning from Step 4 with an already-saved manager.
+  useEffect(() => {
+    if (!initialManager) return
+    const parts = initialManager.name.trim().split(' ')
+    setFirstName(parts[0] ?? '')
+    setLastName(parts.slice(1).join(' ') ?? '')
+    setEmail(initialManager.email)
+    setPhone(initialManager.phone ?? '')
+    // Capitalise the stored enum value to match dropdown options (e.g. "family" → "Family")
+    const rel = initialManager.relationship
+    setRelationship(rel.charAt(0).toUpperCase() + rel.slice(1))
+  }, [initialManager])
 
   const handleContinue = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !relationship) return
