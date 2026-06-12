@@ -62,7 +62,9 @@ export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
           selectedIndividualIds.push(a.recipient_id)
         }
         break
-      // 'assign_later' → nothing selected
+      case 'assign_later':
+        if (!audience.includes('Assign later')) audience.push('Assign later')
+        break
     }
   }
   return { audience, selectedIndividualIds }
