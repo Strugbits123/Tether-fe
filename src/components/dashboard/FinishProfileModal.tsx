@@ -15,6 +15,8 @@ interface FinishProfileModalProps {
   onSkip?: () => void
   /** Overrides the secondary (left) button label. Defaults to Skip/Cancel. */
   cancelLabel?: string
+  /** Read-only view of the saved profile (inputs locked, no Save). */
+  readOnly?: boolean
 }
 
 // State display name <-> 2-letter code (the API stores/returns the code).
@@ -75,7 +77,7 @@ const HEAR_OPTIONS = [
   'Other',
 ]
 
-export default function FinishProfileModal({ open, onClose, onCompleted, onSkip, cancelLabel }: FinishProfileModalProps) {
+export default function FinishProfileModal({ open, onClose, onCompleted, onSkip, cancelLabel, readOnly = false }: FinishProfileModalProps) {
   const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -319,7 +321,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
               color: '#101828',
             }}
           >
-            Finish Your Profile
+            {readOnly ? 'Your Profile' : 'Finish Your Profile'}
           </h2>
           <p
             className="mt-2"
@@ -332,12 +334,29 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
               color: '#717182',
             }}
           >
-            Answer the questions below so Tether can provide the best experience possible.
+            {readOnly
+              ? 'Your saved profile details.'
+              : 'Answer the questions below so Tether can provide the best experience possible.'}
           </p>
         </div>
 
         {/* Body */}
         <div className="flex flex-col gap-5 px-4 sm:px-6 pt-6 pb-4">
+          {readOnly ? (
+            <ReadOnlyProfile
+              photo={photo}
+              firstName={firstName}
+              lastName={lastName}
+              zipCode={zipCode}
+              state={state}
+              ageGroup={ageGroup}
+              gender={gender}
+              status={status}
+              phone={phone}
+              smsOptedIn={smsOptedIn}
+            />
+          ) : (
+            <>
           {/* Profile photo row */}
           <div
             className="flex items-center gap-4"
@@ -670,6 +689,8 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
             </div>
             <HearAboutDropdown value={hearAbout} onChange={setHearAbout} />
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -697,6 +718,27 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
             </p>
           )}
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {readOnly ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex items-center justify-center cursor-pointer hover:opacity-90"
+                style={{
+                  height: 36,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#4F46E5',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#FFFFFF',
+                }}
+              >
+                Close
+              </button>
+            ) : (
+              <>
             <button
               type="button"
               onClick={onSkip ?? onClose}
@@ -738,6 +780,8 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {submitting ? statusText || 'Saving…' : 'Save and Continue'}
             </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -747,6 +791,95 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
 }
 
 /* ------------------------ Sub-components ------------------------ */
+
+function ReadOnlyProfile({
+  photo,
+  firstName,
+  lastName,
+  zipCode,
+  state,
+  ageGroup,
+  gender,
+  status,
+  phone,
+  smsOptedIn,
+}: {
+  photo: string | null
+  firstName: string
+  lastName: string
+  zipCode: string
+  state: string
+  ageGroup: string
+  gender: string
+  status: string
+  phone: string
+  smsOptedIn: boolean
+}) {
+  const rows: { label: string; value: string }[] = [
+    { label: 'Zip Code', value: zipCode },
+    { label: 'State', value: state },
+    { label: 'Age Group', value: ageGroup },
+    { label: 'Gender Identity', value: gender },
+    { label: 'Status', value: status },
+    { label: 'Phone', value: phone },
+  ]
+  const labelStyle = {
+    fontFamily: 'Inter, sans-serif',
+    fontWeight: 500,
+    fontSize: 12.5,
+    lineHeight: '16px',
+    color: '#717182',
+  } as const
+  const valueStyle = {
+    fontFamily: 'Inter, sans-serif',
+    fontWeight: 500,
+    fontSize: 14,
+    lineHeight: '20px',
+    color: '#101828',
+  } as const
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Avatar + name */}
+      <div
+        className="flex items-center gap-4"
+        style={{ borderBottom: '1px solid rgba(0,0,0,0.1)', paddingBottom: 16 }}
+      >
+        <div
+          className="flex items-center justify-center rounded-full overflow-hidden flex-shrink-0"
+          style={{ width: 80, height: 80, background: '#4F46E5' }}
+        >
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photo} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            <User className="text-white" style={{ width: 40, height: 40 }} strokeWidth={2} />
+          )}
+        </div>
+        <span style={{ ...valueStyle, fontWeight: 600, fontSize: 16, lineHeight: '24px' }}>
+          {[firstName, lastName].filter(Boolean).join(' ') || '—'}
+        </span>
+      </div>
+
+      {/* Detail rows */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+        {rows.map((r) => (
+          <div key={r.label} className="flex flex-col gap-1">
+            <span style={labelStyle}>{r.label}</span>
+            <span style={valueStyle}>{r.value || '—'}</span>
+          </div>
+        ))}
+      </div>
+
+      {phone.trim().length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span style={labelStyle}>Text updates</span>
+          <span style={valueStyle}>{smsOptedIn ? 'Enabled' : 'Disabled'}</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function FieldError({ message }: { message: string }) {
   return (
