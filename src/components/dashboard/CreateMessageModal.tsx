@@ -79,7 +79,11 @@ const AUDIENCE_CHIPS = [
   'Release Manager',
   'All Others',
   'Choose individuals',
+  'Assign later',
 ]
+
+/** Chips that stand alone — selecting one clears every other chip. */
+const EXCLUSIVE_CHIPS = ['Choose individuals', 'Assign later']
 
 /** Maps an audience chip label to its backend Assignment shape. */
 const RECIPIENT_OPTIONS: Record<string, Assignment> = {
@@ -88,12 +92,16 @@ const RECIPIENT_OPTIONS: Record<string, Assignment> = {
   'All friends': { scope: 'group', groupValue: 'friends' },
   'Release Manager': { scope: 'release_manager' },
   'All Others': { scope: 'group', groupValue: 'others' },
+  'Assign later': { scope: 'assign_later' },
 }
 
 export function buildAssignments(
   audience: string[],
   selectedIndividualIds: string[],
 ): Assignment[] {
+  // "Assign later" stands alone — send only that.
+  if (audience.includes('Assign later')) return [{ scope: 'assign_later' }]
+
   const result: Assignment[] = []
   for (const chip of audience) {
     if (chip === 'Choose individuals') {
@@ -104,7 +112,7 @@ export function buildAssignments(
       result.push(RECIPIENT_OPTIONS[chip])
     }
   }
-  if (result.length === 0) result.push({ scope: 'all' })
+  if (result.length === 0) result.push({ scope: 'assign_later' })
   return result
 }
 
@@ -623,15 +631,15 @@ function SetupStep({
 
   const toggleAudience = (chip: string) =>
     setAudience((prev) => {
-      // "Choose individuals" is exclusive — picking it clears every group, and
-      // picking any group clears it.
-      if (chip === 'Choose individuals') {
-        return prev.includes(chip) ? prev.filter((c) => c !== chip) : ['Choose individuals']
+      // "Choose individuals" and "Assign later" are exclusive — picking one clears
+      // every other chip, and picking any group clears them.
+      if (EXCLUSIVE_CHIPS.includes(chip)) {
+        return prev.includes(chip) ? prev.filter((c) => c !== chip) : [chip]
       }
-      const withoutIndividuals = prev.filter((c) => c !== 'Choose individuals')
-      return withoutIndividuals.includes(chip)
-        ? withoutIndividuals.filter((c) => c !== chip)
-        : [...withoutIndividuals, chip]
+      const withoutExclusive = prev.filter((c) => !EXCLUSIVE_CHIPS.includes(c))
+      return withoutExclusive.includes(chip)
+        ? withoutExclusive.filter((c) => c !== chip)
+        : [...withoutExclusive, chip]
     })
 
   const validateTitle = () => {
