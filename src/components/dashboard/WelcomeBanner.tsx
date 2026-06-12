@@ -4,11 +4,30 @@ import { X } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '@/lib/context/AuthContext'
 
+// Mirrors the dashboard setup checklist — the banner is only relevant while
+// these steps are still incomplete.
+const ONBOARDING_STEP_KEYS = [
+  'finish_account',
+  'add_recipients',
+  'add_release_manager',
+  'add_photos',
+  'create_message',
+] as const
+
 export default function WelcomeBanner() {
   const [visible, setVisible] = useState(true)
   const { profile, user } = useAuth()
   const firstName = profile?.first_name?.trim() || user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'there'
-  if (!visible) return null
+
+  // Wait for the profile so we don't flash the banner for already-onboarded users.
+  if (!profile) return null
+
+  const onboarding = profile.onboarding
+  const onboardingIncomplete =
+    !onboarding || ONBOARDING_STEP_KEYS.some((k) => !onboarding[k as keyof typeof onboarding])
+
+  // Hide once dismissed or once every onboarding step is complete.
+  if (!visible || !onboardingIncomplete) return null
 
   return (
     <div
