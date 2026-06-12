@@ -345,10 +345,7 @@ export default function AssignRecipientsModal({
             </button>
             <button
               type="button"
-              onClick={() => {
-                onSave?.(groups, individualIds)
-                onClose()
-              }}
+              onClick={() => onSave?.(groups, individualIds)}
               className="flex-1 flex items-center justify-center cursor-pointer hover:opacity-90"
               style={{
                 minHeight: 36,
