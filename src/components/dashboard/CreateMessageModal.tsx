@@ -35,6 +35,7 @@ import {
   getMessageStatus,
 } from '@/lib/api/messages'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
+import { fixAudioDuration } from '@/lib/utils/audio'
 
 interface CreateMessageModalProps {
   open: boolean
@@ -1326,7 +1327,12 @@ function RecordStep({
 
         {/* Audio playback in preview/upload */}
         {kind === 'audio' && (phase === 'preview' || phase === 'uploading') && previewUrl && (
-          <audio src={previewUrl} controls className="w-full" />
+          <audio
+            src={previewUrl}
+            controls
+            className="w-full"
+            onLoadedMetadata={fixAudioDuration}
+          />
         )}
 
         {kind === 'video' && phase !== 'preview' && phase !== 'uploading' && (

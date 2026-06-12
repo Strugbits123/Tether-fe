@@ -23,6 +23,7 @@ import AssignRecipientsModal from '@/components/dashboard/AssignRecipientsModal'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
 import { withRetry } from '@/lib/utils/retry'
+import { fixAudioDuration } from '@/lib/utils/audio'
 import {
   type Assignment,
   type Message,
@@ -953,7 +954,13 @@ function PlaybackModal({
                 }}
               >
                 <Mic className="w-16 h-16 text-white" strokeWidth={1.5} />
-                <audio src={audioUrl} controls autoPlay className="w-full" />
+                <audio
+                  src={audioUrl}
+                  controls
+                  autoPlay
+                  className="w-full"
+                  onLoadedMetadata={fixAudioDuration}
+                />
               </div>
             ) : null}
 
