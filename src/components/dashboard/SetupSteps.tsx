@@ -4,12 +4,53 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { notifyActivityChanged } from "@/lib/activity-helpers";
+import { createClient } from "@/lib/supabase/client";
+import { getRecipients } from "@/lib/api/recipients";
+import { getReleaseManager } from "@/lib/api/release-managers";
+import { getPhotos } from "@/lib/api/photos";
+import { displayRelationship } from "@/lib/relationship";
 import FinishProfileModal from "./FinishProfileModal";
 import AddReleaseManagerModal from "./AddReleaseManagerModal";
 import AddRecipientsModal from "./AddRecipientsModal";
 import AddPhotosModal from "./AddPhotosModal";
 import CreateMessageModal from "./CreateMessageModal";
 import PlaceholderStepModal from "./PlaceholderStepModal";
+
+type PersonView = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  relationship: string;
+  note: string;
+};
+
+// Maps a stored recipient/release-manager record to the modal's read-only shape.
+function toPersonView(p: {
+  name: string;
+  email: string;
+  phone: string | null;
+  relationship: string;
+  note: string | null;
+}): PersonView {
+  const parts = p.name.trim().split(/\s+/);
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+    email: p.email,
+    phone: p.phone ?? "",
+    relationship: displayRelationship(p.relationship),
+    note: p.note ?? "",
+  };
+}
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
 
 type StepKey =
   | "finish_account"
@@ -45,6 +86,11 @@ const STEP_DEFS: { key: StepKey; label: string; cta: string; index: number }[] =
 export default function SetupSteps() {
   const { profile, profileLoading, refreshProfile } = useAuth();
   const [openStep, setOpenStep] = useState<StepKey | null>(null);
+  // Read-only records for already-completed steps 2 & 3 (null = create mode).
+  const [recipientView, setRecipientView] = useState<PersonView | null>(null);
+  const [rmView, setRmView] = useState<PersonView | null>(null);
+  // First uploaded photo's URL for the read-only photos view (null = create mode).
+  const [photoView, setPhotoView] = useState<string[] | null>(null);
   // 'visible' → showing; 'fading' → playing the fade-out; 'gone' → unmounted.
   const [phase, setPhase] = useState<"visible" | "fading" | "gone">("visible");
   // Tracks whether we ever saw an incomplete state this session. Only then do we
@@ -55,6 +101,48 @@ export default function SetupSteps() {
   const refreshAll = () => {
     refreshProfile();
     notifyActivityChanged();
+  };
+
+  const closeModal = () => {
+    setOpenStep(null);
+    setRecipientView(null);
+    setRmView(null);
+    setPhotoView(null);
+  };
+
+  // Opening a step: completed recipients / release-manager / photos steps open
+  // read-only, pre-filled with the existing record(s); else the create form.
+  const openStepFor = async (key: StepKey, done: boolean) => {
+    setRecipientView(null);
+    setRmView(null);
+    setPhotoView(null);
+    if (
+      done &&
+      (key === "add_recipients" ||
+        key === "add_release_manager" ||
+        key === "add_photos")
+    ) {
+      const token = await getToken();
+      if (token) {
+        try {
+          if (key === "add_recipients") {
+            const recipients = await getRecipients(token);
+            if (recipients[0]) setRecipientView(toPersonView(recipients[0]));
+          } else if (key === "add_release_manager") {
+            const rm = await getReleaseManager(token);
+            if (rm) setRmView(toPersonView(rm));
+          } else {
+            const photos = await getPhotos(token);
+            // Show the first uploaded photo.
+            const first = photos.find((p) => p.signedUrl);
+            if (first?.signedUrl) setPhotoView([first.signedUrl]);
+          }
+        } catch {
+          /* fall back to the create form if the record can't be loaded */
+        }
+      }
+    }
+    setOpenStep(key);
   };
 
   const onboarding = profile?.onboarding;
@@ -161,7 +249,7 @@ export default function SetupSteps() {
           <StepRow
             key={step.index}
             step={step}
-            onClick={() => setOpenStep(step.key)}
+            onClick={() => openStepFor(step.key, step.done)}
           />
         ))}
       </div>
@@ -179,31 +267,37 @@ export default function SetupSteps() {
       />
       <AddRecipientsModal
         open={openStep === "add_recipients"}
-        onClose={() => setOpenStep(null)}
-        onSkip={() => setOpenStep(null)}
+        onClose={closeModal}
+        onSkip={closeModal}
         cancelLabel="Cancel"
+        readOnly={!!recipientView}
+        initialData={recipientView}
         onCreated={() => {
           refreshAll();
-          setOpenStep(null);
+          closeModal();
         }}
       />
       <AddReleaseManagerModal
         open={openStep === "add_release_manager"}
-        onClose={() => setOpenStep(null)}
-        onSkip={() => setOpenStep(null)}
+        onClose={closeModal}
+        onSkip={closeModal}
         cancelLabel="Cancel"
+        readOnly={!!rmView}
+        initialData={rmView}
         onCreated={() => {
           refreshAll();
-          setOpenStep(null);
+          closeModal();
         }}
       />
       <AddPhotosModal
         open={openStep === "add_photos"}
-        onClose={() => setOpenStep(null)}
-        onSkip={() => setOpenStep(null)}
+        onClose={closeModal}
+        onSkip={closeModal}
+        readOnly={!!photoView}
+        initialPhotos={photoView ?? []}
         onCreated={() => {
           refreshAll();
-          setOpenStep(null);
+          closeModal();
         }}
       />
       <CreateMessageModal
