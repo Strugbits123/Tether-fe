@@ -26,6 +26,7 @@ import { withRetry } from '@/lib/utils/retry'
 import {
   type Assignment,
   type Message,
+  type MessageAssignment,
   assignmentsToAudience,
   deleteMessage,
   getAudioUrl,
@@ -63,6 +64,38 @@ const ASSIGN_GROUP_MAP: Record<string, Assignment> = {
   'All Friends': { scope: 'group', groupValue: 'friends' },
   'All Others': { scope: 'group', groupValue: 'others' },
   'Release Manager': { scope: 'release_manager' },
+}
+
+/**
+ * Reverse of ASSIGN_GROUP_MAP — turns a message's saved assignments back into the
+ * AssignRecipientsModal's group labels + selected individual ids, so it opens
+ * pre-filled with the message's current audience.
+ */
+function assignmentsToAssignSelection(assignments: MessageAssignment[] = []): {
+  groups: string[]
+  individualIds: string[]
+} {
+  const groups: string[] = []
+  const individualIds: string[] = []
+  for (const a of assignments) {
+    switch (a.assignment_scope) {
+      case 'all':
+        groups.push('All Recipients')
+        break
+      case 'group':
+        if (a.group_value === 'family') groups.push('All Family')
+        else if (a.group_value === 'friends') groups.push('All Friends')
+        else if (a.group_value === 'others') groups.push('All Others')
+        break
+      case 'release_manager':
+        groups.push('Release Manager')
+        break
+      case 'individual':
+        if (a.recipient_id) individualIds.push(a.recipient_id)
+        break
+    }
+  }
+  return { groups, individualIds }
 }
 
 async function getToken(): Promise<string | null> {
@@ -203,6 +236,9 @@ export default function MessagesPage() {
 
   const visible = items.filter((m) => filter === 'all' || m.type === filter)
 
+  // Current audience of the message being assigned, mapped to the modal's shape.
+  const assignSelection = assignmentsToAssignSelection(assigning?.assignments ?? [])
+
   const handleDelete = async () => {
     if (!confirmDelete) return
     const token = await getToken()
@@ -236,6 +272,22 @@ export default function MessagesPage() {
       setEditing(full)
     } catch {
       setEditing(m)
+    }
+  }
+
+  // Fetch the full message (with assignments) so the assign modal can pre-fill
+  // the current audience. Falls back to the list item if the fetch fails.
+  const handleAssign = async (m: Message) => {
+    const token = await getToken()
+    if (!token) {
+      setAssigning(m)
+      return
+    }
+    try {
+      const full = await getMessage(token, m.id)
+      setAssigning(full)
+    } catch {
+      setAssigning(m)
     }
   }
 
@@ -450,7 +502,7 @@ export default function MessagesPage() {
               key={m.id}
               item={m}
               onEdit={() => handleEdit(m)}
-              onAssign={() => setAssigning(m)}
+              onAssign={() => handleAssign(m)}
               onDelete={() => setConfirmDelete(m)}
               onPlay={() => setPlaying(m)}
             />
@@ -494,6 +546,8 @@ export default function MessagesPage() {
         open={!!assigning}
         onClose={() => setAssigning(null)}
         messageTitle={assigning?.title ?? ''}
+        initialGroups={assignSelection.groups}
+        initialIndividualIds={assignSelection.individualIds}
         onSave={handleSaveAssign}
       />
 

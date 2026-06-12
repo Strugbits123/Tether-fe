@@ -13,6 +13,8 @@ interface FinishProfileModalProps {
   onCompleted?: () => void
   /** Skip this onboarding step without saving. */
   onSkip?: () => void
+  /** Overrides the secondary (left) button label. Defaults to Skip/Cancel. */
+  cancelLabel?: string
 }
 
 // State display name <-> 2-letter code (the API stores/returns the code).
@@ -73,7 +75,7 @@ const HEAR_OPTIONS = [
   'Other',
 ]
 
-export default function FinishProfileModal({ open, onClose, onCompleted, onSkip }: FinishProfileModalProps) {
+export default function FinishProfileModal({ open, onClose, onCompleted, onSkip, cancelLabel }: FinishProfileModalProps) {
   const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -685,7 +687,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip 
                 color: '#0A0A0A',
               }}
             >
-              {onSkip ? 'Skip' : 'Cancel'}
+              {cancelLabel ?? (onSkip ? 'Skip' : 'Cancel')}
             </button>
             <button
               type="button"

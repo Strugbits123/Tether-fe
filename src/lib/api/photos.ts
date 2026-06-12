@@ -43,4 +43,4 @@ export const createPhotosBatch = (
 export const getPhotos = (token: string) => api.get<Photo[]>('/photos', token)
 
 export const deletePhoto = (token: string, id: string) =>
-  api.delete<{ success: boolean }>(`/photos/${id}`, token)
+  api.delete<{ message: string }>(`/photos/${id}`, token)
