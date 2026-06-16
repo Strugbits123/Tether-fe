@@ -35,7 +35,8 @@ import {
   getMessageStatus,
 } from '@/lib/api/messages'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
-import { fixAudioDuration } from '@/lib/utils/audio'
+import AudioRecordingWaveform from '@/components/audio/AudioRecordingWaveform'
+import AudioPlaybackWaveform from '@/components/audio/AudioPlaybackWaveform'
 
 interface CreateMessageModalProps {
   open: boolean
@@ -1196,6 +1197,11 @@ function RecordStep({
   const [error, setError] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState('')
 
+  // Audio uses WaveSurfer's Record plugin (Option A) for both visualization and
+  // capture. This flag drives the recording waveform; the captured blob arrives
+  // via its onRecordEnd. Video keeps the MediaRecorder path below.
+  const [audioRecording, setAudioRecording] = useState(false)
+
   const maxSeconds = kind === 'video' ? 5 * 60 : 10 * 60
 
   // Start the camera preview as soon as the video recorder opens.
@@ -1257,7 +1263,34 @@ function RecordStep({
     }
   }
 
+  // Audio: WaveSurfer's Record plugin opens the mic and captures the blob (see
+  // AudioRecordingWaveform). We just drive the phase + elapsed timer here; the
+  // blob arrives via handleAudioRecordEnd.
+  const startAudioRecording = () => {
+    setError(null)
+    blobRef.current = null
+    setElapsed(0)
+    setPhase('recording')
+    setAudioRecording(true)
+    timerRef.current = window.setInterval(() => {
+      setElapsed((s) => {
+        const next = s + 1
+        if (next >= maxSeconds) stopRecording()
+        return next
+      })
+    }, 1000)
+  }
+
+  const handleAudioRecordEnd = (blob: Blob) => {
+    blobRef.current = blob
+    setPhase('preview')
+  }
+
   const startRecording = async () => {
+    if (kind === 'audio') {
+      startAudioRecording()
+      return
+    }
     setError(null)
     chunksRef.current = []
     try {
@@ -1311,12 +1344,19 @@ function RecordStep({
       window.clearInterval(timerRef.current)
       timerRef.current = null
     }
+    if (kind === 'audio') {
+      // Flip the flag — AudioRecordingWaveform stops the plugin and fires
+      // record-end, which transitions us to preview via handleAudioRecordEnd.
+      setAudioRecording(false)
+      return
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
   }
 
   const reRecord = () => {
+    setAudioRecording(false)
     blobRef.current = null
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current)
@@ -1502,34 +1542,58 @@ function RecordStep({
               gap: 16,
             }}
           >
-            <Radio className="w-[96px] h-[96px] text-white" strokeWidth={1.5} />
-            <span
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 17.2,
-                lineHeight: '28px',
-                color: '#FFFFFF',
-                textAlign: 'center',
-              }}
-            >
-              {recording
-                ? `Recording… ${formatTime(elapsed)}`
-                : phase === 'preview' || phase === 'uploading'
-                ? 'Recording complete'
-                : 'Ready to record'}
-            </span>
+            {phase === 'recording' ? (
+              <>
+                <AudioRecordingWaveform
+                  isRecording={audioRecording}
+                  height={80}
+                  waveColor="rgba(255, 255, 255, 0.6)"
+                  progressColor="rgba(255, 255, 255, 1)"
+                  onRecordEnd={handleAudioRecordEnd}
+                  onError={() =>
+                    setError(
+                      'Microphone access is required to record audio. Please allow access in your browser settings.',
+                    )
+                  }
+                />
+                <span
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 17.2,
+                    lineHeight: '28px',
+                    color: '#FFFFFF',
+                    textAlign: 'center',
+                  }}
+                >
+                  {`Recording… ${formatTime(elapsed)}`}
+                </span>
+              </>
+            ) : (phase === 'preview' || phase === 'uploading') && blobRef.current ? (
+              <AudioPlaybackWaveform
+                audioBlob={blobRef.current}
+                height={80}
+                waveColor="rgba(255, 255, 255, 0.3)"
+                progressColor="rgba(255, 255, 255, 1)"
+              />
+            ) : (
+              <>
+                <Radio className="w-[96px] h-[96px] text-white" strokeWidth={1.5} />
+                <span
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 17.2,
+                    lineHeight: '28px',
+                    color: '#FFFFFF',
+                    textAlign: 'center',
+                  }}
+                >
+                  Ready to record
+                </span>
+              </>
+            )}
           </div>
-        )}
-
-        {/* Audio playback in preview/upload */}
-        {kind === 'audio' && (phase === 'preview' || phase === 'uploading') && previewUrl && (
-          <audio
-            src={previewUrl}
-            controls
-            className="w-full"
-            onLoadedMetadata={fixAudioDuration}
-          />
         )}
 
         {kind === 'video' && phase !== 'preview' && phase !== 'uploading' && (
