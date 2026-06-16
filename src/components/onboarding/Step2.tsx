@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
-import { ArrowLeft, ArrowRight, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react'
 import CustomSelect from './CustomSelect'
 import { useRouter } from 'next/navigation'
 
@@ -12,24 +12,29 @@ interface Recipient {
   email: string
 }
 
+interface FetchedRecipient {
+  id: string
+  name: string
+  email: string
+  relationship: string
+}
+
 interface Step2Props {
   onNext: (recipients: Recipient[]) => void
   onBack: () => void
   loading?: boolean
+  initialRecipients?: FetchedRecipient[]
 }
 
 const relationshipOptions = [
-  'Spouse',
-  'Child',
-  'Parent',
-  'Sibling',
+  'Family',
   'Friend',
+  'Partner',
   'Colleague',
-  'Lawyer',
   'Other',
 ]
 
-export default function Step2({ onNext, onBack, loading }: Step2Props) {
+export default function Step2({ onNext, onBack, loading, initialRecipients = [] }: Step2Props) {
   const router = useRouter()
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [firstName, setFirstName] = useState('')
@@ -261,7 +266,26 @@ export default function Step2({ onNext, onBack, loading }: Step2Props) {
           </div>
         </div>
 
-        {/* Added Recipients List */}
+        {/* Already-saved recipients (fetched from API on back-navigation) */}
+        {initialRecipients.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {initialRecipients.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between px-4 py-3 rounded-lg border border-[#B9F8CF]"
+                style={{ background: '#F0FDF4' }}
+              >
+                <div>
+                  <span className="font-medium text-sm text-[#101828]">{r.name}</span>
+                  <span className="text-xs text-[#6A7282] ml-2 capitalize">({r.relationship})</span>
+                </div>
+                <Check className="w-4 h-4 text-[#00C950]" strokeWidth={3} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Newly added recipients (current session) */}
         {recipients.length > 0 && (
           <div className="space-y-2 mb-6">
             {recipients.map((r, i) => (
@@ -313,12 +337,12 @@ export default function Step2({ onNext, onBack, loading }: Step2Props) {
 
           <button
             onClick={handleContinue}
-            disabled={recipients.length === 0 || loading}
+            disabled={(recipients.length === 0 && initialRecipients.length === 0) || loading}
             className="flex items-center justify-center gap-2 text-white font-medium rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               width: '165px',
               height: '50px',
-              background: recipients.length > 0 && !loading ? '#4F46E5' : '#9CA3AF',
+              background: (recipients.length > 0 || initialRecipients.length > 0) && !loading ? '#4F46E5' : '#9CA3AF',
               fontFamily: 'Inter, sans-serif',
               fontWeight: 500,
               fontSize: '14px',

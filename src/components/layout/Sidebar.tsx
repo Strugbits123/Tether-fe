@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   { label: 'Messages', href: '/messages', icon: Video, comingSoon: true },
   { label: 'Documents', href: '/documents', icon: FileText, comingSoon: true },
   { label: 'Photos', href: '/photos', icon: Image, comingSoon: true },
-  { label: 'Memoir', href: '/memoir', icon: BookOpen, comingSoon: true },
+  { label: 'story', href: '/story', icon: BookOpen, comingSoon: true },
   { label: 'Recipients', href: '/recipients', icon: Users, comingSoon: true },
   { label: 'Settings', href: '/settings', icon: Settings },
   { label: 'Help', href: '/help', icon: HelpCircle, comingSoon: true },

@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { FiMenu, FiX } from 'react-icons/fi'
+import { useAuth } from '@/lib/context/AuthContext'
 
 const NAV_LINKS = [
   { label: 'Home',         href: '#home' },
@@ -14,6 +15,8 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { session } = useAuth()
+  const signedIn = !!session
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-100">
@@ -54,42 +57,64 @@ export default function Navbar() {
 
           {/* CTA buttons: width 208, height 35, gap: 11.99px */}
           <div className="flex items-center flex-shrink-0" style={{ gap: '11.99px' }}>
-            {/* Sign in: 76×35, border #374151 */}
-            <Link
-              href="/signin"
-              className="flex items-center justify-center rounded-[10px] border border-[#374151] hover:bg-slate-50 transition-colors flex-shrink-0"
-              style={{
-                width: '78px',
-                height: '35px',
-                padding: '7px 15px',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: '14px',
-                lineHeight: '21px',
-                color: '#374151',
-              }}
-            >
-              Sign in
-            </Link>
-            {/* Start free trial: 122×35, bg #4F46E5 */}
-            <Link
-              href="/signup"
-              className="flex items-center justify-center rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] transition-colors flex-shrink-0"
-              style={{
-                width: '122px',
-                height: '35px',
-                padding: '7px 14px',
-                boxShadow: '0px 1px 2px 0px #4F46E54D',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: '13px',
-                lineHeight: '19.5px',
-                color: '#FFFFFF',
-                textAlign: 'center',
-              }}
-            >
-              Start free trial
-            </Link>
+            {signedIn ? (
+              <Link
+                href="/dashboard"
+                className="flex items-center justify-center rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] transition-colors flex-shrink-0"
+                style={{
+                  height: '35px',
+                  padding: '7px 18px',
+                  boxShadow: '0px 1px 2px 0px #4F46E54D',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: '13px',
+                  lineHeight: '19.5px',
+                  color: '#FFFFFF',
+                  textAlign: 'center',
+                }}
+              >
+                Go to Portal
+              </Link>
+            ) : (
+              <>
+                {/* Sign in: 76×35, border #374151 */}
+                <Link
+                  href="/signin"
+                  className="flex items-center justify-center rounded-[10px] border border-[#374151] hover:bg-slate-50 transition-colors flex-shrink-0"
+                  style={{
+                    width: '78px',
+                    height: '35px',
+                    padding: '7px 15px',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    lineHeight: '21px',
+                    color: '#374151',
+                  }}
+                >
+                  Sign in
+                </Link>
+                {/* Start free trial: 122×35, bg #4F46E5 */}
+                <Link
+                  href="/signup"
+                  className="flex items-center justify-center rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] transition-colors flex-shrink-0"
+                  style={{
+                    width: '122px',
+                    height: '35px',
+                    padding: '7px 14px',
+                    boxShadow: '0px 1px 2px 0px #4F46E54D',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: '13px',
+                    lineHeight: '19.5px',
+                    color: '#FFFFFF',
+                    textAlign: 'center',
+                  }}
+                >
+                  Start free trial
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -108,19 +133,31 @@ export default function Navbar() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
-            <Link
-              href="/signin"
-              className="flex items-center justify-center px-[15px] py-[7px] rounded-[10px] border border-[#374151] text-[#374151] text-[14px] font-medium hover:bg-slate-50 transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="flex items-center justify-center px-[14px] py-[7px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-medium transition-colors"
-              style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
-            >
-              Start free trial
-            </Link>
+            {signedIn ? (
+              <Link
+                href="/dashboard"
+                className="flex items-center justify-center px-[18px] py-[7px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-medium transition-colors"
+                style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
+              >
+                Go to Portal
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/signin"
+                  className="flex items-center justify-center px-[15px] py-[7px] rounded-[10px] border border-[#374151] text-[#374151] text-[14px] font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="flex items-center justify-center px-[14px] py-[7px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-medium transition-colors"
+                  style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
+                >
+                  Start free trial
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -148,21 +185,34 @@ export default function Navbar() {
               {label}
             </Link>
           ))}
-          <Link
-            href="/signin"
-            className="mt-2 text-center py-2.5 border border-[#374151] rounded-[10px] text-[#374151] text-[14px] font-medium hover:bg-slate-50 transition-colors"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="text-center py-2.5 bg-[#4F46E5] rounded-[10px] text-white text-[13px] font-medium hover:bg-[#4338CA] transition-colors"
-            style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Start free trial
-          </Link>
+          {signedIn ? (
+            <Link
+              href="/dashboard"
+              className="mt-2 text-center py-2.5 bg-[#4F46E5] rounded-[10px] text-white text-[13px] font-medium hover:bg-[#4338CA] transition-colors"
+              style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Go to Portal
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/signin"
+                className="mt-2 text-center py-2.5 border border-[#374151] rounded-[10px] text-[#374151] text-[14px] font-medium hover:bg-slate-50 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="text-center py-2.5 bg-[#4F46E5] rounded-[10px] text-white text-[13px] font-medium hover:bg-[#4338CA] transition-colors"
+                style={{ boxShadow: '0px 1px 2px 0px #4F46E54D' }}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Start free trial
+              </Link>
+            </>
+          )}
         </div>
       )}
     </header>
