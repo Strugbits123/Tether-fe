@@ -40,6 +40,8 @@ interface AddPhotosModalProps {
   readOnly?: boolean
   /** Signed URLs of existing photos to show in read-only mode. */
   initialPhotos?: string[]
+  /** If set, photos are uploaded into this folder. */
+  folderId?: string
 }
 
 const GROUP_OPTIONS = [
@@ -98,6 +100,7 @@ export default function AddPhotosModal({
   isOnboarding = false,
   readOnly = false,
   initialPhotos = [],
+  folderId,
 }: AddPhotosModalProps) {
   const { showToast } = useToast()
   const isDoc = kind === 'document'
@@ -106,6 +109,7 @@ export default function AddPhotosModal({
   const noun = isDoc ? 'document' : 'photo'
 
   const [files, setFiles] = useState<File[]>([])
+  const [photoTitle, setPhotoTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([])
@@ -134,6 +138,7 @@ export default function AddPhotosModal({
   useEffect(() => {
     if (!open) return
     setFiles([])
+    setPhotoTitle('')
     setNotes('')
     setSelectedGroups([])
     setSelectedIndividuals([])
@@ -381,8 +386,10 @@ export default function AddPhotosModal({
             fileSizeBytes: s.file.size,
             width: s.dims.width || undefined,
             height: s.dims.height || undefined,
+            title: photoTitle.trim() || s.file.name.replace(/\.[^.]+$/, '') || undefined,
           })),
           caption: notes || undefined,
+          folderId: folderId || undefined,
           assignments,
         })
       }
@@ -634,7 +641,45 @@ export default function AddPhotosModal({
               )}
             </div>
 
-            {/* Notes */}
+            {/* Title */}
+            {!isDoc && (
+              <div className="flex flex-col gap-2">
+                <label
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: '14px',
+                    letterSpacing: '-0.15px',
+                    color: '#0A0A0A',
+                  }}
+                >
+                  Title (optional)
+                </label>
+                <input
+                  type="text"
+                  value={photoTitle}
+                  onChange={(e) => setPhotoTitle(e.target.value)}
+                  placeholder="e.g. Family reunion 2024"
+                  className="w-full focus:outline-none"
+                  style={{
+                    height: 44,
+                    borderRadius: 8,
+                    border: '1.25px solid rgba(0,0,0,0.1)',
+                    background: '#F3F3F5',
+                    padding: '4px 12px',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    lineHeight: '20px',
+                    letterSpacing: '-0.15px',
+                    color: '#0A0A0A',
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Caption */}
             <div className="flex flex-col gap-2">
               <label
                 style={{
@@ -646,7 +691,7 @@ export default function AddPhotosModal({
                   color: '#0A0A0A',
                 }}
               >
-                Notes (optional)
+                Caption (optional)
               </label>
               <textarea
                 value={notes}

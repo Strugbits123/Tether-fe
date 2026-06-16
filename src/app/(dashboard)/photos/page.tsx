@@ -1,28 +1,69 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
   ChevronUp,
-  Copy,
   Download,
   Folder as FolderIcon,
   FolderPlus,
   Grid3x3,
   Image as ImageIcon,
   List,
+  Loader2,
   MoreHorizontal,
   MoreVertical,
+  MoveRight,
   Pencil,
   Search,
   Trash2,
   Upload,
   X,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import {
+  createFolder,
+  deleteFolder,
+  deletePhoto,
+  getFolders,
+  getPhoto,
+  getPhotoDownloadUrl,
+  getPhotos,
+  movePhoto,
+  renameFolder,
+  updatePhoto,
+  type Photo,
+  type PhotoFolder,
+} from '@/lib/api/photos'
+import { buildAssignments } from '@/lib/utils/assignments'
+import { getRecipients, type Recipient } from '@/lib/api/recipients'
 import AddPhotosModal from '@/components/dashboard/AddPhotosModal'
 
-/* ---------------------- Types & data ---------------------- */
+/* ---------------------- Helpers ---------------------- */
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function photoDisplayName(photo: Photo): string {
+  return photo.title || photo.storage_path.split('/').pop() || 'Untitled'
+}
+
+/* ---------------------- Types ---------------------- */
 
 interface FolderItem {
   id: string
@@ -30,37 +71,18 @@ interface FolderItem {
   isDefault?: boolean
 }
 
-interface PhotoItem {
-  id: string
-  filename: string
-  uploadedAt: string // YYYY-MM-DD
-  folderId: string
-}
-
-const INITIAL_FOLDERS: FolderItem[] = [
-  { id: 'uncategorized', name: 'Uncategorized',     isDefault: true },
-  { id: 'family',        name: 'Family Vacations'  },
-  { id: 'childhood',     name: 'Childhood Memories'},
-  { id: 'wedding',       name: 'Wedding Day'       },
-]
-
-const INITIAL_PHOTOS: PhotoItem[] = [
-  { id: 'p1', filename: 'uncategorized-1.jpg', uploadedAt: '2024-03-09', folderId: 'uncategorized' },
-  { id: 'p2', filename: 'uncategorized-2.jpg', uploadedAt: '2024-03-08', folderId: 'uncategorized' },
-  { id: 'p3', filename: 'paris-2023.jpg',      uploadedAt: '2023-07-21', folderId: 'family' },
-  { id: 'p4', filename: 'tokyo-cherry.jpg',    uploadedAt: '2023-04-04', folderId: 'family' },
-  { id: 'p5', filename: 'beach-day.jpg',       uploadedAt: '2022-08-11', folderId: 'family' },
-  { id: 'p6', filename: 'first-bike.jpg',      uploadedAt: '2005-06-14', folderId: 'childhood' },
-  { id: 'p7', filename: 'birthday-7.jpg',      uploadedAt: '2007-09-02', folderId: 'childhood' },
-  { id: 'p8', filename: 'family-camp.jpg',     uploadedAt: '2008-07-18', folderId: 'childhood' },
-  { id: 'p9', filename: 'wedding-day.jpg',     uploadedAt: '2019-05-22', folderId: 'wedding' },
-]
-
 /* ---------------------- Page ---------------------- */
 
 export default function PhotosPage() {
-  const [folders, setFolders] = useState<FolderItem[]>(INITIAL_FOLDERS)
-  const [photos, setPhotos] = useState<PhotoItem[]>(INITIAL_PHOTOS)
+  const { showToast } = useToast()
+
+  // Data from API
+  const [folders, setFolders] = useState<PhotoFolder[]>([])
+  const [uncategorizedCount, setUncategorizedCount] = useState(0)
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [loadingPhotos, setLoadingPhotos] = useState(false)
+
+  // UI state
   const [activeFolderId, setActiveFolderId] = useState('uncategorized')
   const [search, setSearch] = useState('')
   const [layout, setLayout] = useState<'grid' | 'list'>('grid')
@@ -68,51 +90,157 @@ export default function PhotosPage() {
   // Modals
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
-  const [editingFolder, setEditingFolder] = useState<FolderItem | null>(null)
-  const [editingPhoto, setEditingPhoto] = useState<PhotoItem | null>(null)
+  const [editingFolder, setEditingFolder] = useState<PhotoFolder | null>(null)
+  const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null)
+  const [movingPhoto, setMovingPhoto] = useState<Photo | null>(null)
+  const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null)
 
-  // Live folder counts from photos state
-  const folderCounts: Record<string, number> = {}
-  for (const f of folders) folderCounts[f.id] = 0
-  for (const p of photos) {
-    if (folderCounts[p.folderId] !== undefined) folderCounts[p.folderId]++
+  const loadFolders = useCallback(async () => {
+    const token = await getToken()
+    if (!token) return
+    try {
+      const data = await getFolders(token)
+      setFolders(data.folders)
+      setUncategorizedCount(data.uncategorizedCount)
+    } catch {
+      /* non-fatal */
+    }
+  }, [])
+
+  const loadPhotos = useCallback(
+    async (folderId: string) => {
+      const token = await getToken()
+      if (!token) return
+      setLoadingPhotos(true)
+      try {
+        const data = await getPhotos(token, folderId === 'uncategorized' ? undefined : folderId)
+        setPhotos(data)
+      } catch {
+        showToast('Failed to load photos', 'error')
+      } finally {
+        setLoadingPhotos(false)
+      }
+    },
+    [showToast],
+  )
+
+  // Initial load
+  useEffect(() => {
+    loadFolders()
+  }, [loadFolders])
+
+  useEffect(() => {
+    loadPhotos(activeFolderId)
+  }, [activeFolderId, loadPhotos])
+
+  const handleDeletePhoto = async (photoId: string) => {
+    const token = await getToken()
+    if (!token) return
+    try {
+      await deletePhoto(token, photoId)
+      showToast('Photo deleted', 'success')
+      loadPhotos(activeFolderId)
+      loadFolders()
+    } catch {
+      showToast('Failed to delete photo', 'error')
+    }
   }
 
-  const activeFolder = folders.find((f) => f.id === activeFolderId) ?? folders[0]
-  const visiblePhotos = photos
-    .filter((p) => p.folderId === activeFolderId)
-    .filter((p) =>
-      search.trim() ? p.filename.toLowerCase().includes(search.trim().toLowerCase()) : true,
-    )
+  const handleDownload = async (photoId: string) => {
+    const token = await getToken()
+    if (!token) return
+    try {
+      const { downloadUrl } = await getPhotoDownloadUrl(token, photoId)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = ''
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch {
+      showToast('Download failed', 'error')
+    }
+  }
 
-  const handleDeletePhoto = (id: string) =>
-    setPhotos((prev) => prev.filter((p) => p.id !== id))
+  const handleOpenLightbox = async (photoId: string) => {
+    const token = await getToken()
+    if (!token) return
+    try {
+      const photo = await getPhoto(token, photoId)
+      setLightboxPhoto(photo)
+    } catch {
+      showToast('Failed to load photo', 'error')
+    }
+  }
 
-  const handleCreateFolder = (name: string) => {
-    if (!name.trim()) return
-    setFolders((prev) => [
-      ...prev,
-      { id: `f-${Date.now()}`, name: name.trim() },
-    ])
+  const handleCreateFolder = async (
+    name: string,
+    groups: string[],
+    individualIds: string[],
+  ): Promise<void> => {
+    const token = await getToken()
+    if (!token) return
+    await createFolder(token, {
+      name: name.trim(),
+      assignments: buildAssignments(groups, individualIds),
+    })
+    showToast('Folder created', 'success')
     setCreatingFolder(false)
+    loadFolders()
   }
-  const handleSaveFolder = (id: string, name: string) => {
-    if (!name.trim()) return
-    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name: name.trim() } : f)))
+
+  const handleSaveFolder = async (id: string, name: string): Promise<void> => {
+    const token = await getToken()
+    if (!token) return
+    await renameFolder(token, id, { name: name.trim() })
+    showToast('Folder renamed', 'success')
     setEditingFolder(null)
+    loadFolders()
   }
-  const handleDuplicateFolder = (id: string) => {
-    const src = folders.find((f) => f.id === id)
-    if (!src) return
-    setFolders((prev) => [
-      ...prev,
-      { id: `f-${Date.now()}`, name: `${src.name} (copy)` },
-    ])
+
+  const handleDeleteFolder = async (id: string) => {
+    const token = await getToken()
+    if (!token) return
+    try {
+      await deleteFolder(token, id)
+      showToast('Folder deleted. Photos moved to Uncategorized.', 'success')
+      if (activeFolderId === id) setActiveFolderId('uncategorized')
+      loadFolders()
+      loadPhotos('uncategorized')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete folder', 'error')
+    }
   }
-  const handleDeleteFolder = (id: string) => {
-    setFolders((prev) => prev.filter((f) => f.id !== id))
-    if (activeFolderId === id) setActiveFolderId('uncategorized')
+
+  const handleSavePhoto = async (photoId: string, title: string, caption: string): Promise<void> => {
+    const token = await getToken()
+    if (!token) return
+    await updatePhoto(token, photoId, { title: title.trim() || undefined, caption: caption.trim() || undefined })
+    showToast('Photo updated', 'success')
+    setEditingPhoto(null)
+    loadPhotos(activeFolderId)
   }
+
+  const handleMovePhoto = async (photoId: string, targetFolderId: string | null): Promise<void> => {
+    const token = await getToken()
+    if (!token) return
+    await movePhoto(token, photoId, { folderId: targetFolderId })
+    showToast('Photo moved', 'success')
+    setMovingPhoto(null)
+    loadPhotos(activeFolderId)
+    loadFolders()
+  }
+
+  const activeFolder = folders.find((f) => f.id === activeFolderId)
+
+  const filteredPhotos = photos.filter((p) => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    const title = (p.title || '').toLowerCase()
+    const path = (p.storage_path || '').toLowerCase()
+    return title.includes(q) || path.includes(q)
+  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -297,15 +425,26 @@ export default function PhotosPage() {
           </h3>
 
           <div className="flex flex-col" style={{ gap: 3.98 }}>
+            {/* Uncategorized — always shown */}
+            <FolderRow
+              folder={{ id: 'uncategorized', name: 'Uncategorized', isDefault: true }}
+              count={uncategorizedCount}
+              active={activeFolderId === 'uncategorized'}
+              onSelect={() => setActiveFolderId('uncategorized')}
+              onEdit={() => {}}
+              onDuplicate={() => {}}
+              onDelete={() => {}}
+            />
+            {/* API folders */}
             {folders.map((f) => (
               <FolderRow
                 key={f.id}
-                folder={f}
-                count={folderCounts[f.id] ?? 0}
+                folder={{ id: f.id, name: f.name }}
+                count={f.photoCount}
                 active={activeFolderId === f.id}
                 onSelect={() => setActiveFolderId(f.id)}
                 onEdit={() => setEditingFolder(f)}
-                onDuplicate={() => handleDuplicateFolder(f.id)}
+                onDuplicate={() => {}}
                 onDelete={() => handleDeleteFolder(f.id)}
               />
             ))}
@@ -336,7 +475,7 @@ export default function PhotosPage() {
                 wordBreak: 'break-word',
               }}
             >
-              {activeFolder?.name ?? 'Uncategorized'} Photos
+              {activeFolderId === 'uncategorized' ? 'Uncategorized' : (activeFolder?.name ?? 'Photos')} Photos
             </h3>
             <span
               style={{
@@ -348,12 +487,16 @@ export default function PhotosPage() {
                 color: '#6A7282',
               }}
             >
-              {visiblePhotos.length} photos
+              {filteredPhotos.length} photos
             </span>
           </div>
 
           {/* Photo content */}
-          {visiblePhotos.length === 0 ? (
+          {loadingPhotos ? (
+            <div className="flex items-center justify-center" style={{ minHeight: 200 }}>
+              <Loader2 style={{ width: 32, height: 32, color: '#4F39F6' }} className="animate-spin" />
+            </div>
+          ) : filteredPhotos.length === 0 ? (
             <div
               className="flex items-center justify-center"
               style={{
@@ -373,23 +516,28 @@ export default function PhotosPage() {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               }}
             >
-              {visiblePhotos.map((p) => (
+              {filteredPhotos.map((p) => (
                 <PhotoCard
                   key={p.id}
                   photo={p}
                   onEdit={() => setEditingPhoto(p)}
                   onDelete={() => handleDeletePhoto(p.id)}
+                  onDownload={() => handleDownload(p.id)}
+                  onMove={() => setMovingPhoto(p)}
+                  onLightbox={() => handleOpenLightbox(p.id)}
                 />
               ))}
             </div>
           ) : (
             <div className="flex flex-col" style={{ gap: 7.99 }}>
-              {visiblePhotos.map((p) => (
+              {filteredPhotos.map((p) => (
                 <PhotoRow
                   key={p.id}
                   photo={p}
                   onEdit={() => setEditingPhoto(p)}
                   onDelete={() => handleDeletePhoto(p.id)}
+                  onDownload={() => handleDownload(p.id)}
+                  onMove={() => setMovingPhoto(p)}
                 />
               ))}
             </div>
@@ -401,26 +549,51 @@ export default function PhotosPage() {
       <AddPhotosModal
         open={uploading}
         onClose={() => setUploading(false)}
+        onCreated={() => {
+          loadPhotos(activeFolderId)
+          loadFolders()
+        }}
         title="Upload Photos"
         subtitle="Add new photos to your secure vault"
+        folderId={activeFolderId === 'uncategorized' ? undefined : activeFolderId}
       />
-      <AddPhotosModal
-        open={!!editingPhoto}
-        onClose={() => setEditingPhoto(null)}
-        title="Edit Photo"
-        subtitle={editingPhoto?.filename ?? ''}
-      />
+
       {creatingFolder && (
         <CreateFolderModal
           onClose={() => setCreatingFolder(false)}
           onCreate={handleCreateFolder}
         />
       )}
+
       {editingFolder && (
         <EditFolderModal
           folder={editingFolder}
           onClose={() => setEditingFolder(null)}
           onSave={(name) => handleSaveFolder(editingFolder.id, name)}
+        />
+      )}
+
+      {editingPhoto && (
+        <EditPhotoModal
+          photo={editingPhoto}
+          onClose={() => setEditingPhoto(null)}
+          onSave={(title, caption) => handleSavePhoto(editingPhoto.id, title, caption)}
+        />
+      )}
+
+      {movingPhoto && (
+        <MovePhotoModal
+          photo={movingPhoto}
+          folders={folders}
+          onClose={() => setMovingPhoto(null)}
+          onMove={(targetFolderId) => handleMovePhoto(movingPhoto.id, targetFolderId)}
+        />
+      )}
+
+      {lightboxPhoto && (
+        <LightboxModal
+          photo={lightboxPhoto}
+          onClose={() => setLightboxPhoto(null)}
         />
       )}
     </div>
@@ -598,12 +771,6 @@ function FolderActionMenu({
         onClick={onEdit}
       />
       <MenuRow
-        icon={<Copy style={{ width: 18, height: 18 }} color="#4A5565" strokeWidth={2} />}
-        label="Duplicate"
-        color="#4A5565"
-        onClick={onDuplicate}
-      />
-      <MenuRow
         icon={<Trash2 style={{ width: 18, height: 18 }} color="#C70036" strokeWidth={2} />}
         label="Delete"
         color="#C70036"
@@ -644,14 +811,18 @@ function MenuRow({
   )
 }
 
-/* ---------------------- Photo action dropdown (Edit / Download / Delete) ---------------------- */
+/* ---------------------- Photo action dropdown ---------------------- */
 
 function PhotoActionMenu({
   onEdit,
+  onDownload,
   onDelete,
+  onMove,
 }: {
   onEdit: () => void
+  onDownload: () => void
   onDelete: () => void
+  onMove: () => void
 }) {
   return (
     <div
@@ -678,7 +849,13 @@ function PhotoActionMenu({
         icon={<Download style={{ width: 18, height: 18 }} color="#4A5565" strokeWidth={2} />}
         label="Download"
         color="#4A5565"
-        onClick={() => {}}
+        onClick={onDownload}
+      />
+      <MenuRow
+        icon={<MoveRight style={{ width: 18, height: 18 }} color="#4A5565" strokeWidth={2} />}
+        label="Move to Folder"
+        color="#4A5565"
+        onClick={onMove}
       />
       <MenuRow
         icon={<Trash2 style={{ width: 18, height: 18 }} color="#C70036" strokeWidth={2} />}
@@ -696,10 +873,16 @@ function PhotoCard({
   photo,
   onEdit,
   onDelete,
+  onDownload,
+  onMove,
+  onLightbox,
 }: {
-  photo: PhotoItem
+  photo: Photo
   onEdit: () => void
   onDelete: () => void
+  onDownload: () => void
+  onMove: () => void
+  onLightbox: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -715,19 +898,35 @@ function PhotoCard({
   return (
     <div className="flex flex-col" style={{ gap: 7.99 }}>
       <div
-        className="relative flex items-center justify-center"
+        className="relative flex items-center justify-center cursor-pointer"
         style={{
           aspectRatio: '1 / 1',
           borderRadius: 10,
           border: '1.25px solid #E5E7EB',
           background: 'linear-gradient(135deg, #E0E7FF 0%, #F3E8FF 100%)',
           padding: 1.25,
+          overflow: 'hidden',
         }}
+        onClick={onLightbox}
       >
-        <ImageIcon style={{ width: 48, height: 48, flexShrink: 0 }} color="#A3B3FF" strokeWidth={1.75} />
+        {photo.signedUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photo.signedUrl}
+            alt={photoDisplayName(photo)}
+            className="w-full h-full object-cover"
+            style={{ borderRadius: 9 }}
+          />
+        ) : (
+          <ImageIcon style={{ width: 48, height: 48, flexShrink: 0 }} color="#A3B3FF" strokeWidth={1.75} />
+        )}
 
         {/* 3-dot menu at top-right */}
-        <div ref={menuRef} className="absolute top-2 right-2">
+        <div
+          ref={menuRef}
+          className="absolute top-2 right-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
@@ -744,14 +943,10 @@ function PhotoCard({
           </button>
           {menuOpen && (
             <PhotoActionMenu
-              onEdit={() => {
-                setMenuOpen(false)
-                onEdit()
-              }}
-              onDelete={() => {
-                setMenuOpen(false)
-                onDelete()
-              }}
+              onEdit={() => { setMenuOpen(false); onEdit() }}
+              onDownload={() => { setMenuOpen(false); onDownload() }}
+              onMove={() => { setMenuOpen(false); onMove() }}
+              onDelete={() => { setMenuOpen(false); onDelete() }}
             />
           )}
         </div>
@@ -770,7 +965,7 @@ function PhotoCard({
               wordBreak: 'break-word',
             }}
           >
-            {photo.filename}
+            {photoDisplayName(photo)}
           </span>
           <span
             style={{
@@ -781,12 +976,13 @@ function PhotoCard({
               color: '#6A7282',
             }}
           >
-            {photo.uploadedAt}
+            {formatDate(photo.created_at)}
           </span>
         </div>
         <button
           type="button"
           aria-label="Download photo"
+          onClick={onDownload}
           className="flex items-center justify-center cursor-pointer hover:bg-gray-100"
           style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0 }}
         >
@@ -803,10 +999,14 @@ function PhotoRow({
   photo,
   onEdit,
   onDelete,
+  onDownload,
+  onMove,
 }: {
-  photo: PhotoItem
+  photo: Photo
   onEdit: () => void
   onDelete: () => void
+  onDownload: () => void
+  onMove: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -831,7 +1031,7 @@ function PhotoRow({
       }}
     >
       <div
-        className="flex items-center justify-center flex-shrink-0"
+        className="flex items-center justify-center flex-shrink-0 overflow-hidden"
         style={{
           width: 63.98,
           height: 63.98,
@@ -839,7 +1039,16 @@ function PhotoRow({
           background: 'linear-gradient(135deg, #E0E7FF 0%, #F3E8FF 100%)',
         }}
       >
-        <ImageIcon style={{ width: 24, height: 24, flexShrink: 0 }} color="#A3B3FF" strokeWidth={1.75} />
+        {photo.signedUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photo.signedUrl}
+            alt={photoDisplayName(photo)}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <ImageIcon style={{ width: 24, height: 24, flexShrink: 0 }} color="#A3B3FF" strokeWidth={1.75} />
+        )}
       </div>
 
       <div className="flex-1 min-w-0 flex flex-col">
@@ -854,7 +1063,7 @@ function PhotoRow({
             wordBreak: 'break-word',
           }}
         >
-          {photo.filename}
+          {photoDisplayName(photo)}
         </span>
         <span
           style={{
@@ -865,7 +1074,7 @@ function PhotoRow({
             color: '#6A7282',
           }}
         >
-          Uploaded {photo.uploadedAt}
+          Uploaded {formatDate(photo.created_at)}
         </span>
       </div>
 
@@ -873,6 +1082,7 @@ function PhotoRow({
         <button
           type="button"
           aria-label="Download"
+          onClick={onDownload}
           className="flex items-center justify-center cursor-pointer hover:bg-gray-100"
           style={{
             width: 35.996,
@@ -900,14 +1110,10 @@ function PhotoRow({
           </button>
           {menuOpen && (
             <PhotoActionMenu
-              onEdit={() => {
-                setMenuOpen(false)
-                onEdit()
-              }}
-              onDelete={() => {
-                setMenuOpen(false)
-                onDelete()
-              }}
+              onEdit={() => { setMenuOpen(false); onEdit() }}
+              onDownload={() => { setMenuOpen(false); onDownload() }}
+              onMove={() => { setMenuOpen(false); onMove() }}
+              onDelete={() => { setMenuOpen(false); onDelete() }}
             />
           )}
         </div>
@@ -927,20 +1133,6 @@ const GROUP_OPTIONS = [
   'Release Manager',
 ]
 
-interface Individual {
-  id: string
-  name: string
-  relationship: string
-}
-
-const INDIVIDUALS: Individual[] = [
-  { id: 'i1', name: 'Michael Chen', relationship: 'Family' },
-  { id: 'i2', name: 'Emma Rodriguez', relationship: 'Family' },
-  { id: 'i3', name: 'David Thompson', relationship: 'Friend' },
-  { id: 'i4', name: 'Sophie Martin', relationship: 'Friend' },
-  { id: 'i5', name: 'James Wilson', relationship: 'Colleague' },
-]
-
 /* ---------------------- Create Folder Modal ---------------------- */
 
 function CreateFolderModal({
@@ -948,13 +1140,15 @@ function CreateFolderModal({
   onCreate,
 }: {
   onClose: () => void
-  onCreate: (name: string) => void
+  onCreate: (name: string, groups: string[], individualIds: string[]) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [selectedGroups, setSelectedGroups] = useState<string[]>(['Assign Later'])
   const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([])
   const [showIndividuals, setShowIndividuals] = useState(false)
   const [search, setSearch] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [recipients, setRecipients] = useState<Recipient[]>([])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -969,6 +1163,22 @@ function CreateFolderModal({
     }
   }, [onClose])
 
+  // Load real recipients
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch {
+        /* non-fatal */
+      }
+    })()
+    return () => { active = false }
+  }, [])
+
   const toggleGroup = (g: string) =>
     setSelectedGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
   const toggleIndividual = (id: string) =>
@@ -976,11 +1186,23 @@ function CreateFolderModal({
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
 
-  const filteredIndividuals = INDIVIDUALS.filter((i) =>
+  const filteredIndividuals = recipients.filter((i) =>
     i.name.toLowerCase().includes(search.trim().toLowerCase()),
   )
 
   const canCreate = name.trim().length > 0
+
+  const handleCreate = async () => {
+    if (!canCreate || creating) return
+    setCreating(true)
+    try {
+      await onCreate(name, selectedGroups, selectedIndividuals)
+    } catch {
+      /* error already toasted by parent */
+    } finally {
+      setCreating(false)
+    }
+  }
 
   return (
     <div
@@ -1171,7 +1393,7 @@ function CreateFolderModal({
                           color: '#717182',
                         }}
                       >
-                        No matches.
+                        {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
                       </p>
                     ) : (
                       filteredIndividuals.map((p) => {
@@ -1249,15 +1471,15 @@ function CreateFolderModal({
             </button>
             <button
               type="button"
-              onClick={() => onCreate(name)}
-              disabled={!canCreate}
-              className="cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+              onClick={handleCreate}
+              disabled={!canCreate || creating}
+              className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
               style={{
                 height: 35.996,
                 padding: '8px 16px',
                 borderRadius: 8,
                 background: '#4F39F6',
-                opacity: canCreate ? 1 : 0.5,
+                opacity: canCreate && !creating ? 1 : 0.5,
                 fontFamily: 'Inter, sans-serif',
                 fontWeight: 500,
                 fontSize: 14,
@@ -1266,6 +1488,7 @@ function CreateFolderModal({
                 color: '#FFFFFF',
               }}
             >
+              {creating && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
               Create
             </button>
           </div>
@@ -1282,11 +1505,12 @@ function EditFolderModal({
   onClose,
   onSave,
 }: {
-  folder: FolderItem
+  folder: { id: string; name: string }
   onClose: () => void
-  onSave: (name: string) => void
+  onSave: (name: string) => Promise<void>
 }) {
   const [name, setName] = useState(folder.name)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1302,6 +1526,18 @@ function EditFolderModal({
   }, [onClose])
 
   const canSave = name.trim().length > 0 && name.trim() !== folder.name
+
+  const handleSave = async () => {
+    if (!canSave || saving) return
+    setSaving(true)
+    try {
+      await onSave(name)
+    } catch {
+      /* error already toasted by parent */
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div
@@ -1397,15 +1633,15 @@ function EditFolderModal({
               </button>
               <button
                 type="button"
-                onClick={() => onSave(name)}
-                disabled={!canSave}
-                className="cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                onClick={handleSave}
+                disabled={!canSave || saving}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
                 style={{
                   height: 35.996,
                   padding: '8px 16px',
                   borderRadius: 8,
                   background: '#4F39F6',
-                  opacity: canSave ? 1 : 0.5,
+                  opacity: canSave && !saving ? 1 : 0.5,
                   fontFamily: 'Inter, sans-serif',
                   fontWeight: 500,
                   fontSize: 14,
@@ -1414,10 +1650,519 @@ function EditFolderModal({
                   color: '#FFFFFF',
                 }}
               >
+                {saving && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
                 Save
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------- Edit Photo Modal ---------------------- */
+
+function EditPhotoModal({
+  photo,
+  onClose,
+  onSave,
+}: {
+  photo: Photo
+  onClose: () => void
+  onSave: (title: string, caption: string) => Promise<void>
+}) {
+  const [title, setTitle] = useState(photo.title || '')
+  const [caption, setCaption] = useState(photo.caption || '')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await onSave(title, caption)
+    } catch {
+      /* error already toasted by parent */
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 448,
+            borderRadius: 10,
+            boxShadow:
+              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <div className="flex flex-col gap-4 px-6 py-6">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-4">
+              <h2
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: '28px',
+                  letterSpacing: '-0.44px',
+                  color: '#101828',
+                }}
+              >
+                Edit Photo
+              </h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="cursor-pointer hover:bg-gray-100 rounded-md flex items-center justify-center"
+                style={{ width: 24, height: 24 }}
+              >
+                <X style={{ width: 20, height: 20 }} color="#0A0A0A" strokeWidth={2} />
+              </button>
+            </div>
+
+            {/* Title */}
+            <div className="flex flex-col" style={{ gap: 8 }}>
+              <label
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '14px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Title
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Photo title..."
+                className="w-full focus:outline-none"
+                style={{
+                  height: 44,
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#F3F3F5',
+                  padding: '4px 12px',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              />
+            </div>
+
+            {/* Caption */}
+            <div className="flex flex-col" style={{ gap: 8 }}>
+              <label
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '14px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Caption
+              </label>
+              <textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Add a caption..."
+                rows={3}
+                className="w-full focus:outline-none resize-none"
+                style={{
+                  minHeight: 80,
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#F3F3F5',
+                  padding: '8px 12px',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                className="cursor-pointer hover:bg-gray-50"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#FFFFFF',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#4F39F6',
+                  opacity: saving ? 0.5 : 1,
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#FFFFFF',
+                }}
+              >
+                {saving && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------- Move Photo Modal ---------------------- */
+
+function MovePhotoModal({
+  photo,
+  folders,
+  onClose,
+  onMove,
+}: {
+  photo: Photo
+  folders: PhotoFolder[]
+  onClose: () => void
+  onMove: (folderId: string | null) => Promise<void>
+}) {
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('uncategorized')
+  const [moving, setMoving] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const handleMove = async () => {
+    if (moving) return
+    setMoving(true)
+    try {
+      await onMove(selectedFolderId === 'uncategorized' ? null : selectedFolderId)
+    } catch {
+      /* error already toasted by parent */
+    } finally {
+      setMoving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 448,
+            borderRadius: 10,
+            boxShadow:
+              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <div className="flex flex-col gap-4 px-6 py-6">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-4">
+              <h2
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: '28px',
+                  letterSpacing: '-0.44px',
+                  color: '#101828',
+                }}
+              >
+                Move Image
+              </h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="cursor-pointer hover:bg-gray-100 rounded-md flex items-center justify-center"
+                style={{ width: 24, height: 24 }}
+              >
+                <X style={{ width: 20, height: 20 }} color="#0A0A0A" strokeWidth={2} />
+              </button>
+            </div>
+
+            <p
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 14,
+                lineHeight: '20px',
+                color: '#6A7282',
+              }}
+            >
+              Move &ldquo;{photoDisplayName(photo)}&rdquo; to a different folder.
+            </p>
+
+            {/* Folder selector */}
+            <div className="flex flex-col" style={{ gap: 8 }}>
+              <label
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '14px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Destination Folder
+              </label>
+              <select
+                value={selectedFolderId}
+                onChange={(e) => setSelectedFolderId(e.target.value)}
+                className="w-full focus:outline-none cursor-pointer"
+                style={{
+                  height: 44,
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#F3F3F5',
+                  padding: '4px 12px',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                  appearance: 'auto',
+                }}
+              >
+                <option value="uncategorized">Uncategorized</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                className="cursor-pointer hover:bg-gray-50"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#FFFFFF',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleMove}
+                disabled={moving}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#4F39F6',
+                  opacity: moving ? 0.5 : 1,
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#FFFFFF',
+                }}
+              >
+                {moving && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------- Lightbox Modal ---------------------- */
+
+function LightboxModal({ photo, onClose }: { photo: Photo; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative flex flex-col items-center w-full max-w-3xl mx-4"
+        style={{ maxHeight: '90vh' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute -top-10 right-0 flex items-center justify-center cursor-pointer hover:opacity-80"
+          style={{ width: 36, height: 36 }}
+        >
+          <X style={{ width: 28, height: 28 }} color="#FFFFFF" strokeWidth={2} />
+        </button>
+
+        {/* Image */}
+        <div
+          className="w-full flex items-center justify-center overflow-hidden"
+          style={{
+            borderRadius: 12,
+            background: '#1a1a1a',
+            maxHeight: '70vh',
+          }}
+        >
+          {photo.signedUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photo.signedUrl}
+              alt={photo.title || 'Photo'}
+              className="max-w-full max-h-full object-contain"
+              style={{ maxHeight: '70vh' }}
+            />
+          ) : (
+            <div
+              className="flex items-center justify-center"
+              style={{ width: '100%', height: 300, background: '#2a2a2a' }}
+            >
+              <ImageIcon style={{ width: 64, height: 64 }} color="#555" strokeWidth={1.5} />
+            </div>
+          )}
+        </div>
+
+        {/* Title + caption */}
+        <div
+          className="w-full flex flex-col gap-1 mt-4 px-2"
+        >
+          <span
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              fontSize: 16,
+              lineHeight: '24px',
+              color: '#FFFFFF',
+            }}
+          >
+            {photo.title || 'Untitled'}
+          </span>
+          {photo.caption && (
+            <span
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 14,
+                lineHeight: '20px',
+                color: 'rgba(255,255,255,0.7)',
+              }}
+            >
+              {photo.caption}
+            </span>
+          )}
         </div>
       </div>
     </div>
