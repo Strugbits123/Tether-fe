@@ -1,12 +1,20 @@
 "use client"
 
 import React, { useRef, useState } from 'react'
-import { ArrowLeft, FileText, Mic, Video, Upload } from 'lucide-react'
+import { ArrowLeft, Check, FileText, Mic, Video, Upload } from 'lucide-react'
+
+interface SavedMessage {
+  id: string
+  title: string
+  type: string
+}
 
 interface Step5Props {
-  onNext: () => void
+  /** Finishes setup. Receives the selected files to upload (empty when skipping). */
+  onNext: (files: File[]) => void
   onBack: () => void
   loading?: boolean
+  initialMessages?: SavedMessage[]
 }
 
 const fileTypeCards = [
@@ -30,7 +38,7 @@ const fileTypeCards = [
   },
 ]
 
-export default function Step5({ onNext, onBack, loading }: Step5Props) {
+export default function Step5({ onNext, onBack, loading, initialMessages = [] }: Step5Props) {
   const [files, setFiles] = useState<File[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -110,6 +118,25 @@ export default function Step5({ onNext, onBack, loading }: Step5Props) {
             Keep your important documents secure and accessible
           </p>
         </div>
+
+        {/* Already-created messages from step 4 */}
+        {initialMessages.length > 0 && (
+          <div className="space-y-2 mb-6">
+            {initialMessages.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center justify-between px-4 py-3 rounded-lg border border-[#B9F8CF]"
+                style={{ background: '#F0FDF4' }}
+              >
+                <div>
+                  <span className="font-medium text-sm text-[#101828]">{m.title || 'Untitled'}</span>
+                  <span className="text-xs text-[#6A7282] ml-2 capitalize">({m.type} message)</span>
+                </div>
+                <Check className="w-4 h-4 text-[#00C950]" strokeWidth={3} />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* File Type Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -267,7 +294,7 @@ export default function Step5({ onNext, onBack, loading }: Step5Props) {
         {/* Action Buttons */}
         <div className="flex items-center justify-between">
           <button
-            onClick={onNext}
+            onClick={() => onNext([])}
             disabled={loading}
             className="flex items-center justify-center text-[#0A0A0A] font-medium rounded-lg transition-all cursor-pointer hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
@@ -287,7 +314,7 @@ export default function Step5({ onNext, onBack, loading }: Step5Props) {
           </button>
 
           <button
-            onClick={onNext}
+            onClick={() => onNext(files)}
             disabled={loading}
             className="flex items-center justify-center gap-2 text-white font-medium rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             style={{

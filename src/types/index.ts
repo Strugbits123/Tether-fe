@@ -45,7 +45,7 @@ export interface DashboardStats {
   messages: number
   documents: number
   photos: number
-  memoir_chapters: number
+  story_chapters: number
   recipients: number
   release_manager_status: 'not_designated' | 'invited' | 'accepted'
 }

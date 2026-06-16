@@ -4,7 +4,7 @@ import { FiCheck } from "react-icons/fi";
 import MessagesMockup from "./MessagesMockup";
 import DocsFilesMockup from "./DocsFilesMockup";
 import PhotosMockup from "./PhotosMockup";
-import MemoirMockup from "./MemoirMockup";
+import StoryMockup from "./StoryMockup";
 
 const HEADING_SERIF = '"Instrument Serif", Georgia, "Times New Roman", serif';
 
@@ -255,18 +255,18 @@ const FEATURES: Feature[] = [
     imageOnRight: false,
   },
   {
-    badge: "Memoir",
+    badge: "Story",
     heading: "The story only you can tell.",
     italicHeading: "The chapters only you can write.",
     description:
-      "Your experiences, your wisdom, your truth. Create a memoir that captures the moments that shaped you — in your own words, on your own timeline. Share it with the people who matter most.",
+      "Your experiences, your wisdom, your truth. Create a story that captures the moments that shaped you — in your own words, on your own timeline. Share it with the people who matter most.",
     bullets: [
       "Write or record chapters about the big moments of your life",
       "Add photos and personal notes to bring stories to life",
-      "Control who receives the whole memoir or specific chapters",
+      "Control who receives the whole story or specific chapters",
       "Professional book-style reading and listening experience for recipients",
     ],
-    mockup: <MemoirMockup />,
+    mockup: <StoryMockup />,
     imageOnRight: true,
   },
 ];

@@ -84,9 +84,14 @@ function MainAuthForm({
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const DUPLICATE_EMAIL_MESSAGE =
+    'An account with this email already exists. Please sign in or reset your password.'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError(null)
 
     if (!email || !password) {
       showToast('Please fill in all required fields.', 'error')
@@ -121,25 +126,33 @@ function MainAuthForm({
           },
         })
         if (error) {
-          if (error.message.toLowerCase().includes('already registered')) {
-            showToast('An account with this email already exists.', 'error')
-          } else {
-            showToast(error.message, 'error')
-          }
+          setFormError(
+            error.message.toLowerCase().includes('already registered')
+              ? DUPLICATE_EMAIL_MESSAGE
+              : error.message,
+          )
           return
         }
-        // Email confirmation disabled in Supabase — session exists immediately
+        // Supabase returns a user with an EMPTY identities array when the email is
+        // already registered & confirmed (anti-enumeration). Treat that as a duplicate.
+        if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          setFormError(DUPLICATE_EMAIL_MESSAGE)
+          return
+        }
+        // Brand-new, already-active account (email confirmation disabled in Supabase) —
+        // a session exists immediately, so go straight into onboarding.
         if (data.session) {
           router.push('/onboarding')
           return
         }
-        // Email confirmation required (or duplicate unconfirmed email — Supabase
-        // returns user: null, session: null with no error in that case)
+        // Otherwise the account is unconfirmed — either a fresh signup or an
+        // unconfirmed re-signup (Supabase re-sends the confirmation, identities > 0,
+        // email_verified false). Never the dashboard: send them to verify their email.
         router.push(`/verify-email?email=${encodeURIComponent(email)}`)
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) {
-          showToast('Invalid email or password', 'error')
+          setFormError('Invalid email or password')
           return
         }
         try {
@@ -151,7 +164,7 @@ function MainAuthForm({
         router.push('/dashboard')
       }
     } catch (err: any) {
-      showToast(err.message || 'Something went wrong', 'error')
+      setFormError(err.message || 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -211,7 +224,7 @@ function MainAuthForm({
             <input
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={e => { setEmail(e.target.value); if (formError) setFormError(null) }}
               placeholder="you@example.com"
               className="w-full px-4 py-3 bg-white border border-[#D1D5DB] rounded-[10px] text-sm text-[#111827] focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all font-sans h-[50px]"
             />
@@ -324,6 +337,33 @@ function MainAuthForm({
               </>
             )}
           </button>
+
+          {formError && (
+            <div
+              role="alert"
+              className="text-center"
+              style={{
+                color: '#DC2626',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: 14,
+                lineHeight: '20px',
+              }}
+            >
+              {formError}
+              {formError.includes('already exists') && (
+                <>
+                  {' '}
+                  <Link
+                    href="/signin"
+                    className="hover:opacity-80"
+                    style={{ textDecoration: 'underline', fontWeight: 500, color: '#DC2626' }}
+                  >
+                    Sign in instead
+                  </Link>
+                </>
+              )}
+            </div>
+          )}
         </form>
       </div>
 
@@ -393,7 +433,7 @@ function MagicLinkForm({
   onSent,
 }: {
   onBack: () => void
-  onSent: () => void
+  onSent: (email: string) => void
 }) {
   const { showToast } = useToast()
   const [email, setEmail] = useState('')
@@ -419,7 +459,7 @@ function MagicLinkForm({
         showToast(error.message, 'error')
         return
       }
-      onSent()
+      onSent(email)
     } catch (err: any) {
       showToast(err.message || 'Failed to send magic link', 'error')
     } finally {
@@ -551,6 +591,7 @@ function MagicLinkForm({
 /* ──────────────────────────────────────────────────────────── */
 function InboxView({
   onBack,
+  onResend,
   subtitle = 'We sent you a magic sign-in link. Tap it on any device to log in instantly — no password needed.',
   steps = [
     'Open the email from Tether',
@@ -560,14 +601,32 @@ function InboxView({
   resendToastMessage = 'Magic link resent. Check your inbox.',
 }: {
   onBack: () => void
+  /** Performs the actual resend. Should throw on failure. */
+  onResend?: () => Promise<void>
   subtitle?: string
   steps?: string[]
   resendToastMessage?: string
 }) {
   const { showToast } = useToast()
+  const [resending, setResending] = useState(false)
 
-  const handleResend = () => {
-    showToast(resendToastMessage, 'success')
+  const handleResend = async () => {
+    if (!onResend) {
+      showToast(resendToastMessage, 'success')
+      return
+    }
+    setResending(true)
+    try {
+      await onResend()
+      showToast(resendToastMessage, 'success')
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Failed to resend. Please try again.',
+        'error',
+      )
+    } finally {
+      setResending(false)
+    }
   }
 
   const STEPS = steps
@@ -683,7 +742,8 @@ function InboxView({
             <button
               type="button"
               onClick={handleResend}
-              className="hover:underline cursor-pointer"
+              disabled={resending}
+              className="hover:underline cursor-pointer disabled:opacity-50"
               style={{
                 fontFamily: 'Inter, sans-serif',
                 fontWeight: 500,
@@ -692,7 +752,7 @@ function InboxView({
                 color: '#4F46E5',
               }}
             >
-              Resend email
+              {resending ? 'Sending…' : 'Resend email'}
             </button>
           </p>
         </div>
@@ -724,7 +784,7 @@ function ForgotPasswordForm({
   onSent,
 }: {
   onBack: () => void
-  onSent: () => void
+  onSent: (email: string) => void
 }) {
   const { showToast } = useToast()
   const [email, setEmail] = useState('')
@@ -746,7 +806,7 @@ function ForgotPasswordForm({
         showToast(error.message, 'error')
         return
       }
-      onSent()
+      onSent(email)
     } catch (err: any) {
       showToast(err.message || 'Failed to send reset email', 'error')
     } finally {
@@ -897,6 +957,9 @@ export default function AuthModePage({
 
   const isSignUp = mode === 'signup'
   const [view, setView] = useState<View>('main')
+  // Email captured from the magic-link / reset forms, so the inbox view can
+  // resend to the same address.
+  const [flowEmail, setFlowEmail] = useState('')
 
   // Reset to main view if the route changes (e.g. signup → signin)
   React.useEffect(() => {
@@ -905,6 +968,26 @@ export default function AuthModePage({
 
   const handleToggleMode = () => {
     router.push(isSignUp ? '/signin' : '/signup')
+  }
+
+  const resendMagicLink = async () => {
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithOtp({
+      email: flowEmail,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        shouldCreateUser: false,
+      },
+    })
+    if (error) throw new Error(error.message)
+  }
+
+  const resendResetLink = async () => {
+    const supabase = createClient()
+    const { error } = await supabase.auth.resetPasswordForEmail(flowEmail, {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    })
+    if (error) throw new Error(error.message)
   }
 
   return (
@@ -920,21 +1003,22 @@ export default function AuthModePage({
       {view === 'magic-link' && (
         <MagicLinkForm
           onBack={() => setView('main')}
-          onSent={() => setView('inbox')}
+          onSent={(email) => { setFlowEmail(email); setView('inbox') }}
         />
       )}
       {view === 'inbox' && (
-        <InboxView onBack={() => setView('main')} />
+        <InboxView onBack={() => setView('main')} onResend={resendMagicLink} />
       )}
       {view === 'forgot-password' && (
         <ForgotPasswordForm
           onBack={() => setView('main')}
-          onSent={() => setView('forgot-password-sent')}
+          onSent={(email) => { setFlowEmail(email); setView('forgot-password-sent') }}
         />
       )}
       {view === 'forgot-password-sent' && (
         <InboxView
           onBack={() => setView('main')}
+          onResend={resendResetLink}
           subtitle="We sent a password reset link to your email address. Follow the instructions to create a new password."
           steps={[
             'Open the email from Tether',

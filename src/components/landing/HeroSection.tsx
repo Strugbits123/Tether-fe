@@ -4,7 +4,7 @@ import Image from "next/image";
 import { BsFillPlayFill } from "react-icons/bs";
 
 const BULLETS = [
-  "Easily build and share your personal memoir",
+  "Easily build and share your personal story",
   "Store and share photos, documents, and files",
   "Make video, audio, and written messages for loved ones",
   "Automated delivery when the time comes",

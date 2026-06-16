@@ -4,12 +4,19 @@ Next.js frontend for Tether — Digital Legacy Platform
 
 ## Tech Stack
 
-- **Next.js 16** + TypeScript (strict mode)
+- **Next.js 16** (App Router) + React 19 + TypeScript (strict mode)
 - **Tailwind CSS v4**
-- **Supabase SSR** (`@supabase/ssr`)
-- **Sentry** (`@sentry/nextjs`)
+- **Supabase SSR** (`@supabase/ssr`) — auth & storage
+- **Mux** (`@mux/mux-player-react`) — video message playback
+- **Sentry** (`@sentry/nextjs`) — error monitoring
+- **PostHog** (`posthog-js`) — product analytics
+- **Stripe** (`@stripe/stripe-js`) — billing
 - **Lucide React** (icons)
 - **Vercel** (hosting)
+
+The frontend talks to a NestJS REST API. Every response uses one of two envelopes
+(`{ success, data }` or `{ success: false, statusCode, message }`) — see
+[`API_REFERENCE.md`](./API_REFERENCE.md) for the full contract.
 
 ## Prerequisites
 
@@ -76,31 +83,69 @@ All PRs require CodeRabbit review before merge.
 ```
 src/
 ├── app/
-│   ├── (auth)/          # Auth pages — login, signup, onboarding
-│   ├── (dashboard)/     # Protected dashboard pages
+│   ├── (auth)/          # signin/signup ([mode]), onboarding, verify-email, update-password
+│   ├── (dashboard)/     # Protected pages — dashboard, messages, access
 │   └── auth/callback/   # Supabase OAuth callback handler
 ├── components/
 │   ├── ui/              # Reusable UI components
-│   ├── dashboard/       # Dashboard-specific components
+│   ├── dashboard/       # WelcomeBanner, SetupSteps, modals (recipients, RM, photos, message, profile)
 │   ├── layout/          # Sidebar, TopBar
-│   └── onboarding/      # Onboarding step components
+│   └── onboarding/      # Onboarding step components (Step1–Step5)
 ├── lib/
 │   ├── supabase/        # Browser and server Supabase clients
-│   ├── api/             # NestJS API client
-│   └── context/         # AuthContext, ToastContext
+│   ├── api/             # Typed API client + per-resource modules
+│   │                    #   client, users, recipients, release-managers,
+│   │                    #   photos, documents, messages, activity
+│   ├── context/         # AuthContext, ToastContext
+│   └── utils/           # assignments, retry, audio (duration fix)
 └── types/               # Shared TypeScript types
 ```
 
+## API Integration
+
+- `lib/api/client.ts` is the **single source of truth** for success/failure. It
+  unwraps `data` on success and throws a typed `ApiError(statusCode, message)`
+  for every failure class (non-2xx, `success: false`, malformed body, network
+  error). Call sites surface `error.message` and branch on `error.statusCode`.
+- Per-resource modules (`users`, `recipients`, `release-managers`, `photos`,
+  `documents`, `messages`, `activity`) wrap the documented endpoints.
+- Uploads use signed-URL flows: photos/documents (Supabase Storage) and
+  video/audio messages (Mux upload / Supabase + confirm).
+- `AuthContext` loads `/users/me` with backoff retry on transient failures and
+  exposes the canonical `UserProfile` type.
+
 ## Auth Flow
 
-1. Signup → `/verify-email` (email confirmation required)
-2. Click email link → `/auth/callback` (token_hash flow)
-3. New user → `/onboarding`
-4. Returning user → `/dashboard`
-5. Google OAuth → `/auth/callback` (PKCE code flow)
+Auth is **Supabase-direct** (the documented `/auth/*` REST routes are not used);
+a single `/auth/login` side-call syncs the backend after sign-in.
+
+1. **Sign up** (email/password via `supabase.auth.signUp`):
+   - Duplicate email → inline error + "Sign in instead" (no redirect).
+   - Unverified → `/verify-email` (never the dashboard).
+   - Active session → `/onboarding`.
+2. **Email confirmation / magic link / password reset** — all "check your inbox"
+   screens have working resend.
+3. **Google OAuth** → `/auth/callback` (PKCE code flow).
+4. New user → `/onboarding`; returning user → `/dashboard`.
+
+> Note: preventing the same email signing up via both password and Google
+> requires Supabase config (enable email confirmations + identity linking) — the
+> client guards the password path but can't fully enforce it.
+
+## Onboarding & Dashboard
+
+- **Onboarding** (`Step1–Step5`) creates real resources via the API as you go
+  (recipients, release manager, message, document/media upload). Skipping a step
+  creates nothing, so its onboarding flag stays incomplete; a step only advances
+  after its API call succeeds (errors keep you on the step).
+- **Dashboard setup checklist** mirrors onboarding completion (read from
+  `/users/me`), refreshed on entry. It hides once every step is complete (fading
+  out after a live completion). The welcome banner shows only while onboarding is
+  incomplete.
 
 ## Sprint Progress
 
 - **Sprint 1** ✅ — Auth, Onboarding, Dashboard shell
-- **Sprint 2** 🔄 — Message Recorder (upcoming)
+- **Sprint 2** ✅ — Messages (text/video/audio), Recipients, Release Manager,
+  Photos & Documents, centralized API client
 - **Sprint 3–10** — See sprint execution plan

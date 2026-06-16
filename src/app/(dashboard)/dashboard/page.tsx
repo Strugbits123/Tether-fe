@@ -10,11 +10,20 @@ import RecentActivity from '@/components/dashboard/RecentActivity'
 import QuickActions from '@/components/dashboard/QuickActions'
 
 function DashboardContent() {
-  const { user, loading } = useAuth()
+  const { user, loading, refreshProfile } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const justOnboarded = searchParams.get('onboarded') === 'true'
   const supabase = createClient()
+
+  // The cached profile may predate onboarding (steps created on a different
+  // route never refreshed it). Re-fetch once on entry so the setup checklist
+  // reflects the latest completion state instead of showing stale steps.
+  // Mount-only: refreshProfile's identity isn't stable, so we don't depend on it.
+  useEffect(() => {
+    refreshProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (loading) return

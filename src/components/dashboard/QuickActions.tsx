@@ -1,8 +1,17 @@
 'use client'
 
+import { useState } from 'react'
 import { MessageSquare, FileText, Users, UserCheck, LucideIcon } from 'lucide-react'
+import { useAuth } from '@/lib/context/AuthContext'
+import { notifyActivityChanged } from '@/lib/activity-helpers'
+import CreateMessageModal from './CreateMessageModal'
+import AddPhotosModal from './AddPhotosModal'
+import AddRecipientsModal from './AddRecipientsModal'
+
+type ActionKey = 'record_message' | 'upload_document' | 'add_recipients'
 
 type Action = {
+  key: ActionKey
   icon: LucideIcon
   iconBg: string
   iconColor: string
@@ -12,6 +21,7 @@ type Action = {
 
 const actions: Action[] = [
   {
+    key: 'record_message',
     icon: MessageSquare,
     iconBg: '#E0E7FF',
     iconColor: '#4F39F6',
@@ -19,6 +29,7 @@ const actions: Action[] = [
     desc: 'Create video or audio messages',
   },
   {
+    key: 'upload_document',
     icon: FileText,
     iconBg: '#DCFCE7',
     iconColor: '#00A63E',
@@ -26,6 +37,7 @@ const actions: Action[] = [
     desc: 'Add important files to your vault',
   },
   {
+    key: 'add_recipients',
     icon: Users,
     iconBg: '#F3E8FF',
     iconColor: '#9810FA',
@@ -35,6 +47,14 @@ const actions: Action[] = [
 ]
 
 export default function QuickActions() {
+  const { refreshProfile } = useAuth()
+  const [openAction, setOpenAction] = useState<ActionKey | null>(null)
+
+  const refreshAll = () => {
+    refreshProfile()
+    notifyActivityChanged()
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Section header */}
@@ -54,7 +74,8 @@ export default function QuickActions() {
             <button
               key={action.title}
               type="button"
-              className="flex items-center gap-3 rounded-[14px] bg-white p-4 text-left transition-colors hover:bg-gray-50"
+              onClick={() => setOpenAction(action.key)}
+              className="flex items-center gap-3 rounded-[14px] bg-white p-4 text-left transition-colors hover:bg-gray-50 cursor-pointer"
               style={{ border: '1px solid rgba(0,0,0,0.1)' }}
             >
               <div
@@ -113,6 +134,30 @@ export default function QuickActions() {
           </div>
         </button>
       </div>
+
+      {/* Modals */}
+      <CreateMessageModal
+        open={openAction === 'record_message'}
+        onClose={() => setOpenAction(null)}
+        headerTitle="Record New Message"
+        headerSubtitle="Create a meaningful message for your loved ones"
+      />
+      <AddPhotosModal
+        open={openAction === 'upload_document'}
+        onClose={() => setOpenAction(null)}
+        onCreated={refreshAll}
+        kind="document"
+        title="Upload Document"
+        subtitle="Add a new document to your secure vault"
+      />
+      <AddRecipientsModal
+        open={openAction === 'add_recipients'}
+        onClose={() => setOpenAction(null)}
+        onCreated={refreshAll}
+        title="Add Recipients"
+        subtitle={null}
+        bottomVariant="guardian"
+      />
     </div>
   )
 }
