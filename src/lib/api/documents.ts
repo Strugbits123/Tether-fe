@@ -16,6 +16,26 @@ export interface Document {
   signedUrl: string | null
 }
 
+export interface DocumentStats {
+  categories: Record<string, number>
+  fileTypes: {
+    total: number
+    documents: number
+    audio: number
+    video: number
+    images: number
+    other: number
+  }
+}
+
+export interface DocumentDetail extends Document {
+  assignments: {
+    assignment_scope: string
+    group_value: string | null
+    recipient_id: string | null
+  }[]
+}
+
 export const requestDocUploadUrls = (
   token: string,
   files: { fileName: string; fileType: string; fileSizeBytes: number }[],
@@ -32,6 +52,7 @@ export const createDocumentsBatch = (
       originalFilename: string
       fileType: string
       fileSizeBytes: number
+      mimeType?: string
       title?: string
       category?: string
     }[]
@@ -41,10 +62,30 @@ export const createDocumentsBatch = (
 ) =>
   api.post<{ count: number; documents: Document[] }>('/documents/batch', body, token)
 
-export const getDocuments = (token: string, category?: string) => {
-  const query = category ? `?category=${category}` : ''
-  return api.get<Document[]>(`/documents${query}`, token)
+export const getDocuments = (token: string, category?: string, fileType?: string) => {
+  const params = new URLSearchParams()
+  if (category) params.set('category', category)
+  if (fileType) params.set('file_type', fileType)
+  const query = params.toString() ? `?${params.toString()}` : ''
+  return api.get<(Document & { assignmentCount: number })[]>(`/documents${query}`, token)
 }
+
+export const getDocumentStats = (token: string) =>
+  api.get<DocumentStats>('/documents/stats', token)
+
+export const getDocument = (token: string, id: string) =>
+  api.get<DocumentDetail>(`/documents/${id}`, token)
+
+export const updateDocument = (
+  token: string,
+  id: string,
+  body: {
+    title?: string
+    note?: string
+    category?: string
+    assignments?: Assignment[]
+  },
+) => api.patch<Document>(`/documents/${id}`, body, token)
 
 export const getDocDownloadUrl = (token: string, id: string) =>
   api.get<{ downloadUrl: string; expiresIn: number; filename: string }>(
