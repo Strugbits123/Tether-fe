@@ -17,6 +17,18 @@ export interface Photo {
   signedUrl: string | null
 }
 
+export interface PhotoFolder {
+  id: string
+  name: string
+  photoCount: number
+  created_at: string
+}
+
+export interface FoldersResponse {
+  folders: PhotoFolder[]
+  uncategorizedCount: number
+}
+
 export const requestPhotoUploadUrls = (
   token: string,
   files: { fileName: string; fileType: string; fileSizeBytes: number }[],
@@ -34,13 +46,53 @@ export const createPhotosBatch = (
       fileSizeBytes: number
       width?: number
       height?: number
+      title?: string
     }[]
     caption?: string
+    folderId?: string
     assignments: Assignment[]
   },
 ) => api.post<{ count: number; photos: Photo[] }>('/photos/batch', body, token)
 
-export const getPhotos = (token: string) => api.get<Photo[]>('/photos', token)
+export const getPhotos = (token: string, folderId?: string) => {
+  const query = folderId ? `?folder_id=${folderId}` : ''
+  return api.get<Photo[]>(`/photos${query}`, token)
+}
+
+export const getPhoto = (token: string, id: string) =>
+  api.get<Photo>(`/photos/${id}`, token)
+
+export const updatePhoto = (
+  token: string,
+  id: string,
+  body: { title?: string; caption?: string; assignments?: Assignment[] },
+) => api.patch<Photo>(`/photos/${id}`, body, token)
+
+export const movePhoto = (
+  token: string,
+  id: string,
+  body: { folderId: string | null },
+) => api.patch<Photo>(`/photos/${id}/move`, body, token)
 
 export const deletePhoto = (token: string, id: string) =>
   api.delete<{ message: string }>(`/photos/${id}`, token)
+
+export const getPhotoDownloadUrl = (token: string, id: string) =>
+  api.get<{ downloadUrl: string; expiresIn: number }>(`/photos/${id}/download-url`, token)
+
+export const createFolder = (
+  token: string,
+  body: { name: string; assignments: Assignment[] },
+) => api.post<PhotoFolder>('/photos/folders', body, token)
+
+export const getFolders = (token: string) =>
+  api.get<FoldersResponse>('/photos/folders', token)
+
+export const renameFolder = (
+  token: string,
+  folderId: string,
+  body: { name: string },
+) => api.patch<PhotoFolder>(`/photos/folders/${folderId}`, body, token)
+
+export const deleteFolder = (token: string, folderId: string) =>
+  api.delete<{ success: boolean }>(`/photos/folders/${folderId}`, token)
