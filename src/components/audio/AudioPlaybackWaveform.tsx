@@ -25,6 +25,35 @@ function formatTime(sec: number) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+async function extractPeaks(src: string, numBars = 80): Promise<{ peaks: number[]; duration: number } | null> {
+  try {
+    const response = await fetch(src)
+    const arrayBuffer = await response.arrayBuffer()
+    const audioCtx = new AudioContext()
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+    await audioCtx.close()
+
+    const channelData = audioBuffer.getChannelData(0)
+    const blockSize = Math.floor(channelData.length / numBars)
+    const peaks: number[] = []
+
+    for (let i = 0; i < numBars; i++) {
+      let max = 0
+      for (let j = 0; j < blockSize; j++) {
+        const abs = Math.abs(channelData[i * blockSize + j])
+        if (abs > max) max = abs
+      }
+      peaks.push(max)
+    }
+
+    // Normalize
+    const maxPeak = Math.max(...peaks) || 1
+    return { peaks: peaks.map(p => p / maxPeak), duration: audioBuffer.duration }
+  } catch {
+    return null
+  }
+}
+
 export default function AudioPlaybackWaveform({
   audioUrl,
   audioBlob,
@@ -42,8 +71,8 @@ export default function AudioPlaybackWaveform({
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Keep callbacks fresh without re-creating the WaveSurfer instance.
   const cbRef = useRef({ onReady, onTimeUpdate, onFinish, autoPlay })
   useEffect(() => {
     cbRef.current = { onReady, onTimeUpdate, onFinish, autoPlay }
@@ -56,41 +85,54 @@ export default function AudioPlaybackWaveform({
     const src = objectUrl ?? audioUrl
     if (!src) return
 
-    const ws = WaveSurfer.create({
-      container: containerRef.current,
-      height,
-      waveColor,
-      progressColor,
-      cursorColor,
-      cursorWidth: 2,
-      barWidth: 3,
-      barGap: 2,
-      barRadius: 3,
-      url: src,
-      dragToSeek: true,
-    })
+    let ws: WaveSurfer | null = null
+    let cancelled = false
 
-    ws.on('ready', () => {
-      const dur = ws.getDuration()
-      setDuration(dur)
-      cbRef.current.onReady?.(dur)
-      if (cbRef.current.autoPlay) ws.play().catch(() => {})
-    })
-    ws.on('play', () => setIsPlaying(true))
-    ws.on('pause', () => setIsPlaying(false))
-    ws.on('timeupdate', (time: number) => {
-      setCurrentTime(time)
-      cbRef.current.onTimeUpdate?.(time)
-    })
-    ws.on('finish', () => {
-      setIsPlaying(false)
-      cbRef.current.onFinish?.()
-    })
+    setIsLoading(true)
+    extractPeaks(src).then(peakData => {
+      if (cancelled || !containerRef.current) return
 
-    wsRef.current = ws
+      ws = WaveSurfer.create({
+        container: containerRef.current,
+        height,
+        waveColor,
+        progressColor,
+        cursorColor,
+        cursorWidth: 2,
+        barWidth: 3,
+        barGap: 2,
+        barRadius: 3,
+        url: src,
+        dragToSeek: true,
+        // Pre-supply decoded peaks so bars render immediately before play
+        ...(peakData ? { peaks: [peakData.peaks], duration: peakData.duration } : {}),
+      })
+
+      ws.on('ready', () => {
+        if (cancelled) return
+        const dur = ws!.getDuration()
+        setDuration(dur)
+        setIsLoading(false)
+        cbRef.current.onReady?.(dur)
+      })
+      ws.on('play', () => setIsPlaying(true))
+      ws.on('pause', () => setIsPlaying(false))
+      ws.on('timeupdate', (time: number) => {
+        setCurrentTime(time)
+        cbRef.current.onTimeUpdate?.(time)
+      })
+      ws.on('finish', () => {
+        setIsPlaying(false)
+        cbRef.current.onFinish?.()
+      })
+
+      if (peakData) setDuration(peakData.duration)
+      wsRef.current = ws
+    })
 
     return () => {
-      ws.destroy()
+      cancelled = true
+      ws?.destroy()
       wsRef.current = null
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
@@ -103,12 +145,21 @@ export default function AudioPlaybackWaveform({
 
   return (
     <div className="w-full flex flex-col gap-2">
-      <div ref={containerRef} className="w-full" style={{ minHeight: height }} />
+      <div ref={containerRef} className={`w-full${isLoading ? ' opacity-0' : ''}`} style={{ minHeight: height }} />
+      {isLoading && (
+        <div className="w-full flex items-center justify-center" style={{ height }}>
+          <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-label="Loading">
+            <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
       <div className="flex items-center justify-between px-1">
         <button
           type="button"
           onClick={togglePlayPause}
-          className="flex items-center justify-center rounded-full transition-opacity hover:opacity-80 cursor-pointer"
+          disabled={isLoading}
+          className="flex items-center justify-center rounded-full transition-opacity hover:opacity-80 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.2)' }}
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
