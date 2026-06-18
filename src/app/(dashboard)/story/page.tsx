@@ -155,6 +155,7 @@ export default function StoryPage() {
             </span>
             <button
               type="button"
+              onClick={() => router.push('/story/preview')}
               className="cursor-pointer hover:opacity-80"
               style={{
                 fontFamily: 'Inter, sans-serif',
@@ -706,6 +707,7 @@ function ChapterListCard({ chapter }: { chapter: Chapter }) {
 /* ---------------------- Progress panel ---------------------- */
 
 function ProgressPanel() {
+  const router = useRouter()
   const percent = 50
 
   return (
@@ -768,8 +770,16 @@ function ProgressPanel() {
 
       {/* Buttons */}
       <div className="flex flex-col" style={{ gap: 7.99 }}>
-        <PanelButton icon={<Download style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />} label="Download Memoir" />
-        <PanelButton icon={<Settings style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />} label="Memoir settings" />
+        <PanelButton
+          icon={<Download style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />}
+          label="Download Memoir"
+          onClick={() => router.push('/story/preview')}
+        />
+        <PanelButton
+          icon={<Settings style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />}
+          label="Memoir settings"
+          onClick={() => router.push('/story/settings')}
+        />
       </div>
     </div>
   )
@@ -806,10 +816,19 @@ function StatRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function PanelButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+function PanelButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick?: () => void
+}) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className="flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
       style={{
         height: 31.99,

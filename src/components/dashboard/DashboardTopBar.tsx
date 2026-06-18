@@ -1,12 +1,14 @@
 'use client'
 
 import { Search, HelpCircle, Bell, Settings, Menu } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface DashboardTopBarProps {
   onMenuClick: () => void
 }
 
 export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
+  const router = useRouter()
   return (
     <header
       className="h-16 bg-white flex items-center"
@@ -50,6 +52,7 @@ export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
           </button>
           <button
             type="button"
+            onClick={() => router.push('/help')}
             className="hidden sm:flex w-9 h-9 rounded-lg items-center justify-center hover:bg-gray-100 transition-colors"
             aria-label="Help"
           >
