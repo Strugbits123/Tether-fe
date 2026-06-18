@@ -113,7 +113,7 @@ export default function PhotosPage() {
       if (!token) return
       setLoadingPhotos(true)
       try {
-        const data = await getPhotos(token, folderId === 'uncategorized' ? undefined : folderId)
+        const data = await getPhotos(token, folderId === 'uncategorized' ? null : folderId)
         setPhotos(data)
       } catch {
         showToast('Failed to load photos', 'error')
@@ -213,10 +213,21 @@ export default function PhotosPage() {
     }
   }
 
-  const handleSavePhoto = async (photoId: string, title: string, caption: string): Promise<void> => {
+  const handleSavePhoto = async (
+    photoId: string,
+    title: string,
+    caption: string,
+    selectedGroups: string[],
+    selectedIndividuals: string[],
+  ): Promise<void> => {
     const token = await getToken()
     if (!token) return
-    await updatePhoto(token, photoId, { title: title.trim() || undefined, caption: caption.trim() || undefined })
+    const assignments = buildAssignments(selectedGroups, selectedIndividuals)
+    await updatePhoto(token, photoId, {
+      title: title.trim() || undefined,
+      caption: caption.trim() || undefined,
+      assignments,
+    })
     showToast('Photo updated', 'success')
     setEditingPhoto(null)
     loadPhotos(activeFolderId)
@@ -577,7 +588,9 @@ export default function PhotosPage() {
         <EditPhotoModal
           photo={editingPhoto}
           onClose={() => setEditingPhoto(null)}
-          onSave={(title, caption) => handleSavePhoto(editingPhoto.id, title, caption)}
+          onSave={(title, caption, groups, individuals) =>
+            handleSavePhoto(editingPhoto.id, title, caption, groups, individuals)
+          }
         />
       )}
 
@@ -1670,11 +1683,16 @@ function EditPhotoModal({
 }: {
   photo: Photo
   onClose: () => void
-  onSave: (title: string, caption: string) => Promise<void>
+  onSave: (title: string, caption: string, groups: string[], individuals: string[]) => Promise<void>
 }) {
   const [title, setTitle] = useState(photo.title || '')
   const [caption, setCaption] = useState(photo.caption || '')
   const [saving, setSaving] = useState(false)
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([])
+  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([])
+  const [showIndividuals, setShowIndividuals] = useState(true)
+  const [search, setSearch] = useState('')
+  const [recipients, setRecipients] = useState<Recipient[]>([])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1689,11 +1707,46 @@ function EditPhotoModal({
     }
   }, [onClose])
 
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch { /* non-fatal */ }
+    })()
+    return () => { active = false }
+  }, [])
+
+  const toggleGroup = (g: string) => {
+    if (g === 'Assign Later') {
+      setSelectedIndividuals([])
+      setSelectedGroups((prev) => prev.includes('Assign Later') ? [] : ['Assign Later'])
+      return
+    }
+    setSelectedIndividuals([])
+    setSelectedGroups((prev) => {
+      const withoutLater = prev.filter((x) => x !== 'Assign Later')
+      return withoutLater.includes(g) ? withoutLater.filter((x) => x !== g) : [...withoutLater, g]
+    })
+  }
+
+  const toggleIndividual = (id: string) => {
+    setSelectedGroups([])
+    setSelectedIndividuals((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+  }
+
+  const filteredIndividuals = recipients.filter((r) =>
+    r.name.toLowerCase().includes(search.trim().toLowerCase()),
+  )
+
   const handleSave = async () => {
     if (saving) return
     setSaving(true)
     try {
-      await onSave(title, caption)
+      await onSave(title, caption, selectedGroups, selectedIndividuals)
     } catch {
       /* error already toasted by parent */
     } finally {
@@ -1820,6 +1873,145 @@ function EditPhotoModal({
                   color: '#0A0A0A',
                 }}
               />
+            </div>
+
+            {/* Recipients */}
+            <div className="flex flex-col gap-2">
+              <label
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '14px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Recipients
+              </label>
+              <div className="flex flex-col gap-2">
+                {GROUP_OPTIONS.map((g) => (
+                  <GroupRow
+                    key={g}
+                    label={g}
+                    selected={selectedGroups.includes(g)}
+                    variant={g === 'Assign Later' ? 'yellow' : 'default'}
+                    onToggle={() => toggleGroup(g)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIndividuals((s) => !s)}
+                className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 mt-1"
+                style={{
+                  height: 36,
+                  borderRadius: 8,
+                  border: '1.1px solid rgba(0,0,0,0.1)',
+                  background: '#FFFFFF',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#0A0A0A',
+                }}
+              >
+                {showIndividuals ? (
+                  <ChevronUp className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
+                )}
+                {showIndividuals ? 'Hide Individuals' : 'Show Individuals'}
+              </button>
+              {showIndividuals && (
+                <div className="flex flex-col gap-2 mt-1">
+                  <div
+                    className="w-full flex items-center gap-2"
+                    style={{ height: 36, borderRadius: 8, background: '#F3F3F5', padding: '4px 12px' }}
+                  >
+                    <Search className="w-4 h-4 text-[#717182] flex-shrink-0" strokeWidth={2} />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by name..."
+                      className="flex-1 bg-transparent outline-none min-w-0"
+                      style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 400,
+                        fontSize: 14,
+                        lineHeight: '20px',
+                        color: '#0A0A0A',
+                      }}
+                    />
+                  </div>
+                  <div
+                    className="flex flex-col gap-2 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
+                    style={{
+                      maxHeight: 150,
+                      borderRadius: 10,
+                      border: '1.1px solid rgba(0,0,0,0.1)',
+                      background: '#F9FAFB',
+                      padding: '8px',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: '#D1D5DC transparent',
+                    }}
+                  >
+                    {filteredIndividuals.length === 0 ? (
+                      <p
+                        className="text-center py-4"
+                        style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#717182' }}
+                      >
+                        {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
+                      </p>
+                    ) : (
+                      filteredIndividuals.map((r) => {
+                        const selected = selectedIndividuals.includes(r.id)
+                        return (
+                          <button
+                            type="button"
+                            key={r.id}
+                            onClick={() => toggleIndividual(r.id)}
+                            className="w-full flex items-center gap-2 cursor-pointer"
+                            style={{
+                              borderRadius: 8,
+                              background: selected ? '#E0E7FF' : '#FFFFFF',
+                              border: selected ? '1px solid #4F46E5' : '1px solid transparent',
+                              padding: '8px',
+                            }}
+                          >
+                            <CheckBox checked={selected} />
+                            <div className="flex flex-col items-start flex-1 min-w-0">
+                              <span
+                                className="truncate"
+                                style={{
+                                  fontFamily: 'Inter, sans-serif',
+                                  fontWeight: 500,
+                                  fontSize: 14,
+                                  lineHeight: '20px',
+                                  color: '#0A0A0A',
+                                }}
+                              >
+                                {r.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: 'Inter, sans-serif',
+                                  fontWeight: 400,
+                                  fontSize: 12,
+                                  lineHeight: '16px',
+                                  color: '#717182',
+                                }}
+                              >
+                                {r.relationship}
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer */}

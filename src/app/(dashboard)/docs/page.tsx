@@ -29,6 +29,7 @@ import {
   Shield,
   Trash2,
   Upload,
+  Users,
   Video,
   X,
 } from 'lucide-react'
@@ -115,6 +116,15 @@ const GROUP_OPTIONS = [
   'All Friends',
   'All Others',
   'Release Manager',
+]
+
+const DOC_CATEGORIES = [
+  { value: 'legal', label: 'Legal' },
+  { value: 'financial', label: 'Financial' },
+  { value: 'insurance', label: 'Insurance' },
+  { value: 'property', label: 'Property' },
+  { value: 'digital_accounts', label: 'Digital' },
+  { value: 'other', label: 'Other' },
 ]
 
 /* ---------------------- Helpers ---------------------- */
@@ -684,13 +694,13 @@ function DocumentViewModal({
     }
   }, [onClose])
 
-  const InfoRow = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex items-center justify-between" style={{ gap: 8 }}>
-      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 14, color: '#4A5565' }}>
+  const Cell = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div className="flex flex-col" style={{ gap: 4 }}>
+      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 13, lineHeight: '18px', color: '#4A5565' }}>
         {label}
       </span>
-      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: 14, color: '#101828' }}>
-        {value}
+      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 15, lineHeight: '22px', color: '#101828' }}>
+        {children}
       </span>
     </div>
   )
@@ -708,8 +718,8 @@ function DocumentViewModal({
         <div
           className="relative bg-white w-full"
           style={{
-            maxWidth: 448,
-            borderRadius: 10,
+            maxWidth: 560,
+            borderRadius: 14,
             boxShadow: '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
             fontFamily: 'Inter, sans-serif',
           }}
@@ -719,130 +729,103 @@ function DocumentViewModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="absolute cursor-pointer top-5 right-5 sm:top-[22px] sm:right-6"
+            className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6"
             style={{ width: 22, height: 22, opacity: 0.7 }}
           >
             <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
           </button>
 
-          {/* Header */}
-          <div className="flex flex-col items-center px-5 sm:px-6 pt-6 sm:pt-[22px] pb-5" style={{ gap: 12 }}>
-            <div
-              className="flex items-center justify-center"
-              style={{ width: 72, height: 72, borderRadius: 14, background: '#E0E7FF' }}
-            >
-              <KindIcon className="w-8 h-8" color="#4F46E5" strokeWidth={1.75} />
-            </div>
-            <div className="flex flex-col items-center" style={{ gap: 4 }}>
-              <h2
-                style={{
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 600,
-                  fontSize: 20,
-                  lineHeight: '28px',
-                  color: '#101828',
-                  textAlign: 'center',
-                  wordBreak: 'break-word',
-                }}
+          <div className="flex flex-col px-6 sm:px-8 pt-6 sm:pt-8 pb-6 sm:pb-8" style={{ gap: 28 }}>
+            {/* Header */}
+            <div className="flex items-center pr-8" style={{ gap: 16 }}>
+              <div
+                className="flex items-center justify-center flex-shrink-0"
+                style={{ width: 56, height: 56, borderRadius: 12, background: '#E0E7FF' }}
               >
-                {doc.title}
-              </h2>
-              <span
-                className="inline-flex items-center"
-                style={{
-                  height: 22,
-                  borderRadius: 4,
-                  padding: '1px 12px',
-                  gap: 4,
-                  background: cat.bg,
-                  color: cat.color,
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 500,
-                  fontSize: 12,
-                  lineHeight: '20px',
-                }}
-              >
-                {cat.label}
-              </span>
-            </div>
-          </div>
-
-          {/* Info grid */}
-          <div
-            className="flex flex-col mx-5 sm:mx-6 mb-5"
-            style={{
-              gap: 12,
-              padding: 16,
-              borderRadius: 10,
-              background: '#F9FAFB',
-              border: '1px solid rgba(0,0,0,0.07)',
-            }}
-          >
-            <InfoRow label="File Size" value={formatFileSize(doc.file_size_bytes)} />
-            <InfoRow label="Uploaded" value={formatTimeAgo(doc.created_at)} />
-            <InfoRow label="File Type" value={doc.file_type.toUpperCase()} />
-            <InfoRow label="Category" value={cat.label} />
-            <div className="flex items-center justify-between" style={{ gap: 8 }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 14, color: '#4A5565' }}>
-                Access
-              </span>
-              <div className="flex items-center" style={{ gap: 6 }}>
-                <Lock className="w-4 h-4" color="#4A5565" strokeWidth={2} />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: 14, color: '#101828' }}>
-                  {doc.assignments.length} {doc.assignments.length === 1 ? 'Recipient' : 'Recipients'}
+                <KindIcon className="w-7 h-7" color="#4F46E5" strokeWidth={1.75} />
+              </div>
+              <div className="flex flex-col min-w-0" style={{ gap: 2 }}>
+                <h2
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 600,
+                    fontSize: 22,
+                    lineHeight: '28px',
+                    color: '#101828',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {doc.title}
+                </h2>
+                <span
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 15,
+                    lineHeight: '22px',
+                    color: '#6A7282',
+                  }}
+                >
+                  {cat.label}
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Footer */}
-          <div
-            className="flex flex-wrap items-center justify-end gap-3 px-5 sm:px-6 py-[15px]"
-            style={{
-              background: '#F9FAFB',
-              borderTop: '0.8px solid #E5E7EB',
-              borderBottomLeftRadius: 10,
-              borderBottomRightRadius: 10,
-            }}
-          >
-            <button
-              type="button"
-              onClick={onEditRecipients}
-              className="cursor-pointer hover:bg-gray-50"
-              style={{
-                height: 36,
-                padding: '7.8px 15.8px',
-                borderRadius: 8,
-                border: '1px solid rgba(0,0,0,0.1)',
-                background: '#FFFFFF',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 13.2,
-                lineHeight: '20px',
-                color: '#0A0A0A',
-              }}
-            >
-              Edit Recipients
-            </button>
-            <button
-              type="button"
-              onClick={onDownload}
-              className="flex items-center gap-2 cursor-pointer hover:opacity-90"
-              style={{
-                height: 36,
-                padding: '8px 16px',
-                borderRadius: 8,
-                background: '#4F46E5',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 14,
-                lineHeight: '20px',
-                color: '#FFFFFF',
-              }}
-            >
-              <Download className="w-4 h-4" />
-              Download
-            </button>
+            {/* Info grid */}
+            <div className="grid grid-cols-2" style={{ rowGap: 24, columnGap: 16 }}>
+              <Cell label="File Size">{formatFileSize(doc.file_size_bytes)}</Cell>
+              <Cell label="Uploaded">{formatTimeAgo(doc.created_at)}</Cell>
+              <Cell label="File Type">{doc.file_type.toUpperCase()}</Cell>
+              <Cell label="Category">{cat.label}</Cell>
+              <Cell label="Access">
+                <span className="flex items-center" style={{ gap: 6 }}>
+                  <Lock className="w-4 h-4 flex-shrink-0" color="#4A5565" strokeWidth={2} />
+                  {doc.assignments.length} {doc.assignments.length === 1 ? 'Recipient' : 'Recipients'}
+                </span>
+              </Cell>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center" style={{ gap: 12 }}>
+              <button
+                type="button"
+                onClick={onDownload}
+                className="flex flex-1 items-center justify-center gap-2 cursor-pointer hover:opacity-90"
+                style={{
+                  height: 44,
+                  borderRadius: 8,
+                  background: '#4F46E5',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#FFFFFF',
+                }}
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </button>
+              <button
+                type="button"
+                onClick={onEditRecipients}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
+                style={{
+                  height: 44,
+                  padding: '0 16px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(0,0,0,0.1)',
+                  background: '#FFFFFF',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  color: '#0A0A0A',
+                }}
+              >
+                <Users className="w-4 h-4" color="#0A0A0A" strokeWidth={2} />
+                Edit Recipients
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -865,6 +848,7 @@ function EditDocumentModal({
   const { groups: initGroups, individuals: initIndividuals } = assignmentsToSelections(doc.assignments)
 
   const [notes, setNotes] = useState(doc.note ?? '')
+  const [category, setCategory] = useState(doc.category ?? '')
   const [selectedGroups, setSelectedGroups] = useState<string[]>(initGroups)
   const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>(initIndividuals)
   const [showIndividuals, setShowIndividuals] = useState(true)
@@ -921,6 +905,7 @@ function EditDocumentModal({
     try {
       await updateDocument(token, doc.id, {
         note: notes || undefined,
+        category: category || undefined,
         assignments: buildAssignments(selectedGroups, selectedIndividuals),
       })
       showToast('Document updated', 'success')
@@ -1027,6 +1012,54 @@ function EditDocumentModal({
               >
                 File replacement coming soon
               </span>
+            </div>
+
+            {/* Category */}
+            <div className="flex flex-col gap-2">
+              <label
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '14px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Category <span style={{ color: '#FB2C36' }}>*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full focus:outline-none appearance-none cursor-pointer"
+                  style={{
+                    height: 44,
+                    borderRadius: 8,
+                    border: '1.25px solid rgba(0,0,0,0.1)',
+                    background: '#F3F3F5',
+                    padding: '4px 36px 4px 12px',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    letterSpacing: '-0.15px',
+                    color: category ? '#0A0A0A' : '#717182',
+                  }}
+                >
+                  <option value="" disabled>
+                    Select category
+                  </option>
+                  {DOC_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="w-4 h-4 text-[#717182] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  strokeWidth={2}
+                />
+              </div>
             </div>
 
             {/* Notes */}

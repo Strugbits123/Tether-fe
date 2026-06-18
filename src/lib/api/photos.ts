@@ -54,8 +54,16 @@ export const createPhotosBatch = (
   },
 ) => api.post<{ count: number; photos: Photo[] }>('/photos/batch', body, token)
 
-export const getPhotos = (token: string, folderId?: string) => {
-  const query = folderId ? `?folder_id=${folderId}` : ''
+export const getPhotos = (token: string, folderId?: string | null) => {
+  // folderId === undefined → all photos (no filter)
+  // folderId === null      → uncategorized only (no folder assigned)
+  // folderId === string    → specific folder
+  const query =
+    folderId === null
+      ? '?folder_id=null'
+      : folderId
+        ? `?folder_id=${folderId}`
+        : ''
   return api.get<Photo[]>(`/photos${query}`, token)
 }
 

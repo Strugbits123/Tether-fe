@@ -56,6 +56,15 @@ const GROUP_OPTIONS = [
   "Release Manager",
 ];
 
+const DOC_CATEGORIES = [
+  { value: "legal", label: "Legal" },
+  { value: "financial", label: "Financial" },
+  { value: "insurance", label: "Insurance" },
+  { value: "property", label: "Property" },
+  { value: "digital_accounts", label: "Digital" },
+  { value: "other", label: "Other" },
+];
+
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/heic";
 const DOC_ACCEPT = ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic";
 const ONBOARDING_ACCEPT =
@@ -118,6 +127,7 @@ export default function AddPhotosModal({
 
   const [files, setFiles] = useState<File[]>([]);
   const [photoTitle, setPhotoTitle] = useState("");
+  const [category, setCategory] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([]);
@@ -150,6 +160,7 @@ export default function AddPhotosModal({
     if (!open) return;
     setFiles([]);
     setPhotoTitle("");
+    setCategory("");
     setNotes("");
     setSelectedGroups([]);
     setSelectedIndividuals([]);
@@ -316,6 +327,10 @@ export default function AddPhotosModal({
       setErrors([`Please select at least one ${noun} to upload.`]);
       return;
     }
+    if (isDoc && !category) {
+      setErrors(["Please select a category."]);
+      return;
+    }
 
     const supabase = createClient();
     const {
@@ -398,6 +413,7 @@ export default function AddPhotosModal({
             fileType: deriveDocFileType(s.file.type),
             fileSizeBytes: s.file.size,
             mimeType: s.file.type,
+            category,
           })),
           note: notes || undefined,
           assignments,
@@ -682,6 +698,56 @@ export default function AddPhotosModal({
                   )}
                 </div>
 
+                {/* Category (documents only) */}
+                {isDoc && (
+                  <div className="flex flex-col gap-2">
+                    <label
+                      style={{
+                        fontFamily: "Inter, sans-serif",
+                        fontWeight: 500,
+                        fontSize: 14,
+                        lineHeight: "14px",
+                        letterSpacing: "-0.15px",
+                        color: "#0A0A0A",
+                      }}
+                    >
+                      Category <span style={{ color: "#FB2C36" }}>*</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="w-full focus:outline-none appearance-none cursor-pointer"
+                        style={{
+                          height: 44,
+                          borderRadius: 8,
+                          border: "1.25px solid rgba(0,0,0,0.1)",
+                          background: "#F3F3F5",
+                          padding: "4px 36px 4px 12px",
+                          fontFamily: "Inter, sans-serif",
+                          fontWeight: 400,
+                          fontSize: 14,
+                          letterSpacing: "-0.15px",
+                          color: category ? "#0A0A0A" : "#717182",
+                        }}
+                      >
+                        <option value="" disabled>
+                          Select category
+                        </option>
+                        {DOC_CATEGORIES.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        className="w-4 h-4 text-[#717182] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                        strokeWidth={2}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Title */}
                 {!isDoc && (
                   <div className="flex flex-col gap-2">
@@ -732,7 +798,7 @@ export default function AddPhotosModal({
                       color: "#0A0A0A",
                     }}
                   >
-                    Caption (optional)
+                    {isDoc ? "Notes (optional)" : "Caption (optional)"}
                   </label>
                   <textarea
                     value={notes}
