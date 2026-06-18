@@ -19,9 +19,13 @@ import {
   Play,
   Search,
   Shield,
+  Upload,
   Users,
   Video,
+  X,
 } from 'lucide-react'
+
+const SUPPORT_EMAIL = 'Support@jointether.com'
 
 /* ---------------------- Data ---------------------- */
 
@@ -43,20 +47,22 @@ const VIDEOS: VideoTutorial[] = [
 interface FaqCategory {
   label: string
   Icon: React.ComponentType<{ style?: React.CSSProperties; color?: string; strokeWidth?: number }>
-  iconColor: string
-  iconBg: string
+  /** Accent (dark) color — used for the icon-box bg + border when selected, and the icon when unselected. */
+  color: string
+  /** Light tint — used as the card bg when selected, and the icon-box bg when unselected. */
+  lightBg: string
 }
 
 const CATEGORIES: FaqCategory[] = [
-  { label: 'All Questions', Icon: HelpCircle, iconColor: '#FFFFFF', iconBg: '#007359' },
-  { label: 'Documents & Vault', Icon: FileText, iconColor: '#155DFC', iconBg: '#EFF6FF' },
-  { label: 'Messages & Videos', Icon: MessageSquare, iconColor: '#00A63E', iconBg: '#F0FDF4' },
-  { label: 'Release Managers & Recipients', Icon: Users, iconColor: '#9810FA', iconBg: '#FAF5FF' },
-  { label: 'Account & Passwords', Icon: Lock, iconColor: '#E60076', iconBg: '#FDF2F8' },
-  { label: 'Billing & Plans', Icon: CreditCard, iconColor: '#4F39F6', iconBg: '#EEF2FF' },
-  { label: 'Notifications', Icon: Bell, iconColor: '#D08700', iconBg: '#FEFCE8' },
-  { label: 'Legal & Compliance', Icon: Globe, iconColor: '#E7000B', iconBg: '#FEF2F2' },
-  { label: 'Security & Privacy', Icon: Shield, iconColor: '#F54900', iconBg: '#FFF7ED' },
+  { label: 'All Questions', Icon: HelpCircle, color: '#007359', lightBg: '#F0FDFA' },
+  { label: 'Documents & Vault', Icon: FileText, color: '#155DFC', lightBg: '#EFF6FF' },
+  { label: 'Messages & Videos', Icon: MessageSquare, color: '#00A63E', lightBg: '#F0FDF4' },
+  { label: 'Release Managers & Recipients', Icon: Users, color: '#9810FA', lightBg: '#FAF5FF' },
+  { label: 'Account & Passwords', Icon: Lock, color: '#E60076', lightBg: '#FDF2F8' },
+  { label: 'Billing & Plans', Icon: CreditCard, color: '#4F39F6', lightBg: '#EEF2FF' },
+  { label: 'Notifications', Icon: Bell, color: '#D08700', lightBg: '#FEFCE8' },
+  { label: 'Legal & Compliance', Icon: Globe, color: '#E7000B', lightBg: '#FEF2F2' },
+  { label: 'Security & Privacy', Icon: Shield, color: '#F54900', lightBg: '#FFF7ED' },
 ]
 
 const FAQS: string[] = [
@@ -69,9 +75,16 @@ const FAQS: string[] = [
 
 /* ---------------------- Page ---------------------- */
 
+type ModalKind = 'feedback' | 'feature' | 'bug' | 'thanks' | null
+
 export default function HelpPage() {
   const [activeCategory, setActiveCategory] = useState('All Questions')
   const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const [modal, setModal] = useState<ModalKind>(null)
+
+  const openEmail = () => {
+    window.location.href = `mailto:${SUPPORT_EMAIL}`
+  }
 
   return (
     <div className="mx-auto w-full flex flex-col" style={{ maxWidth: 1152, gap: 31.99 }}>
@@ -299,8 +312,8 @@ export default function HelpPage() {
           ))}
           <button
             type="button"
-            className="flex items-center cursor-pointer hover:opacity-80"
-            style={{ padding: 16, background: 'transparent' }}
+            className="flex items-center justify-between cursor-pointer hover:opacity-80"
+            style={{ padding: 16, gap: 16, background: 'transparent' }}
           >
             <span
               style={{
@@ -314,6 +327,7 @@ export default function HelpPage() {
             >
               Load More
             </span>
+            <ChevronDown style={{ width: 20, height: 20, flexShrink: 0 }} color="#4F39F6" strokeWidth={2} />
           </button>
         </div>
       </section>
@@ -339,6 +353,8 @@ export default function HelpPage() {
             title="Support@jointether.com"
             desc="Get help via email. We typically respond within 4 hours during business hours."
             buttonLabel="Send us an email"
+            onTitleClick={openEmail}
+            onButtonClick={openEmail}
           />
           <ContactCard
             iconBg="rgba(52,199,89,0.1)"
@@ -346,6 +362,7 @@ export default function HelpPage() {
             title="General Feedback"
             desc="Tell us about your Tether experience."
             buttonLabel="Tell us your experience"
+            onButtonClick={() => setModal('feedback')}
           />
         </div>
       </section>
@@ -371,6 +388,7 @@ export default function HelpPage() {
             title="Request a feature"
             desc="Have an idea for how we can improve Tether? We'd love to hear it."
             buttonLabel="Submit an idea"
+            onButtonClick={() => setModal('feature')}
           />
           <ContactCard
             iconBg="#FFE2E2"
@@ -378,9 +396,20 @@ export default function HelpPage() {
             title="Report a bug"
             desc="Found something that's not working right? Let us know so we can fix it."
             buttonLabel="Report an issue"
+            onButtonClick={() => setModal('bug')}
           />
         </div>
       </section>
+
+      {/* Modals */}
+      {modal === 'feedback' && (
+        <FeedbackModal onClose={() => setModal(null)} onSubmit={() => setModal('thanks')} />
+      )}
+      {modal === 'feature' && (
+        <FeatureModal onClose={() => setModal(null)} onSubmit={() => setModal('thanks')} />
+      )}
+      {modal === 'bug' && <BugModal onClose={() => setModal(null)} onSubmit={() => setModal('thanks')} />}
+      {modal === 'thanks' && <ThanksModal onClose={() => setModal(null)} />}
     </div>
   )
 }
@@ -513,7 +542,7 @@ function CategoryCard({
   active: boolean
   onClick: () => void
 }) {
-  const { label, Icon, iconColor, iconBg } = category
+  const { label, Icon, color, lightBg } = category
   return (
     <button
       type="button"
@@ -524,15 +553,15 @@ function CategoryCard({
         padding: '11px 25px',
         gap: 12,
         borderRadius: 14,
-        border: active ? '1.25px solid #007359' : '1.25px solid rgba(0,0,0,0.1)',
-        background: active ? '#F0FDFA' : '#FFFFFF',
+        border: `1.25px solid ${active ? color : 'rgba(0,0,0,0.1)'}`,
+        background: active ? lightBg : '#FFFFFF',
       }}
     >
       <span
         className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 47.99, height: 47.99, borderRadius: 10, background: iconBg }}
+        style={{ width: 47.99, height: 47.99, borderRadius: 10, background: active ? color : lightBg }}
       >
-        <Icon style={{ width: 24, height: 24 }} color={iconColor} strokeWidth={2} />
+        <Icon style={{ width: 24, height: 24 }} color={active ? '#FFFFFF' : color} strokeWidth={2} />
       </span>
       <span
         style={{
@@ -608,12 +637,16 @@ function ContactCard({
   title,
   desc,
   buttonLabel,
+  onButtonClick,
+  onTitleClick,
 }: {
   iconBg: string
   icon: React.ReactNode
   title: string
   desc: string
   buttonLabel: string
+  onButtonClick?: () => void
+  onTitleClick?: () => void
 }) {
   return (
     <div
@@ -634,6 +667,8 @@ function ContactCard({
       </span>
       <div className="flex flex-col" style={{ gap: 8 }}>
         <h3
+          onClick={onTitleClick}
+          className={onTitleClick ? 'cursor-pointer hover:opacity-80 break-all' : 'break-all'}
           style={{
             fontFamily: 'Inter, sans-serif',
             fontWeight: 600,
@@ -660,6 +695,7 @@ function ContactCard({
       </div>
       <button
         type="button"
+        onClick={onButtonClick}
         className="cursor-pointer hover:bg-gray-50"
         style={{
           height: 36,
@@ -679,5 +715,470 @@ function ContactCard({
         {buttonLabel}
       </button>
     </div>
+  )
+}
+
+/* ---------------------- Modal building blocks ---------------------- */
+
+function ModalShell({
+  maxWidth,
+  onClose,
+  children,
+}: {
+  maxWidth: number
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full flex flex-col"
+        style={{
+          maxWidth,
+          borderRadius: 10,
+          border: '1px solid rgba(0,0,0,0.1)',
+          background: '#FFFFFF',
+          boxShadow: '0px 10px 15px -3px rgba(0,0,0,0.1), 0px 4px 6px -4px rgba(0,0,0,0.1)',
+          padding: 25,
+          maxHeight: 'calc(100vh - 32px)',
+          overflowY: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute cursor-pointer hover:opacity-70"
+          style={{ top: 25, right: 25, background: 'transparent' }}
+        >
+          <X style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />
+        </button>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ModalHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="flex flex-col" style={{ gap: 8, paddingRight: 24 }}>
+      <h2
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 600,
+          fontSize: 18,
+          lineHeight: '18px',
+          letterSpacing: '-0.44px',
+          color: '#0A0A0A',
+        }}
+      >
+        {title}
+      </h2>
+      <p
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 400,
+          fontSize: 14,
+          lineHeight: '20px',
+          letterSpacing: '-0.15px',
+          color: '#717182',
+        }}
+      >
+        {subtitle}
+      </p>
+    </div>
+  )
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label
+      style={{
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 500,
+        fontSize: 14,
+        lineHeight: '14px',
+        letterSpacing: '-0.15px',
+        color: '#0A0A0A',
+      }}
+    >
+      {children}
+    </label>
+  )
+}
+
+const FIELD_STYLE: React.CSSProperties = {
+  borderRadius: 8,
+  border: '1px solid rgba(0,0,0,0.1)',
+  background: '#F3F3F5',
+  fontFamily: 'Inter, sans-serif',
+  fontWeight: 400,
+  fontSize: 14,
+  lineHeight: '20px',
+  letterSpacing: '-0.15px',
+  color: '#0A0A0A',
+  outline: 'none',
+  width: '100%',
+}
+
+function TextArea({
+  placeholder,
+  value,
+  onChange,
+}: {
+  placeholder: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <textarea
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className="placeholder:text-[#717182] resize-none"
+      style={{ ...FIELD_STYLE, height: 64, padding: '8px 12px' }}
+    />
+  )
+}
+
+function Dropdown({
+  placeholder,
+  options,
+  value,
+  onChange,
+}: {
+  placeholder: string
+  options: string[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center justify-between cursor-pointer"
+        style={{ ...FIELD_STYLE, height: 36, padding: '8px 12px' }}
+      >
+        <span
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 500,
+            fontSize: 14,
+            lineHeight: '20px',
+            letterSpacing: '-0.15px',
+            color: value ? '#0A0A0A' : '#717182',
+          }}
+        >
+          {value || placeholder}
+        </span>
+        <ChevronDown style={{ width: 16, height: 16, flexShrink: 0 }} color="#717182" strokeWidth={2} />
+      </button>
+      {open && (
+        <div
+          className="absolute left-0 right-0 z-10 overflow-hidden"
+          style={{
+            marginTop: 4,
+            borderRadius: 8,
+            border: '1px solid rgba(0,0,0,0.1)',
+            background: '#FFFFFF',
+            boxShadow: '0px 10px 15px -3px rgba(0,0,0,0.1), 0px 4px 6px -4px rgba(0,0,0,0.1)',
+          }}
+        >
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => {
+                onChange(o)
+                setOpen(false)
+              }}
+              className="flex w-full text-left cursor-pointer hover:bg-gray-50"
+              style={{
+                padding: '8px 12px',
+                background: value === o ? '#F3F3F5' : 'transparent',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 14,
+                lineHeight: '20px',
+                letterSpacing: '-0.15px',
+                color: '#0A0A0A',
+              }}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UploadButton() {
+  const [fileName, setFileName] = useState<string | null>(null)
+  return (
+    <label
+      className="flex items-center justify-center cursor-pointer hover:bg-gray-50"
+      style={{
+        height: 36,
+        gap: 8,
+        borderRadius: 8,
+        border: '1px solid rgba(0,0,0,0.1)',
+        background: '#FFFFFF',
+        width: '100%',
+      }}
+    >
+      <Upload style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+      <span
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          fontSize: 14,
+          lineHeight: '20px',
+          letterSpacing: '-0.15px',
+          textAlign: 'center',
+          color: '#0A0A0A',
+          maxWidth: '80%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {fileName ?? 'Upload screenshot'}
+      </span>
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+      />
+    </label>
+  )
+}
+
+function ModalFooter({
+  onCancel,
+  onSubmit,
+  submitLabel,
+  submitColor,
+  disabled,
+}: {
+  onCancel: () => void
+  onSubmit: () => void
+  submitLabel: string
+  submitColor: string
+  disabled: boolean
+}) {
+  return (
+    <div className="flex items-center justify-end" style={{ paddingTop: 8, gap: 12 }}>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="cursor-pointer hover:bg-gray-50"
+        style={{
+          height: 36,
+          padding: '8px 16px',
+          borderRadius: 8,
+          border: '1px solid rgba(0,0,0,0.1)',
+          background: '#FFFFFF',
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          fontSize: 14,
+          lineHeight: '20px',
+          letterSpacing: '-0.15px',
+          textAlign: 'center',
+          color: '#0A0A0A',
+        }}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={onSubmit}
+        disabled={disabled}
+        className={disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:opacity-90'}
+        style={{
+          height: 36,
+          padding: '8px 16px',
+          borderRadius: 8,
+          background: submitColor,
+          opacity: disabled ? 0.5 : 1,
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          fontSize: 14,
+          lineHeight: '20px',
+          letterSpacing: '-0.15px',
+          textAlign: 'center',
+          color: '#FFFFFF',
+        }}
+      >
+        {submitLabel}
+      </button>
+    </div>
+  )
+}
+
+/* ---------------------- Modals ---------------------- */
+
+function FeedbackModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const [type, setType] = useState('')
+  const [feedback, setFeedback] = useState('')
+  const valid = type !== '' && feedback.trim() !== ''
+
+  return (
+    <ModalShell maxWidth={512} onClose={onClose}>
+      <ModalHeader title="General Feedback" subtitle="We'd love to hear your thoughts about Tether" />
+      <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Feedback type</FieldLabel>
+          <Dropdown
+            placeholder="Select a type..."
+            options={['Positive Feedback', 'Suggestion', 'Concern', 'Question']}
+            value={type}
+            onChange={setType}
+          />
+        </div>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Your feedback</FieldLabel>
+          <TextArea placeholder="Share your thoughts with us..." value={feedback} onChange={setFeedback} />
+        </div>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Screenshot (optional)</FieldLabel>
+          <UploadButton />
+        </div>
+        <ModalFooter
+          onCancel={onClose}
+          onSubmit={onSubmit}
+          submitLabel="Submit Feedback"
+          submitColor="#00A63E"
+          disabled={!valid}
+        />
+      </div>
+    </ModalShell>
+  )
+}
+
+function FeatureModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const [feature, setFeature] = useState('')
+  const [benefit, setBenefit] = useState('')
+  const valid = feature.trim() !== '' && benefit.trim() !== ''
+
+  return (
+    <ModalShell maxWidth={512} onClose={onClose}>
+      <ModalHeader title="Request a Feature" subtitle="Help us improve Tether by sharing your ideas" />
+      <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Tell us about the feature you want</FieldLabel>
+          <TextArea placeholder="Describe the feature you'd like to see..." value={feature} onChange={setFeature} />
+        </div>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>How would this feature help you?</FieldLabel>
+          <TextArea
+            placeholder="Explain how this would improve your experience..."
+            value={benefit}
+            onChange={setBenefit}
+          />
+        </div>
+        <ModalFooter
+          onCancel={onClose}
+          onSubmit={onSubmit}
+          submitLabel="Submit Feature Request"
+          submitColor="#9810FA"
+          disabled={!valid}
+        />
+      </div>
+    </ModalShell>
+  )
+}
+
+function BugModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const [location, setLocation] = useState('')
+  const [description, setDescription] = useState('')
+  const valid = location !== '' && description.trim() !== ''
+
+  return (
+    <ModalShell maxWidth={512} onClose={onClose}>
+      <ModalHeader title="Report a Bug" subtitle="Help us fix issues by reporting what's not working" />
+      <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Where did you encounter this bug?</FieldLabel>
+          <Dropdown
+            placeholder="Select a location..."
+            options={['Dashboard/Portal', 'Billing', 'Messages', 'Photos', 'Memoir', 'Other']}
+            value={location}
+            onChange={setLocation}
+          />
+        </div>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Describe the bug</FieldLabel>
+          <TextArea
+            placeholder="What happened? What did you expect to happen?"
+            value={description}
+            onChange={setDescription}
+          />
+        </div>
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          <FieldLabel>Screenshot (optional)</FieldLabel>
+          <UploadButton />
+        </div>
+        <ModalFooter
+          onCancel={onClose}
+          onSubmit={onSubmit}
+          submitLabel="Submit Bug Report"
+          submitColor="#E7000B"
+          disabled={!valid}
+        />
+      </div>
+    </ModalShell>
+  )
+}
+
+function ThanksModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ModalShell maxWidth={448} onClose={onClose}>
+      <div className="flex flex-col items-center" style={{ gap: 16, padding: '7px 0' }}>
+        <span
+          className="flex items-center justify-center"
+          style={{ width: 64, height: 64, borderRadius: 9999, background: '#DCFCE7' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/dashboard/tick.svg" alt="" style={{ width: 32, height: 32 }} />
+        </span>
+        <h2
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 600,
+            fontSize: 24,
+            lineHeight: '32px',
+            letterSpacing: '0.07px',
+            textAlign: 'center',
+            color: '#101828',
+          }}
+        >
+          Thank you, RJ.
+        </h2>
+        <p
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 400,
+            fontSize: 16,
+            lineHeight: '24px',
+            letterSpacing: '-0.31px',
+            textAlign: 'center',
+            color: '#4A5565',
+          }}
+        >
+          We appreciate you taking the time to send feedback.
+        </p>
+      </div>
+    </ModalShell>
   )
 }
