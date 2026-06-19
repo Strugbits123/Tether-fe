@@ -17,6 +17,10 @@ interface FinishProfileModalProps {
   cancelLabel?: string
   /** Read-only view of the saved profile (inputs locked, no Save). */
   readOnly?: boolean
+  /** Overrides the editable-mode heading. Defaults to "Finish Your Profile". */
+  title?: string
+  /** Overrides the helper text under the phone field. */
+  phoneHelpText?: string
 }
 
 // State display name <-> 2-letter code (the API stores/returns the code).
@@ -77,7 +81,7 @@ const HEAR_OPTIONS = [
   'Other',
 ]
 
-export default function FinishProfileModal({ open, onClose, onCompleted, onSkip, cancelLabel, readOnly = false }: FinishProfileModalProps) {
+export default function FinishProfileModal({ open, onClose, onCompleted, onSkip, cancelLabel, readOnly = false, title, phoneHelpText }: FinishProfileModalProps) {
   const { showToast } = useToast()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -321,7 +325,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
               color: '#101828',
             }}
           >
-            {readOnly ? 'Your Profile' : 'Finish Your Profile'}
+            {readOnly ? 'Your Profile' : title ?? 'Finish Your Profile'}
           </h2>
           <p
             className="mt-2"
@@ -642,7 +646,8 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
                   color: '#717182',
                 }}
               >
-                We&apos;ll use this for important account notifications. See our Privacy Policy for additional details.
+                {phoneHelpText ??
+                  "We'll use this for important account notifications. See our Privacy Policy for additional details."}
               </p>
 
               {/* SMS opt-in — only relevant once a mobile number is entered. */}
