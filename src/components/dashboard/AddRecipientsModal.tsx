@@ -22,6 +22,8 @@ interface AddRecipientsModalProps {
   title?: string;
   subtitle?: string | null;
   bottomVariant?: "note" | "guardian";
+  /** Override the relationship dropdown choices. Defaults to the full list. */
+  relationshipOptions?: string[];
   /** Read-only view of an existing recipient (inputs locked, no Add). */
   readOnly?: boolean;
   /** Values to display in read-only mode. */
@@ -57,6 +59,7 @@ export default function AddRecipientsModal({
   title = "Add a Recipient",
   subtitle = "Recipients are the people who will receive access to your messages, photos, and documents when your Tether is released. You can add more in the Access page.",
   bottomVariant = "note",
+  relationshipOptions = RELATIONSHIP_OPTIONS,
   readOnly = false,
   initialData,
 }: AddRecipientsModalProps) {
@@ -347,6 +350,7 @@ export default function AddRecipientsModal({
                 value={relationship}
                 onChange={setRelationship}
                 disabled={readOnly}
+                options={relationshipOptions}
               />
             </Field>
 
@@ -725,10 +729,12 @@ function RelationshipDropdown({
   value,
   onChange,
   disabled,
+  options = RELATIONSHIP_OPTIONS,
 }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  options?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -781,7 +787,7 @@ function RelationshipDropdown({
           }}
         >
           <div className="max-h-60 overflow-y-auto">
-            {RELATIONSHIP_OPTIONS.map((o) => (
+            {options.map((o) => (
               <button
                 key={o}
                 type="button"
