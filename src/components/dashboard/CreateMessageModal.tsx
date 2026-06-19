@@ -37,6 +37,7 @@ import {
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
 import AudioRecordingWaveform from '@/components/audio/AudioRecordingWaveform'
 import AudioPlaybackWaveform from '@/components/audio/AudioPlaybackWaveform'
+import AudioRecorder from '@/components/audio/AudioRecorder'
 
 interface CreateMessageModalProps {
   open: boolean
@@ -314,6 +315,15 @@ export default function CreateMessageModal({
         headerTitle={headerTitle}
         onClose={handleClose}
       />
+    )
+  }
+
+  // Fresh "New Message" flow → the 3-step wizard (type → content → details).
+  // Edit mode (initialMessage) and onboarding deep-links (initialStep) keep the
+  // legacy setup/record/write flow below.
+  if (!initialMessage && !initialStep) {
+    return (
+      <CreateWizard headerTitle={headerTitle} onClose={handleClose} onCreated={onCreated} />
     )
   }
 
@@ -1170,14 +1180,21 @@ function RecordStep({
   assignments,
   onBack,
   onDone,
+  onContinue,
 }: {
   kind: 'video' | 'audio'
   recipient: string
-  title: string
-  notes: string
-  assignments: Assignment[]
+  title?: string
+  notes?: string
+  assignments?: Assignment[]
   onBack: () => void
   onDone: () => void
+  /**
+   * When provided, the preview's primary action becomes "Continue" and hands the
+   * recorded blob + duration back to the caller instead of uploading. Used by the
+   * create wizard, where upload happens after the details step.
+   */
+  onContinue?: (blob: Blob, durationSeconds: number) => void
 }) {
   const { showToast } = useToast()
 
@@ -1417,9 +1434,9 @@ function RecordStep({
       if (kind === 'video') {
         setUploadStatus('Uploading…')
         const { messageId, uploadUrl } = await createVideoUploadUrl(token, {
-          title,
+          title: title ?? '',
           notes: notes || undefined,
-          assignments,
+          assignments: assignments ?? [{ scope: 'assign_later' }],
         })
         const res = await fetch(uploadUrl, {
           method: 'PUT',
@@ -1432,9 +1449,9 @@ function RecordStep({
       } else {
         setUploadStatus('Uploading…')
         const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
-          title,
+          title: title ?? '',
           notes: notes || undefined,
-          assignments,
+          assignments: assignments ?? [{ scope: 'assign_later' }],
           fileType: 'audio/webm',
         })
         const res = await fetch(signedUploadUrl, {
@@ -1635,7 +1652,13 @@ function RecordStep({
             </button>
             <button
               type="button"
-              onClick={handleSave}
+              onClick={
+                onContinue
+                  ? () => {
+                      if (blobRef.current) onContinue(blobRef.current, duration)
+                    }
+                  : handleSave
+              }
               disabled={uploading}
               className="flex-1 flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
               style={{
@@ -1651,7 +1674,13 @@ function RecordStep({
               }}
             >
               {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {uploading ? uploadStatus || 'Uploading…' : error ? 'Try Again' : 'Save'}
+              {onContinue
+                ? 'Continue'
+                : uploading
+                ? uploadStatus || 'Uploading…'
+                : error
+                ? 'Try Again'
+                : 'Save'}
             </button>
           </div>
         ) : (
@@ -2320,6 +2349,616 @@ function ColorPicker({ onPick }: { onPick: (color: string) => void }) {
         </div>
       )}
     </div>
+  )
+}
+
+/* ===================== Create Wizard (type → content → details) ===================== */
+
+function CreateWizard({
+  headerTitle,
+  onClose,
+  onCreated,
+}: {
+  headerTitle: string
+  onClose: () => void
+  onCreated?: () => void
+}) {
+  const { showToast } = useToast()
+
+  const [step, setStep] = useState<'type' | 'content' | 'details'>('type')
+  const [type, setType] = useState<MessageType | null>(null)
+
+  // Step 2 outputs — held in state, uploaded only at the details submit.
+  const [body, setBody] = useState('')
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [duration, setDuration] = useState(0)
+
+  // Step 3 fields.
+  const [title, setTitle] = useState('')
+  const [notes, setNotes] = useState('')
+  const [audience, setAudience] = useState<string[]>(['All recipients'])
+  const [individuals, setIndividuals] = useState<string[]>([])
+
+  const [recipients, setRecipients] = useState<Recipient[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const pollRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch {
+        /* non-fatal */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  useEffect(
+    () => () => {
+      if (pollRef.current) window.clearInterval(pollRef.current)
+    },
+    [],
+  )
+
+  const pollProcessing = (token: string, messageId: string) =>
+    new Promise<void>((resolve, reject) => {
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const status = await getMessageStatus(token, messageId)
+          if (status.processingStatus === 'ready') {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+            pollRef.current = null
+            resolve()
+          } else if (status.processingStatus === 'failed') {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+            pollRef.current = null
+            reject(new Error('Processing failed'))
+          }
+        } catch {
+          /* transient — keep polling */
+        }
+      }, 3000)
+    })
+
+  const handleSubmit = async () => {
+    if (submitting) return
+    const token = await getToken()
+    if (!token) {
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    const assignments = buildAssignments(audience, individuals)
+    setError(null)
+    setSubmitting(true)
+    try {
+      if (type === 'write') {
+        await createTextMessage(token, {
+          title,
+          body,
+          notes: notes || undefined,
+          assignments,
+        })
+      } else if (type === 'video' && videoBlob) {
+        setUploadStatus('Uploading…')
+        const { messageId, uploadUrl } = await createVideoUploadUrl(token, {
+          title,
+          notes: notes || undefined,
+          assignments,
+        })
+        const res = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: videoBlob,
+          headers: { 'Content-Type': 'video/webm' },
+        })
+        if (!res.ok) throw new Error('Upload failed. Please try again.')
+        setUploadStatus('Processing…')
+        await pollProcessing(token, messageId)
+      } else if (type === 'audio' && audioBlob) {
+        setUploadStatus('Uploading…')
+        const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
+          title,
+          notes: notes || undefined,
+          assignments,
+          fileType: 'audio/webm',
+        })
+        const res = await fetch(signedUploadUrl, {
+          method: 'PUT',
+          body: audioBlob,
+          headers: { 'Content-Type': 'audio/webm' },
+        })
+        if (!res.ok) throw new Error('Upload failed. Please try again.')
+        setUploadStatus('Processing…')
+        await confirmAudioUpload(token, messageId, {
+          durationSeconds: Math.round(duration),
+          fileSizeBytes: audioBlob.size,
+        })
+      }
+      showToast('Message saved', 'success')
+      onCreated?.()
+      onClose()
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save your message.'))
+      setUploadStatus('')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const isAudioContent = step === 'content' && type === 'audio'
+
+  let maxWidth = 672
+  if (step === 'content') {
+    if (type === 'video') maxWidth = 896
+    else if (type === 'audio') maxWidth = 560
+    else maxWidth = 775
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth,
+            borderRadius: 16,
+            paddingBottom: isAudioContent ? 0 : 24,
+            boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.25)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          {!isAudioContent && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6 z-10"
+              style={{ width: 22, height: 22, opacity: 0.7 }}
+            >
+              <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
+            </button>
+          )}
+
+          {step === 'type' && (
+            <TypeStep
+              headerTitle={headerTitle}
+              onSelect={(t) => {
+                setType(t)
+                setStep('content')
+              }}
+            />
+          )}
+
+          {step === 'content' && type === 'write' && (
+            <WriteMessageStep
+              recipient="your loved one"
+              initialTitle={title}
+              initialNotes={notes}
+              initialBody={body}
+              onCancel={() => setStep('type')}
+              onSave={(data) => {
+                setTitle(data.title)
+                setNotes(data.notes)
+                setBody(data.body)
+                setStep('details')
+              }}
+            />
+          )}
+
+          {step === 'content' && type === 'video' && (
+            <RecordStep
+              kind="video"
+              recipient="your loved one"
+              onBack={() => setStep('type')}
+              onDone={onClose}
+              onContinue={(blob, dur) => {
+                setVideoBlob(blob)
+                setDuration(dur)
+                setStep('details')
+              }}
+            />
+          )}
+
+          {step === 'content' && type === 'audio' && (
+            <AudioRecorder
+              onCancel={() => setStep('type')}
+              onClose={onClose}
+              onComplete={(blob, dur) => {
+                setAudioBlob(blob)
+                setDuration(dur)
+                setStep('details')
+              }}
+            />
+          )}
+
+          {step === 'details' && type && (
+            <DetailsStep
+              type={type}
+              title={title}
+              setTitle={setTitle}
+              notes={notes}
+              setNotes={setNotes}
+              audience={audience}
+              setAudience={setAudience}
+              selectedIndividualIds={individuals}
+              setSelectedIndividualIds={setIndividuals}
+              recipients={recipients}
+              submitting={submitting}
+              uploadStatus={uploadStatus}
+              error={error}
+              onBack={() => setStep('content')}
+              onSubmit={handleSubmit}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TypeStep({
+  headerTitle,
+  onSelect,
+}: {
+  headerTitle: string
+  onSelect: (type: MessageType) => void
+}) {
+  return (
+    <>
+      <div className="px-6 py-6 pr-12 sm:pr-14" style={{ borderBottom: '0.8px solid #E5E7EB' }}>
+        <h2
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 700,
+            fontSize: 23,
+            lineHeight: '32px',
+            color: '#101828',
+          }}
+        >
+          {headerTitle}
+        </h2>
+        <p
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 400,
+            fontSize: 12.9,
+            lineHeight: '20px',
+            color: '#4A5565',
+          }}
+        >
+          Choose how you&apos;d like to share your message
+        </p>
+      </div>
+
+      <div className="px-6 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <TypeCard
+          icon={<PenLine className="w-[42px] h-[42px] text-[#4F46E5]" strokeWidth={1.75} />}
+          title="Write Message"
+          subtitle="Type a letter for someone"
+          selected={false}
+          onClick={() => onSelect('write')}
+        />
+        <TypeCard
+          icon={<Camera className="w-[40px] h-[40px] text-[#4F46E5]" strokeWidth={1.75} />}
+          title="Video Message"
+          subtitle="Record face-to-face · Up to 5 minutes"
+          selected={false}
+          onClick={() => onSelect('video')}
+        />
+        <TypeCard
+          icon={<Radio className="w-[40px] h-[40px] text-[#4F46E5]" strokeWidth={1.75} />}
+          title="Audio Message"
+          subtitle="Voice only · Up to 10 minutes"
+          selected={false}
+          onClick={() => onSelect('audio')}
+        />
+      </div>
+    </>
+  )
+}
+
+function DetailsStep({
+  type,
+  title,
+  setTitle,
+  notes,
+  setNotes,
+  audience,
+  setAudience,
+  selectedIndividualIds,
+  setSelectedIndividualIds,
+  recipients,
+  submitting,
+  uploadStatus,
+  error,
+  onBack,
+  onSubmit,
+}: {
+  type: MessageType
+  title: string
+  setTitle: (v: string) => void
+  notes: string
+  setNotes: (v: string) => void
+  audience: string[]
+  setAudience: (v: string[] | ((prev: string[]) => string[])) => void
+  selectedIndividualIds: string[]
+  setSelectedIndividualIds: (v: string[] | ((prev: string[]) => string[])) => void
+  recipients: Recipient[]
+  submitting: boolean
+  uploadStatus: string
+  error: string | null
+  onBack: () => void
+  onSubmit: () => void
+}) {
+  const [titleError, setTitleError] = useState<string | null>(null)
+
+  const toggleAudience = (chip: string) =>
+    setAudience((prev) => {
+      if (EXCLUSIVE_CHIPS.includes(chip)) {
+        return prev.includes(chip) ? prev.filter((c) => c !== chip) : [chip]
+      }
+      const withoutExclusive = prev.filter((c) => !EXCLUSIVE_CHIPS.includes(c))
+      return withoutExclusive.includes(chip)
+        ? withoutExclusive.filter((c) => c !== chip)
+        : [...withoutExclusive, chip]
+    })
+
+  const handleSubmit = () => {
+    if (!title.trim()) {
+      setTitleError('Title should not be empty')
+      return
+    }
+    setTitleError(null)
+    onSubmit()
+  }
+
+  return (
+    <>
+      <div className="px-6 py-6 pr-12 sm:pr-14" style={{ borderBottom: '0.8px solid #E5E7EB' }}>
+        <h2
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 700,
+            fontSize: 23,
+            lineHeight: '32px',
+            color: '#101828',
+          }}
+        >
+          Message details
+        </h2>
+        <p
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 400,
+            fontSize: 12.9,
+            lineHeight: '20px',
+            color: '#4A5565',
+          }}
+        >
+          Add a title and choose who receives it
+        </p>
+      </div>
+
+      <div className="px-6 pt-6 flex flex-col gap-5">
+        {/* Title */}
+        <div className="flex flex-col gap-1">
+          <label
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 14,
+              lineHeight: '20px',
+              color: '#0A0A0A',
+            }}
+          >
+            Give your message a title <span style={{ color: '#FB2C36' }}>*</span>
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              if (titleError) setTitleError(null)
+            }}
+            placeholder="Write your title here"
+            className="w-full focus:outline-none"
+            style={{
+              minHeight: 48,
+              borderRadius: 10,
+              background: '#F3F3F5',
+              padding: '0 15px',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: '20px',
+              color: '#0A0A0A',
+              border: titleError ? '1px solid #FB2C36' : undefined,
+            }}
+          />
+          {titleError && (
+            <p style={{ fontSize: 13, lineHeight: '18px', color: '#FB2C36' }}>{titleError}</p>
+          )}
+        </div>
+
+        {/* Notes */}
+        <div className="flex flex-col gap-1">
+          <label
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 14,
+              lineHeight: '20px',
+              color: '#0A0A0A',
+            }}
+          >
+            Notes <span style={{ color: '#717182', fontWeight: 400 }}>(optional)</span>
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add any additional notes..."
+            rows={3}
+            className="w-full focus:outline-none resize-none"
+            style={{
+              minHeight: 78,
+              borderRadius: 10,
+              background: '#F3F3F5',
+              padding: '12px 15px',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: '20px',
+              color: '#0A0A0A',
+            }}
+          />
+        </div>
+
+        {/* Recipients */}
+        <div className="flex flex-col gap-3">
+          <label
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 14,
+              lineHeight: '20px',
+              color: '#0A0A0A',
+            }}
+          >
+            Who is this for? <span style={{ color: '#FB2C36' }}>*</span>
+          </label>
+          <div className="flex flex-wrap gap-3">
+            {AUDIENCE_CHIPS.map((chip) => {
+              const selected = audience.includes(chip)
+              return (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => toggleAudience(chip)}
+                  className="cursor-pointer transition-colors"
+                  style={{
+                    height: 36,
+                    borderRadius: 9999,
+                    padding: '8px 16px',
+                    background: selected ? '#4F46E5' : '#F3F4F6',
+                    color: selected ? '#FFFFFF' : '#364153',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 13.6,
+                    lineHeight: '20px',
+                  }}
+                >
+                  {chip}
+                </button>
+              )
+            })}
+          </div>
+
+          {audience.includes('Choose individuals') && (
+            <IndividualPicker
+              recipients={recipients}
+              selectedIds={selectedIndividualIds}
+              onToggle={(id) =>
+                setSelectedIndividualIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                )
+              }
+            />
+          )}
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+
+      {/* Footer */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 mt-6"
+        style={{
+          background: '#F9FAFB',
+          borderTop: '0.8px solid #E5E7EB',
+          padding: '15px 24px',
+          borderBottomLeftRadius: 16,
+          borderBottomRightRadius: 16,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={submitting}
+          className="cursor-pointer hover:bg-gray-100 disabled:opacity-60"
+          style={{
+            height: 36,
+            padding: '7.8px 15.8px',
+            borderRadius: 8,
+            border: '1px solid rgba(0,0,0,0.1)',
+            background: '#FFFFFF',
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 500,
+            fontSize: 13.2,
+            lineHeight: '20px',
+            color: '#0A0A0A',
+          }}
+        >
+          ← Back
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+          style={{
+            height: 36,
+            padding: '8px 16px',
+            borderRadius: 8,
+            background: '#4F46E5',
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 500,
+            fontSize: 14,
+            lineHeight: '20px',
+            color: '#FFFFFF',
+          }}
+        >
+          {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+          {submitting
+            ? uploadStatus || 'Saving…'
+            : type === 'write'
+            ? 'Save Message'
+            : 'Save and Upload'}
+        </button>
+      </div>
+    </>
   )
 }
 

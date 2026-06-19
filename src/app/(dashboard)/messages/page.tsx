@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
 import {
   FileText,
   Loader2,
@@ -13,7 +12,6 @@ import {
   Trash2,
   UserPlus,
   Video,
-  X,
 } from 'lucide-react'
 import CreateMessageModal, {
   type EditableMessage,
@@ -23,7 +21,9 @@ import AssignRecipientsModal from '@/components/dashboard/AssignRecipientsModal'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
 import { withRetry } from '@/lib/utils/retry'
-import AudioPlaybackWaveform from '@/components/audio/AudioPlaybackWaveform'
+import AudioPlayer from '@/components/audio/AudioPlayer'
+import VideoPlayer from '@/components/video/VideoPlayer'
+import MessagePlayerHeader from '@/components/messages/MessagePlayerHeader'
 import {
   type Assignment,
   type Message,
@@ -37,8 +37,6 @@ import {
   getPlaybackToken,
   updateMessage,
 } from '@/lib/api/messages'
-
-const MuxPlayer = dynamic(() => import('@mux/mux-player-react'), { ssr: false })
 
 type FilterKey = 'all' | Message['type']
 
@@ -134,6 +132,16 @@ function formatDate(iso: string): string {
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+/** A short audience label for the player header, derived from the message's assignments. */
+function recipientLabel(message: Message): string {
+  const { audience, selectedIndividualIds } = assignmentsToAudience(message.assignments)
+  if (audience.includes('Choose individuals')) {
+    const n = selectedIndividualIds.length
+    return n === 1 ? '1 recipient' : `${n} recipients`
+  }
+  return audience[0] ?? 'All Recipients'
 }
 
 function typeLabel(type: Message['type']): string {
@@ -879,93 +887,34 @@ function PlaybackModal({
         <div
           className="relative bg-white w-full"
           style={{
-            maxWidth: 768,
+            maxWidth: 640,
             borderRadius: 16,
-            paddingBottom: 24,
             boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.25)',
             fontFamily: 'Inter, sans-serif',
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6 z-10"
-            style={{ width: 22, height: 22, opacity: 0.7 }}
-          >
-            <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
-          </button>
+          <div className="flex flex-col px-6 sm:px-8 pt-6 sm:pt-7 pb-6 sm:pb-7" style={{ gap: 24 }}>
+            <MessagePlayerHeader
+              type={message.type === 'video' ? 'video' : 'audio'}
+              recipientName={recipientLabel(message)}
+              messageTitle={message.title}
+              onClose={onClose}
+            />
 
-          <div
-            className="px-6 py-6 pr-12 sm:pr-14"
-            style={{ borderBottom: '0.8px solid #E5E7EB' }}
-          >
-            <h2
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 700,
-                fontSize: 23,
-                lineHeight: '32px',
-                color: '#101828',
-              }}
-            >
-              {message.title}
-            </h2>
-            <p
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 12.9,
-                lineHeight: '20px',
-                color: '#4A5565',
-              }}
-            >
-              {typeLabel(message.type)}
-            </p>
-          </div>
-
-          <div className="px-6 pt-6">
             {loading ? (
-              <div
-                className="w-full flex items-center justify-center"
-                style={{ minHeight: 240 }}
-              >
-                <Loader2 className="w-8 h-8 text-[#4F46E5] animate-spin" />
+              <div className="w-full flex items-center justify-center" style={{ minHeight: 200 }}>
+                <Loader2 className="w-8 h-8 text-[#7C3AED] animate-spin" />
               </div>
             ) : error ? (
               <p className="text-sm text-red-600 text-center py-10">{error}</p>
             ) : message.type === 'video' && video ? (
-              <div className="w-full overflow-hidden" style={{ borderRadius: 10 }}>
-                <MuxPlayer
-                  playbackId={video.playbackId}
-                  tokens={{ playback: video.token }}
-                  style={{ width: '100%', aspectRatio: '16 / 9' }}
-                  accentColor="#4F46E5"
-                />
-              </div>
+              <VideoPlayer playbackId={video.playbackId} playbackToken={video.token} autoPlay />
             ) : audioUrl ? (
-              <div
-                className="w-full flex flex-col items-center justify-center gap-4"
-                style={{
-                  minHeight: 200,
-                  borderRadius: 10,
-                  background: 'linear-gradient(135deg, #615FFF 0%, #9810FA 100%)',
-                  padding: 32,
-                }}
-              >
-                <Mic className="w-16 h-16 text-white" strokeWidth={1.5} />
-                <AudioPlaybackWaveform
-                  audioUrl={audioUrl}
-                  height={80}
-                  waveColor="rgba(255, 255, 255, 0.3)"
-                  progressColor="rgba(255, 255, 255, 1)"
-                  autoPlay
-                />
-              </div>
+              <AudioPlayer audioUrl={audioUrl} categoryLabel="Audio message" autoPlay />
             ) : null}
 
             {message.transcript && (
-              <div className="mt-5">
+              <div>
                 <h3
                   className="mb-2"
                   style={{
