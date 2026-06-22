@@ -52,8 +52,8 @@ export default function ReleaseManagerSidebar({
     { label: 'My Profile', icon: User, onClick: () => setProfileOpen(true) },
     { label: 'Overview', icon: Home, href: '/rm' },
     { label: 'Release Plan', icon: FileCheck, href: '/rm/release-plan' },
-    { label: 'Recipients', icon: Users, count: 3 },
-    { label: 'Notifications', icon: Bell },
+    { label: 'Recipients', icon: Users, href: '/rm/recipients', count: 3 },
+    { label: 'Notifications', icon: Bell, href: '/rm/notifications' },
   ]
 
   useEffect(() => {
@@ -200,7 +200,7 @@ export default function ReleaseManagerSidebar({
             <button
               type="button"
               onClick={() => {
-                router.push('/dashboard')
+                router.push('/rm/create-account')
                 onClose()
               }}
               className="flex items-center w-full text-left rounded-[10px] hover:bg-white/5 transition-colors cursor-pointer"
