@@ -11,6 +11,7 @@ import Step2View from '@/components/release-manager/release-plan/Step2View'
 import Step3View from '@/components/release-manager/release-plan/Step3View'
 import Step4View from '@/components/release-manager/release-plan/Step4View'
 import Step5View from '@/components/release-manager/release-plan/Step5View'
+import CompletionView from '@/components/release-manager/release-plan/CompletionView'
 
 // Release Manager portal — Release Plan. Orchestrates the step views; each
 // step lives in its own component under components/release-manager/release-plan.
@@ -20,7 +21,7 @@ export default function ReleasePlanPage() {
 
   return (
     <div className="w-full max-w-[900px] mx-auto flex flex-col gap-8 p-6 sm:p-8">
-      <ReleasePlanHeader view={view} />
+      {view !== 'complete' && <ReleasePlanHeader view={view} />}
 
       {view === 'intro' && (
         <IntroView
@@ -47,7 +48,8 @@ export default function ReleasePlanPage() {
         />
       )}
       {view === 'step4' && <Step4View onComplete={() => setView('step5')} />}
-      {view === 'step5' && <Step5View />}
+      {view === 'step5' && <Step5View onComplete={() => setView('complete')} />}
+      {view === 'complete' && <CompletionView />}
 
       <RequestGuardianModal
         open={guardianModalOpen}

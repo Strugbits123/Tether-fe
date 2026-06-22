@@ -32,6 +32,9 @@ export const NOTIFY_DURATION_MS = 5000
 // How long Step 4 (delivery triggered) is shown before auto-advancing to Step 5.
 export const DELIVER_DURATION_MS = 5000
 
+// How long Step 5 (delivered/tracking) is shown before the final completion screen.
+export const COMPLETE_DURATION_MS = 5000
+
 export interface Party {
   initials: string
   name: string
@@ -94,4 +97,28 @@ export const RECIPIENT_ACCESS: RecipientAccess[] = [
   { party: PARTIES[1], status: 'accessed' },
   { party: PARTIES[2], status: 'delivered' },
   { party: PARTIES[3], status: 'delivered' },
+]
+
+// Final completion screen — what was delivered, plus the full activity timeline.
+export const COMPLETION_STATS: { value: string; label: string }[] = [
+  { value: '4', label: 'Messages' },
+  { value: '47', label: 'Photos' },
+  { value: '5', label: 'Documents' },
+  { value: '12', label: 'Memoir Chapters' },
+]
+
+export const COMPLETION_TIMELINE: { title: string; detail: string }[] = [
+  {
+    title: 'Release initiated by Co-captain',
+    detail: 'Dec 14, 2024, 11:39 AM PST',
+  },
+  { title: 'All parties notified', detail: 'Dec 14, 2024, 11:39 AM PST' },
+  {
+    title: '6-business-day sealing period',
+    detail: 'Dec 15 – Dec 20, 2024, info permanently concealed',
+  },
+  {
+    title: 'Content delivered',
+    detail: 'All 3 recipients got delivery proof and SMS: Dec 20 at 12:48 PM PST',
+  },
 ]

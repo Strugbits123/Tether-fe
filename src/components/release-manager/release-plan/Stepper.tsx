@@ -8,8 +8,8 @@ import { STEPS } from './constants'
  */
 export default function Stepper({ activeStep }: { activeStep: number }) {
   return (
-    <div className="overflow-x-auto">
-      <div className="flex items-center w-full min-w-[600px]" style={{ gap: 8 }}>
+    <div className="w-full">
+      <div className="flex items-center w-full" style={{ gap: 8 }}>
         {STEPS.map((step, i) => {
           const isCompleted = step.n < activeStep
           const isActive = step.n === activeStep
@@ -48,7 +48,7 @@ export default function Stepper({ activeStep }: { activeStep: number }) {
                   )}
                 </span>
                 <span
-                  className="whitespace-nowrap"
+                  className="whitespace-nowrap hidden sm:inline"
                   style={{
                     fontFamily: 'Inter, sans-serif',
                     fontWeight: isCompleted || isActive ? 500 : 400,

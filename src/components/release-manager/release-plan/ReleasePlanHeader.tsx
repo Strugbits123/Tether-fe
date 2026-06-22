@@ -14,6 +14,7 @@ export type ReleasePlanView =
   | 'step3'
   | 'step4'
   | 'step5'
+  | 'complete'
 
 /** Title, status chip, subtitle and stepper — adapts to the current view. */
 export default function ReleasePlanHeader({ view }: { view: ReleasePlanView }) {

@@ -1,11 +1,21 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Check } from 'lucide-react'
-import { DELIVERED_AT, RECIPIENT_ACCESS } from './constants'
+import {
+  COMPLETE_DURATION_MS,
+  DELIVERED_AT,
+  RECIPIENT_ACCESS,
+} from './constants'
 
 /** Step 5 — Delivered. Content delivered automatically; tracks recipient
- * portal access. This is the terminal state of the release flow. */
-export default function Step5View() {
+ * portal access. Shows briefly, then advances to the final completion screen. */
+export default function Step5View({ onComplete }: { onComplete: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onComplete, COMPLETE_DURATION_MS)
+    return () => clearTimeout(t)
+  }, [onComplete])
+
   return (
     <>
       {/* Delivered banner */}
