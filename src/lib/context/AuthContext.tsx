@@ -1,5 +1,6 @@
 'use client'
 
+import posthog from 'posthog-js'
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
 import type { UserProfile } from '@/lib/api/users'
@@ -91,15 +92,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.access_token) {
         loadProfile()
+        if (event === 'SIGNED_IN' && session.user && posthog.__loaded) {
+          posthog.identify(session.user.id, { email: session.user.email })
+        }
       } else {
         stopRetry()
         setProfile(null)
+        if (posthog.__loaded) posthog.reset()
       }
     })
 

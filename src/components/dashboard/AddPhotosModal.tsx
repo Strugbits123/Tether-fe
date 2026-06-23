@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -437,6 +438,11 @@ export default function AddPhotosModal({
         });
       }
 
+      if (isDoc) {
+        posthog.capture('documents_uploaded', { count: succeeded.length });
+      } else {
+        posthog.capture('photos_uploaded', { count: succeeded.length });
+      }
       showToast(
         `${succeeded.length} ${noun}${succeeded.length > 1 ? "s" : ""} uploaded`,
         "success",

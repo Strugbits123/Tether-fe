@@ -1,5 +1,6 @@
 "use client"
 
+import posthog from 'posthog-js'
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
@@ -168,7 +169,7 @@ export default function OnboardingPage() {
       try {
         setFetchedRecipients(await getRecipients(token))
       } catch { /* non-blocking — display-only */ }
-      // Only advance once the save actually succeeded.
+      posthog.capture('onboarding_step_completed', { step: 1, stepName: 'purposes' })
       setCurrentStep(2)
     } catch (err) {
       showToast(errorText(err, 'Could not save your selections. Please try again.'), 'error')
@@ -218,6 +219,7 @@ export default function OnboardingPage() {
           setReleaseManagerSaved(true)
         }
       } catch { /* non-blocking — display-only */ }
+      posthog.capture('onboarding_step_completed', { step: 2, stepName: 'add_recipients' })
       setCurrentStep(3)
     } catch (err) {
       showToast(errorText(err, 'Could not save your recipients. Please try again.'), 'error')
@@ -250,6 +252,7 @@ export default function OnboardingPage() {
         })
         setReleaseManagerSaved(true)
       }
+      posthog.capture('onboarding_step_completed', { step: 3, stepName: 'add_release_manager' })
       setCurrentStep(4)
     } catch (err) {
       showToast(errorText(err, 'Could not save your Release Manager. Please try again.'), 'error')
@@ -285,6 +288,7 @@ export default function OnboardingPage() {
         setFetchedMessages(msgs)
       }
     } catch { /* non-blocking */ }
+    posthog.capture('onboarding_step_completed', { step: 4, stepName: 'create_message' })
     setCurrentStep(5)
   }
 
@@ -332,6 +336,7 @@ export default function OnboardingPage() {
 
       await api.post('/users/onboarding/complete', {}, token)
 
+      posthog.capture('onboarding_step_completed', { step: 5, stepName: 'add_documents' })
       showToast('Welcome to Tether!', 'success')
       router.push('/dashboard?onboarded=true')
     } catch (err: any) {

@@ -1,5 +1,6 @@
 'use client'
 
+import posthog from 'posthog-js'
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Info, Loader2, Upload, User, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -249,6 +250,7 @@ export default function FinishProfileModal({ open, onClose, onCompleted, onSkip,
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       })
 
+      posthog.capture('profile_completed')
       showToast('Profile updated!', 'success')
       onCompleted?.()
       onClose()

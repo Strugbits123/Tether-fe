@@ -1,5 +1,6 @@
 'use client'
 
+import posthog from 'posthog-js'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   AlignCenter,
@@ -295,6 +296,7 @@ export default function CreateMessageModal({
         notes: data.notes || undefined,
         assignments: buildAssignments(audience, selectedIndividualIds),
       })
+      posthog.capture('message_created', { type: 'text' })
       showToast('Message saved', 'success')
       onCreated?.()
       handleClose()
@@ -1467,6 +1469,7 @@ function RecordStep({
         })
       }
       setUploadStatus('Ready!')
+      posthog.capture('message_created', { type: kind })
       showToast('Message saved', 'success')
       cleanup()
       onDone()
@@ -2496,6 +2499,7 @@ function CreateWizard({
           fileSizeBytes: audioBlob.size,
         })
       }
+      posthog.capture('message_created', { type: type ?? 'unknown' })
       showToast('Message saved', 'success')
       onCreated?.()
       onClose()
