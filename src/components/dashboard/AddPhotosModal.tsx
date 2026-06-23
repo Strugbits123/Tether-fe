@@ -439,9 +439,9 @@ export default function AddPhotosModal({
       }
 
       if (isDoc) {
-        posthog.capture('documents_uploaded', { count: succeeded.length });
+        posthog.capture("documents_uploaded", { count: succeeded.length });
       } else {
-        posthog.capture('photos_uploaded', { count: succeeded.length });
+        posthog.capture("photos_uploaded", { count: succeeded.length });
       }
       showToast(
         `${succeeded.length} ${noun}${succeeded.length > 1 ? "s" : ""} uploaded`,
