@@ -34,8 +34,8 @@ type NavItem = {
 }
 
 const SECONDARY_NAV: NavItem[] = [
-  { label: 'Download everything', icon: Download },
-  { label: 'Get support', icon: HelpCircle },
+  { label: 'Download everything', icon: Download, href: '/recipient/download' },
+  { label: 'Get support', icon: HelpCircle, href: '/recipient/support' },
 ]
 
 export default function RecipientSidebar({
