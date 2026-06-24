@@ -9,6 +9,8 @@ import {
   Bold,
   Camera,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock,
   FileText,
   Italic,
@@ -30,11 +32,8 @@ import { useToast } from '@/lib/context/ToastContext'
 import {
   type Assignment,
   createTextMessage,
-  createVideoUploadUrl,
-  createAudioUploadUrl,
-  confirmAudioUpload,
-  getMessageStatus,
 } from '@/lib/api/messages'
+import { requestDocUploadUrls, createDocumentsBatch } from '@/lib/api/documents'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
 import AudioRecordingWaveform from '@/components/audio/AudioRecordingWaveform'
 import AudioPlaybackWaveform from '@/components/audio/AudioPlaybackWaveform'
@@ -87,6 +86,20 @@ const AUDIENCE_CHIPS = [
 
 /** Chips that stand alone — selecting one clears every other chip. */
 const EXCLUSIVE_CHIPS = ['Choose individuals', 'Assign later']
+
+/**
+ * Group rows shown as checkboxes in the details step (document-modal style).
+ * 'Choose individuals' is intentionally excluded — individuals are picked via the
+ * "Show Individuals" list, which manages that chip automatically.
+ */
+const RECIPIENT_GROUP_ROWS = [
+  'Assign later',
+  'All recipients',
+  'All family',
+  'All friends',
+  'All Others',
+  'Release Manager',
+]
 
 /** Maps an audience chip label to its backend Assignment shape. */
 const RECIPIENT_OPTIONS: Record<string, Assignment> = {
@@ -1154,6 +1167,90 @@ function IndividualPicker({
   )
 }
 
+function GroupCheckBox({
+  checked,
+  variant,
+}: {
+  checked: boolean
+  variant: 'yellow' | 'default'
+}) {
+  return (
+    <span
+      className="flex items-center justify-center flex-shrink-0"
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        background: checked ? '#4F46E5' : '#FFFFFF',
+        border: checked
+          ? '1.1px solid #4F46E5'
+          : variant === 'yellow'
+          ? '1.1px solid #FDEBA2'
+          : '1.1px solid rgba(0,0,0,0.1)',
+        boxShadow: '0px 1px 2px 0px rgba(0,0,0,0.05)',
+      }}
+    >
+      {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+    </span>
+  )
+}
+
+function GroupRow({
+  label,
+  selected,
+  variant,
+  onToggle,
+}: {
+  label: string
+  selected: boolean
+  variant: 'yellow' | 'default'
+  onToggle: () => void
+}) {
+  let bg = '#F9FAFB'
+  let border = '1.1px solid rgba(0,0,0,0.1)'
+  let textColor = '#364153'
+
+  if (variant === 'yellow') {
+    bg = '#FFFBEB'
+    border = '1.1px solid #FDEBA2'
+  }
+  if (selected && variant !== 'yellow') {
+    bg = '#E0E7FF'
+    border = '1.1px solid #4F46E5'
+    textColor = '#4F46E5'
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="w-full flex items-center cursor-pointer"
+      style={{
+        minHeight: 42,
+        borderRadius: 10,
+        border,
+        background: bg,
+        padding: '12px',
+        gap: 12,
+      }}
+    >
+      <GroupCheckBox checked={selected} variant={variant} />
+      <span
+        className="text-left flex-1 min-w-0"
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          fontSize: 14,
+          lineHeight: '14px',
+          color: textColor,
+        }}
+      >
+        {label}
+      </span>
+    </button>
+  )
+}
+
 /* ===================== Record Step ===================== */
 
 function pickRecorderMime(kind: 'video' | 'audio'): string | undefined {
@@ -1183,6 +1280,8 @@ function RecordStep({
   onBack,
   onDone,
   onContinue,
+  initialBlob,
+  initialDuration,
 }: {
   kind: 'video' | 'audio'
   recipient: string
@@ -1197,6 +1296,13 @@ function RecordStep({
    * create wizard, where upload happens after the details step.
    */
   onContinue?: (blob: Blob, durationSeconds: number) => void
+  /**
+   * A previously recorded blob to reopen in preview (e.g. when the wizard steps
+   * back from details → content). Skips the camera/mic and restores the preview
+   * so the recording isn't lost.
+   */
+  initialBlob?: Blob | null
+  initialDuration?: number
 }) {
   const { showToast } = useToast()
 
@@ -1205,13 +1311,12 @@ function RecordStep({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const timerRef = useRef<number | null>(null)
-  const pollRef = useRef<number | null>(null)
   const blobRef = useRef<Blob | null>(null)
   const previewUrlRef = useRef<string | null>(null)
 
-  const [phase, setPhase] = useState<RecordPhase>('record')
+  const [phase, setPhase] = useState<RecordPhase>(initialBlob ? 'preview' : 'record')
   const [elapsed, setElapsed] = useState(0)
-  const [duration, setDuration] = useState(0)
+  const [duration, setDuration] = useState(initialDuration ?? 0)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState('')
@@ -1223,9 +1328,20 @@ function RecordStep({
 
   const maxSeconds = kind === 'video' ? 5 * 60 : 10 * 60
 
-  // Start the camera preview as soon as the video recorder opens.
+  // Start the camera preview as soon as the video recorder opens — unless we're
+  // resuming a previously recorded blob (back from details), in which case we
+  // restore its preview and leave the camera/mic untouched.
   useEffect(() => {
-    if (kind === 'video') initStream()
+    if (initialBlob) {
+      blobRef.current = initialBlob
+      if (kind === 'video') {
+        const url = URL.createObjectURL(initialBlob)
+        previewUrlRef.current = url
+        setPreviewUrl(url)
+      }
+    } else if (kind === 'video') {
+      initStream()
+    }
     return () => cleanup()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1242,10 +1358,6 @@ function RecordStep({
     if (timerRef.current) {
       window.clearInterval(timerRef.current)
       timerRef.current = null
-    }
-    if (pollRef.current) {
-      window.clearInterval(pollRef.current)
-      pollRef.current = null
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
@@ -1389,26 +1501,6 @@ function RecordStep({
     if (kind === 'video') initStream()
   }
 
-  const pollProcessing = (token: string, messageId: string) =>
-    new Promise<void>((resolve, reject) => {
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const status = await getMessageStatus(token, messageId)
-          if (status.processingStatus === 'ready') {
-            if (pollRef.current) window.clearInterval(pollRef.current)
-            pollRef.current = null
-            resolve()
-          } else if (status.processingStatus === 'failed') {
-            if (pollRef.current) window.clearInterval(pollRef.current)
-            pollRef.current = null
-            reject(new Error('Processing failed'))
-          }
-        } catch {
-          /* transient — keep polling */
-        }
-      }, 3000)
-    })
-
   const handleSave = async () => {
     const blob = blobRef.current
     if (!blob) return
@@ -1432,45 +1524,37 @@ function RecordStep({
       return
     }
 
+    const mimeType = kind === 'video' ? 'video/webm' : 'audio/webm'
+    const ext = kind === 'video' ? 'webm' : 'webm'
+    const filename = `${title || 'recording'}.${ext}`
+
     try {
-      if (kind === 'video') {
-        setUploadStatus('Uploading…')
-        const { messageId, uploadUrl } = await createVideoUploadUrl(token, {
-          title: title ?? '',
-          notes: notes || undefined,
-          assignments: assignments ?? [{ scope: 'assign_later' }],
-        })
-        const res = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: blob,
-          headers: { 'Content-Type': 'video/webm' },
-        })
-        if (!res.ok) throw new Error('Upload failed. Please try again.')
-        setUploadStatus('Processing…')
-        await pollProcessing(token, messageId)
-      } else {
-        setUploadStatus('Uploading…')
-        const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
-          title: title ?? '',
-          notes: notes || undefined,
-          assignments: assignments ?? [{ scope: 'assign_later' }],
-          fileType: 'audio/webm',
-        })
-        const res = await fetch(signedUploadUrl, {
-          method: 'PUT',
-          body: blob,
-          headers: { 'Content-Type': 'audio/webm' },
-        })
-        if (!res.ok) throw new Error('Upload failed. Please try again.')
-        setUploadStatus('Processing…')
-        await confirmAudioUpload(token, messageId, {
-          durationSeconds: Math.round(duration),
+      setUploadStatus('Uploading…')
+      const [urlInfo] = await requestDocUploadUrls(token, [{
+        fileName: filename,
+        fileType: mimeType,
+        fileSizeBytes: blob.size,
+      }])
+      const res = await fetch(urlInfo.signedUploadUrl, {
+        method: 'PUT',
+        body: blob,
+        headers: { 'Content-Type': mimeType },
+      })
+      if (!res.ok) throw new Error('Upload failed. Please try again.')
+      await createDocumentsBatch(token, {
+        documents: [{
+          storagePath: urlInfo.storagePath,
+          originalFilename: filename,
+          fileType: ext,
           fileSizeBytes: blob.size,
-        })
-      }
+          mimeType,
+          title: title || undefined,
+        }],
+        assignments: assignments ?? [{ scope: 'assign_later' }],
+      })
       setUploadStatus('Ready!')
-      posthog.capture('message_created', { type: kind })
-      showToast('Message saved', 'success')
+      posthog.capture('media_uploaded', { type: kind })
+      showToast('Recording saved', 'success')
       cleanup()
       onDone()
     } catch (e) {
@@ -2387,7 +2471,6 @@ function CreateWizard({
   const [submitting, setSubmitting] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const pollRef = useRef<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -2419,33 +2502,6 @@ function CreateWizard({
     }
   }, [onClose])
 
-  useEffect(
-    () => () => {
-      if (pollRef.current) window.clearInterval(pollRef.current)
-    },
-    [],
-  )
-
-  const pollProcessing = (token: string, messageId: string) =>
-    new Promise<void>((resolve, reject) => {
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const status = await getMessageStatus(token, messageId)
-          if (status.processingStatus === 'ready') {
-            if (pollRef.current) window.clearInterval(pollRef.current)
-            pollRef.current = null
-            resolve()
-          } else if (status.processingStatus === 'failed') {
-            if (pollRef.current) window.clearInterval(pollRef.current)
-            pollRef.current = null
-            reject(new Error('Processing failed'))
-          }
-        } catch {
-          /* transient — keep polling */
-        }
-      }, 3000)
-    })
-
   const handleSubmit = async () => {
     if (submitting) return
     const token = await getToken()
@@ -2464,47 +2520,69 @@ function CreateWizard({
           notes: notes || undefined,
           assignments,
         })
+        posthog.capture('message_created', { type: 'write' })
       } else if (type === 'video' && videoBlob) {
         setUploadStatus('Uploading…')
-        const { messageId, uploadUrl } = await createVideoUploadUrl(token, {
-          title,
-          notes: notes || undefined,
-          assignments,
-        })
-        const res = await fetch(uploadUrl, {
+        const mimeType = 'video/webm'
+        const filename = `${title || 'recording'}.webm`
+        const [urlInfo] = await requestDocUploadUrls(token, [{
+          fileName: filename,
+          fileType: mimeType,
+          fileSizeBytes: videoBlob.size,
+        }])
+        const res = await fetch(urlInfo.signedUploadUrl, {
           method: 'PUT',
           body: videoBlob,
-          headers: { 'Content-Type': 'video/webm' },
+          headers: { 'Content-Type': mimeType },
         })
         if (!res.ok) throw new Error('Upload failed. Please try again.')
-        setUploadStatus('Processing…')
-        await pollProcessing(token, messageId)
+        await createDocumentsBatch(token, {
+          documents: [{
+            storagePath: urlInfo.storagePath,
+            originalFilename: filename,
+            fileType: 'webm',
+            fileSizeBytes: videoBlob.size,
+            mimeType,
+            title: title || undefined,
+          }],
+          note: notes || undefined,
+          assignments,
+        })
+        posthog.capture('media_uploaded', { type: 'video' })
       } else if (type === 'audio' && audioBlob) {
         setUploadStatus('Uploading…')
-        const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
-          title,
-          notes: notes || undefined,
-          assignments,
-          fileType: 'audio/webm',
-        })
-        const res = await fetch(signedUploadUrl, {
+        const mimeType = 'audio/webm'
+        const filename = `${title || 'recording'}.webm`
+        const [urlInfo] = await requestDocUploadUrls(token, [{
+          fileName: filename,
+          fileType: mimeType,
+          fileSizeBytes: audioBlob.size,
+        }])
+        const res = await fetch(urlInfo.signedUploadUrl, {
           method: 'PUT',
           body: audioBlob,
-          headers: { 'Content-Type': 'audio/webm' },
+          headers: { 'Content-Type': mimeType },
         })
         if (!res.ok) throw new Error('Upload failed. Please try again.')
-        setUploadStatus('Processing…')
-        await confirmAudioUpload(token, messageId, {
-          durationSeconds: Math.round(duration),
-          fileSizeBytes: audioBlob.size,
+        await createDocumentsBatch(token, {
+          documents: [{
+            storagePath: urlInfo.storagePath,
+            originalFilename: filename,
+            fileType: 'webm',
+            fileSizeBytes: audioBlob.size,
+            mimeType,
+            title: title || undefined,
+          }],
+          note: notes || undefined,
+          assignments,
         })
+        posthog.capture('media_uploaded', { type: 'audio' })
       }
-      posthog.capture('message_created', { type: type ?? 'unknown' })
-      showToast('Message saved', 'success')
+      showToast('Saved successfully', 'success')
       onCreated?.()
       onClose()
     } catch (e) {
-      setError(errorMessage(e, 'Could not save your message.'))
+      setError(errorMessage(e, 'Could not save. Please try again.'))
       setUploadStatus('')
     } finally {
       setSubmitting(false)
@@ -2559,6 +2637,7 @@ function CreateWizard({
           {step === 'type' && (
             <TypeStep
               headerTitle={headerTitle}
+              initialType={type ?? 'video'}
               onSelect={(t) => {
                 setType(t)
                 setStep('content')
@@ -2586,6 +2665,8 @@ function CreateWizard({
             <RecordStep
               kind="video"
               recipient="your loved one"
+              initialBlob={videoBlob}
+              initialDuration={duration}
               onBack={() => setStep('type')}
               onDone={onClose}
               onContinue={(blob, dur) => {
@@ -2598,6 +2679,8 @@ function CreateWizard({
 
           {step === 'content' && type === 'audio' && (
             <AudioRecorder
+              initialBlob={audioBlob}
+              initialDuration={duration}
               onCancel={() => setStep('type')}
               onClose={onClose}
               onComplete={(blob, dur) => {
@@ -2635,11 +2718,17 @@ function CreateWizard({
 
 function TypeStep({
   headerTitle,
+  initialType,
   onSelect,
 }: {
   headerTitle: string
+  initialType: MessageType
   onSelect: (type: MessageType) => void
 }) {
+  // The card only highlights the choice now; advancing happens on the explicit
+  // button below (see image.png), rather than jumping straight into the recorder.
+  const [selected, setSelected] = useState<MessageType>(initialType)
+
   return (
     <>
       <div className="px-6 py-6 pr-12 sm:pr-14" style={{ borderBottom: '0.8px solid #E5E7EB' }}>
@@ -2663,32 +2752,65 @@ function TypeStep({
             color: '#4A5565',
           }}
         >
-          Choose how you&apos;d like to share your message
+          This is the heart of your Tether
         </p>
       </div>
 
-      <div className="px-6 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <TypeCard
-          icon={<PenLine className="w-[42px] h-[42px] text-[#4F46E5]" strokeWidth={1.75} />}
-          title="Write Message"
-          subtitle="Type a letter for someone"
-          selected={false}
-          onClick={() => onSelect('write')}
-        />
-        <TypeCard
-          icon={<Camera className="w-[40px] h-[40px] text-[#4F46E5]" strokeWidth={1.75} />}
-          title="Video Message"
-          subtitle="Record face-to-face · Up to 5 minutes"
-          selected={false}
-          onClick={() => onSelect('video')}
-        />
-        <TypeCard
-          icon={<Radio className="w-[40px] h-[40px] text-[#4F46E5]" strokeWidth={1.75} />}
-          title="Audio Message"
-          subtitle="Voice only · Up to 10 minutes"
-          selected={false}
-          onClick={() => onSelect('audio')}
-        />
+      <div className="px-6 pt-6 flex flex-col gap-5">
+        <h4
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 500,
+            fontSize: 17.3,
+            lineHeight: '27px',
+            color: '#101828',
+          }}
+        >
+          Video, audio or written?
+        </h4>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <TypeCard
+            icon={<PenLine className="w-[42px] h-[42px] text-[#4F46E5]" strokeWidth={1.75} />}
+            title="Write Message"
+            subtitle="Type a letter for someone"
+            selected={selected === 'write'}
+            onClick={() => setSelected('write')}
+          />
+          <TypeCard
+            icon={<Camera className="w-[40px] h-[40px] text-[#4F46E5]" strokeWidth={1.75} />}
+            title="Video Message"
+            subtitle="Record face-to-face · Up to 5 minutes"
+            selected={selected === 'video'}
+            onClick={() => setSelected('video')}
+          />
+          <TypeCard
+            icon={<Radio className="w-[40px] h-[40px] text-[#4F46E5]" strokeWidth={1.75} />}
+            title="Audio Message"
+            subtitle="Voice only · Up to 10 minutes"
+            selected={selected === 'audio'}
+            onClick={() => setSelected('audio')}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onSelect(selected)}
+          className="w-full flex items-center justify-center cursor-pointer hover:opacity-90"
+          style={{
+            height: 48,
+            borderRadius: 8,
+            background: '#4F46E5',
+            padding: '12px 16px',
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 600,
+            fontSize: 15.3,
+            lineHeight: '24px',
+            color: '#FFFFFF',
+          }}
+        >
+          {selected === 'write' ? 'Start writing' : 'Open recorder'}
+        </button>
       </div>
     </>
   )
@@ -2728,8 +2850,14 @@ function DetailsStep({
   onSubmit: () => void
 }) {
   const [titleError, setTitleError] = useState<string | null>(null)
+  const [showIndividuals, setShowIndividuals] = useState(selectedIndividualIds.length > 0)
+  const [search, setSearch] = useState('')
 
-  const toggleAudience = (chip: string) =>
+  // Selecting a group clears any chosen individuals (and vice-versa) — groups and
+  // individuals are mutually exclusive, matching the document modal. The existing
+  // chip exclusivity ('Assign later') is preserved via the chip helper.
+  const toggleGroup = (chip: string) => {
+    setSelectedIndividualIds([])
     setAudience((prev) => {
       if (EXCLUSIVE_CHIPS.includes(chip)) {
         return prev.includes(chip) ? prev.filter((c) => c !== chip) : [chip]
@@ -2739,6 +2867,21 @@ function DetailsStep({
         ? withoutExclusive.filter((c) => c !== chip)
         : [...withoutExclusive, chip]
     })
+  }
+
+  const toggleIndividual = (id: string) => {
+    const next = selectedIndividualIds.includes(id)
+      ? selectedIndividualIds.filter((x) => x !== id)
+      : [...selectedIndividualIds, id]
+    setSelectedIndividualIds(next)
+    // buildAssignments only emits individuals when 'Choose individuals' is set; keep
+    // it in sync, and clear group chips since the two are mutually exclusive.
+    setAudience(next.length > 0 ? ['Choose individuals'] : [])
+  }
+
+  const filteredIndividuals = recipients.filter((p) =>
+    p.name.toLowerCase().includes(search.trim().toLowerCase()),
+  )
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -2863,43 +3006,138 @@ function DetailsStep({
           >
             Who is this for? <span style={{ color: '#FB2C36' }}>*</span>
           </label>
-          <div className="flex flex-wrap gap-3">
-            {AUDIENCE_CHIPS.map((chip) => {
-              const selected = audience.includes(chip)
-              return (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => toggleAudience(chip)}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    height: 36,
-                    borderRadius: 9999,
-                    padding: '8px 16px',
-                    background: selected ? '#4F46E5' : '#F3F4F6',
-                    color: selected ? '#FFFFFF' : '#364153',
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 500,
-                    fontSize: 13.6,
-                    lineHeight: '20px',
-                  }}
-                >
-                  {chip}
-                </button>
-              )
-            })}
+
+          <div className="flex flex-col gap-2">
+            {RECIPIENT_GROUP_ROWS.map((g) => (
+              <GroupRow
+                key={g}
+                label={g}
+                selected={audience.includes(g)}
+                variant={g === 'Assign later' ? 'yellow' : 'default'}
+                onToggle={() => toggleGroup(g)}
+              />
+            ))}
           </div>
 
-          {audience.includes('Choose individuals') && (
-            <IndividualPicker
-              recipients={recipients}
-              selectedIds={selectedIndividualIds}
-              onToggle={(id) =>
-                setSelectedIndividualIds((prev) =>
-                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-                )
-              }
-            />
+          <button
+            type="button"
+            onClick={() => setShowIndividuals((s) => !s)}
+            className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
+            style={{
+              height: 36,
+              borderRadius: 8,
+              border: '1.1px solid rgba(0,0,0,0.1)',
+              background: '#FFFFFF',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 14,
+              lineHeight: '20px',
+              color: '#0A0A0A',
+            }}
+          >
+            {showIndividuals ? (
+              <ChevronUp className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
+            )}
+            {showIndividuals ? 'Hide Individuals' : 'Show Individuals'}
+          </button>
+
+          {showIndividuals && (
+            <div className="flex flex-col gap-2">
+              <div
+                className="w-full flex items-center gap-2"
+                style={{
+                  height: 36,
+                  borderRadius: 8,
+                  background: '#F3F3F5',
+                  padding: '4px 12px',
+                }}
+              >
+                <Search className="w-4 h-4 text-[#717182] flex-shrink-0" strokeWidth={2} />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name..."
+                  className="flex-1 bg-transparent outline-none min-w-0"
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    lineHeight: '20px',
+                    color: '#0A0A0A',
+                  }}
+                />
+              </div>
+
+              <div
+                className="flex flex-col gap-2 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
+                style={{
+                  maxHeight: 150,
+                  borderRadius: 10,
+                  border: '1.1px solid rgba(0,0,0,0.1)',
+                  background: '#F9FAFB',
+                  padding: '8px',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#D1D5DC transparent',
+                }}
+              >
+                {filteredIndividuals.length === 0 ? (
+                  <p
+                    className="text-center py-4"
+                    style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#717182' }}
+                  >
+                    {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
+                  </p>
+                ) : (
+                  filteredIndividuals.map((p) => {
+                    const selected = selectedIndividualIds.includes(p.id)
+                    return (
+                      <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => toggleIndividual(p.id)}
+                        className="w-full flex items-center gap-2 cursor-pointer"
+                        style={{
+                          borderRadius: 8,
+                          background: selected ? '#E0E7FF' : '#FFFFFF',
+                          border: selected ? '1px solid #4F46E5' : '1px solid transparent',
+                          padding: '8px',
+                        }}
+                      >
+                        <GroupCheckBox checked={selected} variant="default" />
+                        <div className="flex flex-col items-start flex-1 min-w-0">
+                          <span
+                            className="truncate"
+                            style={{
+                              fontFamily: 'Inter, sans-serif',
+                              fontWeight: 500,
+                              fontSize: 14,
+                              lineHeight: '20px',
+                              color: '#0A0A0A',
+                            }}
+                          >
+                            {p.name}
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: 'Inter, sans-serif',
+                              fontWeight: 400,
+                              fontSize: 12,
+                              lineHeight: '16px',
+                              color: '#717182',
+                            }}
+                          >
+                            {p.relationship}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
           )}
         </div>
 

@@ -18,10 +18,7 @@ export default function PostHogProvider({ children }: { children: React.ReactNod
       capture_pageview: false,
       capture_pageleave: true,
       person_profiles: 'identified_only',
-      tracing_headers: {
-        [backendHost]: true,
-        ...(backendHost !== 'localhost' ? { localhost: true } : {}),
-      },
+      tracing_headers: [...new Set([backendHost, 'localhost'])],
       loaded: (ph) => {
         if (process.env.NODE_ENV === 'development') ph.debug();
       },

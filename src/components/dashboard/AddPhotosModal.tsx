@@ -21,11 +21,6 @@ import {
   requestDocUploadUrls,
   createDocumentsBatch,
 } from "@/lib/api/documents";
-import {
-  createVideoUploadUrl,
-  createAudioUploadUrl,
-  confirmAudioUpload,
-} from "@/lib/api/messages";
 
 interface AddPhotosModalProps {
   open: boolean;
@@ -289,36 +284,28 @@ export default function AddPhotosModal({
   const removeFile = (idx: number) =>
     setFiles((prev) => prev.filter((_, i) => i !== idx));
 
-  const handleMediaAsMessage = async (file: File, token: string) => {
-    const assignments = [{ scope: "assign_later" as const }];
-    if (file.type.startsWith("video/")) {
-      const { uploadUrl } = await createVideoUploadUrl(token, {
-        title: "untitled",
-        assignments,
-      });
-      const res = await fetch(uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-      if (!res.ok) throw new Error("Video upload failed. Please try again.");
-    } else {
-      const { signedUploadUrl, messageId } = await createAudioUploadUrl(token, {
-        title: "untitled",
-        assignments,
-        fileType: file.type,
-      });
-      const res = await fetch(signedUploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-      if (!res.ok) throw new Error("Audio upload failed. Please try again.");
-      await confirmAudioUpload(token, messageId, {
-        durationSeconds: 0,
+  const handleMediaAsDocument = async (file: File, token: string) => {
+    const [urlInfo] = await requestDocUploadUrls(token, [{
+      fileName: file.name,
+      fileType: file.type,
+      fileSizeBytes: file.size,
+    }]);
+    const res = await fetch(urlInfo.signedUploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type },
+    });
+    if (!res.ok) throw new Error("Upload failed. Please try again.");
+    await createDocumentsBatch(token, {
+      documents: [{
+        storagePath: urlInfo.storagePath,
+        originalFilename: file.name,
+        fileType: file.type.split("/")[1] || "bin",
         fileSizeBytes: file.size,
-      });
-    }
+        mimeType: file.type,
+      }],
+      assignments: [{ scope: "assign_later" }],
+    });
   };
 
   const handleUpload = async () => {
@@ -343,12 +330,12 @@ export default function AddPhotosModal({
       return;
     }
 
-    // In onboarding mode, route audio/video to message creation.
+    // In onboarding mode, route audio/video to the documents vault.
     if (isOnboarding && files.length > 0 && isMediaFile(files[0])) {
       setUploading(true);
       try {
-        await handleMediaAsMessage(files[0], token);
-        showToast("File saved as a message", "success");
+        await handleMediaAsDocument(files[0], token);
+        showToast("File saved to your vault", "success");
         onCreated?.();
         onClose();
       } catch (error) {

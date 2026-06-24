@@ -120,6 +120,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     stopRetry()
+    // Fire backend logout (invalidates server-side session record) — don't await;
+    // browser session cleared below is the authoritative action.
+    const { data: { session: current } } = await supabase.auth.getSession()
+    if (current?.access_token) {
+      api.post('/auth/logout', {}, current.access_token).catch(() => null)
+    }
     await supabase.auth.signOut()
     setProfile(null)
     router.push('/signin')

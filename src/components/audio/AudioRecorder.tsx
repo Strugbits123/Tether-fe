@@ -18,6 +18,12 @@ interface AudioRecorderProps {
   onCancel: () => void;
   /** Close (X) button. */
   onClose: () => void;
+  /**
+   * A previously recorded blob to reopen directly in preview (e.g. when a wizard
+   * steps back into this recorder) so the recording isn't lost.
+   */
+  initialBlob?: Blob | null;
+  initialDuration?: number;
 }
 
 type Phase = "ready" | "recording" | "preview";
@@ -36,8 +42,10 @@ export default function AudioRecorder({
   onComplete,
   onCancel,
   onClose,
+  initialBlob,
+  initialDuration,
 }: AudioRecorderProps) {
-  const [phase, setPhase] = useState<Phase>("ready");
+  const [phase, setPhase] = useState<Phase>(initialBlob ? "preview" : "ready");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,10 +54,10 @@ export default function AudioRecorder({
   const recordRef = useRef<ReturnType<typeof RecordPlugin.create> | null>(null);
   const timerRef = useRef<number | null>(null);
   const discardingRef = useRef(false);
-  const blobRef = useRef<Blob | null>(null);
-  const durationRef = useRef(0);
+  const blobRef = useRef<Blob | null>(initialBlob ?? null);
+  const durationRef = useRef(initialDuration ?? 0);
   const elapsedRef = useRef(0);
-  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(initialBlob ?? null);
 
   const clearTimer = () => {
     if (timerRef.current) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { notifyActivityChanged } from "@/lib/activity-helpers";
@@ -91,6 +92,7 @@ const STEP_DEFS: { key: StepKey; label: string; cta: string; index: number }[] =
   ];
 
 export default function SetupSteps() {
+  const router = useRouter();
   const { profile, profileLoading, refreshProfile } = useAuth();
   const [openStep, setOpenStep] = useState<StepKey | null>(null);
   // Read-only records for already-completed steps 2 & 3 (null = create mode).
@@ -169,6 +171,11 @@ export default function SetupSteps() {
                 notes: full.notes ?? "",
                 body: full.body ?? "",
               });
+            } else {
+              // Step was completed via audio/video (now in documents vault).
+              // Navigate there instead of opening the create wizard.
+              router.push('/documents?filter=media');
+              return;
             }
           }
         } catch {

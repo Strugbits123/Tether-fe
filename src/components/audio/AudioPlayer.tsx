@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pause, Play, Volume2 } from "lucide-react";
+import { FastForward, Pause, Play, Rewind, Volume2 } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 
 interface AudioPlayerProps {
@@ -92,6 +92,13 @@ export default function AudioPlayer({
 
   const togglePlay = useCallback(() => wsRef.current?.playPause(), []);
   const skip = useCallback((sec: number) => wsRef.current?.skip(sec), []);
+  const seekTo = useCallback(
+    (time: number) => {
+      const dur = wsRef.current?.getDuration() ?? 0;
+      if (dur > 0) wsRef.current?.seekTo(time / dur);
+    },
+    []
+  );
 
   const cycleSpeed = useCallback(() => {
     setSpeedIndex((prev) => {
@@ -107,6 +114,7 @@ export default function AudioPlayer({
   }, []);
 
   const remaining = Math.max(0, duration - currentTime);
+  const seekPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="w-full flex flex-col" style={{ gap: 20 }}>
@@ -177,6 +185,22 @@ export default function AudioPlayer({
       {/* Waveform */}
       <div ref={containerRef} className="w-full" style={{ minHeight: 60 }} />
 
+      {/* Seek bar */}
+      <input
+        type="range"
+        min={0}
+        max={duration || 0}
+        step={0.01}
+        value={currentTime}
+        onChange={(e) => seekTo(Number(e.target.value))}
+        disabled={!ready}
+        aria-label="Seek"
+        className="seek-range w-full"
+        style={{
+          background: `linear-gradient(to right, #EF4444 ${seekPercent}%, #E5E7EB ${seekPercent}%)`,
+        }}
+      />
+
       {/* Controls */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <span
@@ -195,12 +219,17 @@ export default function AudioPlayer({
         <div className="flex items-center" style={{ gap: 16 }}>
           <button
             type="button"
-            onClick={() => skip(-15)}
+            onClick={() => skip(15)}
             disabled={!ready}
-            aria-label="Back 15 seconds"
+            aria-label="Forward 15 seconds"
             className="flex items-center justify-center cursor-pointer hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <SkipBack15 />
+            <FastForward
+              className="w-5 h-5"
+              fill="#374151"
+              stroke="#374151"
+              strokeWidth={1}
+            />
           </button>
           <button
             type="button"
@@ -213,6 +242,7 @@ export default function AudioPlayer({
               height: 56,
               borderRadius: "50%",
               background: "#EF4444",
+              boxShadow: "0 0 16px 2px rgba(239,68,68,0.5)",
             }}
           >
             {isPlaying ? (
@@ -232,12 +262,17 @@ export default function AudioPlayer({
           </button>
           <button
             type="button"
-            onClick={() => skip(15)}
+            onClick={() => skip(-15)}
             disabled={!ready}
-            aria-label="Forward 15 seconds"
+            aria-label="Back 15 seconds"
             className="flex items-center justify-center cursor-pointer hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <SkipForward15 />
+            <Rewind
+              className="w-5 h-5"
+              fill="#374151"
+              stroke="#374151"
+              strokeWidth={1}
+            />
           </button>
           <button
             type="button"
@@ -292,55 +327,38 @@ export default function AudioPlayer({
         .vinyl-spin {
           animation: vinyl-rotate 3s linear infinite;
         }
+        .seek-range {
+          -webkit-appearance: none;
+          appearance: none;
+          height: 4px;
+          border-radius: 999px;
+          outline: none;
+          cursor: pointer;
+        }
+        .seek-range:disabled {
+          cursor: not-allowed;
+        }
+        .seek-range::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #ef4444;
+          border: 2px solid #ffffff;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+          cursor: pointer;
+        }
+        .seek-range::-moz-range-thumb {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #ef4444;
+          border: 2px solid #ffffff;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+          cursor: pointer;
+        }
       `}</style>
     </div>
-  );
-}
-
-function SkipBack15() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M11 7L6 11l5 4M6 11h7a5 5 0 110 10h-2"
-        stroke="#374151"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <text
-        x="11.5"
-        y="11"
-        fontSize="7"
-        fontWeight="700"
-        fill="#374151"
-        fontFamily="Inter, sans-serif"
-      >
-        15
-      </text>
-    </svg>
-  );
-}
-
-function SkipForward15() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M13 7l5 4-5 4M18 11h-7a5 5 0 100 10h2"
-        stroke="#374151"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <text
-        x="5.5"
-        y="11"
-        fontSize="7"
-        fontWeight="700"
-        fill="#374151"
-        fontFamily="Inter, sans-serif"
-      >
-        15
-      </text>
-    </svg>
   );
 }
