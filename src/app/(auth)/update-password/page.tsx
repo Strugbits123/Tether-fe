@@ -7,6 +7,7 @@ import { useToast } from '@/lib/context/ToastContext'
 import { Eye, EyeOff } from 'lucide-react'
 import { FiLock } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase/client'
+import { api, ApiError } from '@/lib/api/client'
 
 export default function UpdatePasswordPage() {
   const router = useRouter()
@@ -45,15 +46,17 @@ export default function UpdatePasswordPage() {
 
     setLoading(true)
     try {
-      const { error } = await supabase.auth.updateUser({ password })
-      if (error) {
-        showToast(error.message, 'error')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setInvalidLink(true)
         return
       }
+      await api.post('/auth/update-password', { password }, session.access_token)
       showToast('Password updated successfully.', 'success')
       setTimeout(() => router.push('/dashboard'), 1500)
-    } catch (err: any) {
-      showToast(err.message || 'Something went wrong.', 'error')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Something went wrong.'
+      showToast(msg, 'error')
     } finally {
       setLoading(false)
     }

@@ -4,7 +4,7 @@ Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment:
     process.env.NEXT_PUBLIC_APP_ENV ?? process.env.NODE_ENV ?? "development",
-  enabled: process.env.NODE_ENV === "production",
+  enabled: process.env.NEXT_PUBLIC_APP_ENV !== "development" && !!process.env.NEXT_PUBLIC_SENTRY_DSN,
   tracesSampleRate: 1.0,
   replaysOnErrorSampleRate: 1.0,
   replaysSessionSampleRate: 0.1,

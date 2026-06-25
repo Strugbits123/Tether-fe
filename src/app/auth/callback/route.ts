@@ -17,7 +17,6 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type })
 
     if (error) {
-      console.error('OTP verification error:', error.message)
       return NextResponse.redirect(`${siteUrl}/signin?error=verification_failed`)
     }
 
@@ -47,7 +46,6 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (error) {
-      console.error('Code exchange error:', error.message)
       return NextResponse.redirect(`${siteUrl}/signin?error=verification_failed`)
     }
 

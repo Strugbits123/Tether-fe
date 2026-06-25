@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Eye,
   FileText,
   Loader2,
   Mic,
@@ -13,17 +13,18 @@ import {
   Trash2,
   UserPlus,
   Video,
-  X,
-} from 'lucide-react'
+} from "lucide-react";
 import CreateMessageModal, {
   type EditableMessage,
   buildAssignments,
-} from '@/components/dashboard/CreateMessageModal'
-import AssignRecipientsModal from '@/components/dashboard/AssignRecipientsModal'
-import { createClient } from '@/lib/supabase/client'
-import { useToast } from '@/lib/context/ToastContext'
-import { withRetry } from '@/lib/utils/retry'
-import { fixAudioDuration } from '@/lib/utils/audio'
+} from "@/components/dashboard/CreateMessageModal";
+import AssignRecipientsModal from "@/components/dashboard/AssignRecipientsModal";
+import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/lib/context/ToastContext";
+import { withRetry } from "@/lib/utils/retry";
+import AudioPlayer from "@/components/audio/AudioPlayer";
+import VideoPlayer from "@/components/video/VideoPlayer";
+import MessagePlayerHeader from "@/components/messages/MessagePlayerHeader";
 import {
   type Assignment,
   type Message,
@@ -36,36 +37,34 @@ import {
   getMessageStatus,
   getPlaybackToken,
   updateMessage,
-} from '@/lib/api/messages'
+} from "@/lib/api/messages";
 
-const MuxPlayer = dynamic(() => import('@mux/mux-player-react'), { ssr: false })
-
-type FilterKey = 'all' | Message['type']
+type FilterKey = "all" | Message["type"];
 
 const FILTERS: { key: FilterKey; label: string; icon?: typeof Mic }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'audio', label: 'Audio', icon: Mic },
-  { key: 'video', label: 'Video', icon: Video },
-  { key: 'text', label: 'Written', icon: FileText },
-]
+  { key: "all", label: "All" },
+  { key: "audio", label: "Audio", icon: Mic },
+  { key: "video", label: "Video", icon: Video },
+  { key: "text", label: "Written", icon: FileText },
+];
 
 const STATUS_BADGE: Record<
-  Message['processing_status'],
+  Message["processing_status"],
   { label: string; bg: string; color: string }
 > = {
-  uploading: { label: 'Uploading', bg: '#FEF9C2', color: '#A16207' },
-  processing: { label: 'Processing', bg: '#DBEAFE', color: '#1447E6' },
-  ready: { label: 'Ready', bg: '#DCFCE7', color: '#016630' },
-  failed: { label: 'Failed', bg: '#FEE2E2', color: '#C10007' },
-}
+  uploading: { label: "Uploading", bg: "#FEF9C2", color: "#A16207" },
+  processing: { label: "Processing", bg: "#DBEAFE", color: "#1447E6" },
+  ready: { label: "Ready", bg: "#DCFCE7", color: "#016630" },
+  failed: { label: "Failed", bg: "#FEE2E2", color: "#C10007" },
+};
 
 const ASSIGN_GROUP_MAP: Record<string, Assignment> = {
-  'All Recipients': { scope: 'all' },
-  'All Family': { scope: 'group', groupValue: 'family' },
-  'All Friends': { scope: 'group', groupValue: 'friends' },
-  'All Others': { scope: 'group', groupValue: 'others' },
-  'Release Manager': { scope: 'release_manager' },
-}
+  "All Recipients": { scope: "all" },
+  "All Family": { scope: "group", groupValue: "family" },
+  "All Friends": { scope: "group", groupValue: "friends" },
+  "All Others": { scope: "group", groupValue: "others" },
+  "Release Manager": { scope: "release_manager" },
+};
 
 /**
  * Reverse of ASSIGN_GROUP_MAP — turns a message's saved assignments back into the
@@ -73,272 +72,309 @@ const ASSIGN_GROUP_MAP: Record<string, Assignment> = {
  * pre-filled with the message's current audience.
  */
 function assignmentsToAssignSelection(assignments: MessageAssignment[] = []): {
-  groups: string[]
-  individualIds: string[]
+  groups: string[];
+  individualIds: string[];
 } {
-  const groups: string[] = []
-  const individualIds: string[] = []
+  const groups: string[] = [];
+  const individualIds: string[] = [];
   for (const a of assignments) {
     switch (a.assignment_scope) {
-      case 'all':
-        groups.push('All Recipients')
-        break
-      case 'group':
-        if (a.group_value === 'family') groups.push('All Family')
-        else if (a.group_value === 'friends') groups.push('All Friends')
-        else if (a.group_value === 'others') groups.push('All Others')
-        break
-      case 'release_manager':
-        groups.push('Release Manager')
-        break
-      case 'individual':
-        if (a.recipient_id) individualIds.push(a.recipient_id)
-        break
+      case "all":
+        groups.push("All Recipients");
+        break;
+      case "group":
+        if (a.group_value === "family") groups.push("All Family");
+        else if (a.group_value === "friends") groups.push("All Friends");
+        else if (a.group_value === "others") groups.push("All Others");
+        break;
+      case "release_manager":
+        groups.push("Release Manager");
+        break;
+      case "individual":
+        if (a.recipient_id) individualIds.push(a.recipient_id);
+        break;
     }
   }
-  return { groups, individualIds }
+  return { groups, individualIds };
 }
 
 async function getToken(): Promise<string | null> {
-  const supabase = createClient()
+  const supabase = createClient();
   const {
     data: { session },
-  } = await supabase.auth.getSession()
-  return session?.access_token ?? null
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
 }
 
 /** Capitalises the first letter so validation errors read in sentence case. */
 function toSentenceCase(message: string): string {
-  if (!message) return message
-  return message.charAt(0).toUpperCase() + message.slice(1)
+  if (!message) return message;
+  return message.charAt(0).toUpperCase() + message.slice(1);
 }
 
 function errorMessage(e: unknown, fallback: string): string {
-  return toSentenceCase(e instanceof Error ? e.message : fallback)
+  return toSentenceCase(e instanceof Error ? e.message : fallback);
 }
 
 function formatDuration(sec?: number): string | undefined {
-  if (!sec || sec <= 0) return undefined
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  if (m === 0) return `${s} sec`
-  if (s === 0) return `${m} min`
-  return `${m} min ${s} sec`
+  if (!sec || sec <= 0) return undefined;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m === 0) return `${s} sec`;
+  if (s === 0) return `${m} min`;
+  return `${m} min ${s} sec`;
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-function typeLabel(type: Message['type']): string {
-  return type === 'audio'
-    ? 'Audio message'
-    : type === 'video'
-    ? 'Video message'
-    : 'Written message'
+/** A short audience label for the player header, derived from the message's assignments. */
+function recipientLabel(message: Message): string {
+  const { audience, selectedIndividualIds } = assignmentsToAudience(
+    message.assignments,
+  );
+  if (audience.includes("Choose individuals")) {
+    const n = selectedIndividualIds.length;
+    return n === 1 ? "1 recipient" : `${n} recipients`;
+  }
+  return audience[0] ?? "All Recipients";
+}
+
+function typeLabel(type: Message["type"]): string {
+  return type === "audio"
+    ? "Audio message"
+    : type === "video"
+      ? "Video message"
+      : "Written message";
 }
 
 export default function MessagesPage() {
-  const { showToast } = useToast()
+  const { showToast } = useToast();
 
-  const [items, setItems] = useState<Message[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<FilterKey>('all')
+  const [items, setItems] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   // Modals
-  const [editing, setEditing] = useState<Message | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [assigning, setAssigning] = useState<Message | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState<Message | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [playing, setPlaying] = useState<Message | null>(null)
+  const [editing, setEditing] = useState<Message | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [assigning, setAssigning] = useState<Message | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Message | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [playing, setPlaying] = useState<Message | null>(null);
+  const [reading, setReading] = useState<Message | null>(null);
 
   const load = useCallback(async () => {
-    const token = await getToken()
+    const token = await getToken();
     if (!token) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
     try {
-      const data = await withRetry(() => getMessages(token))
-      setItems(data)
+      const data = await withRetry(() => getMessages(token));
+      setItems(data);
     } catch (e) {
-      showToast(errorMessage(e, 'Could not load your messages.'), 'error')
+      showToast(errorMessage(e, "Could not load your messages."), "error");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [showToast])
+  }, [showToast]);
 
   useEffect(() => {
-    load()
-  }, [load])
+    load();
+  }, [load]);
 
   // Poll messages that are still being processed.
-  const pollRef = useRef<number | null>(null)
+  const pollRef = useRef<number | null>(null);
   useEffect(() => {
     const pending = items.filter(
-      (m) => m.processing_status !== 'ready' && m.processing_status !== 'failed',
-    )
+      (m) =>
+        m.processing_status !== "ready" && m.processing_status !== "failed",
+    );
     if (pending.length === 0) {
       if (pollRef.current) {
-        window.clearInterval(pollRef.current)
-        pollRef.current = null
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
       }
-      return
+      return;
     }
-    if (pollRef.current) return // already polling
+    if (pollRef.current) return; // already polling
 
     pollRef.current = window.setInterval(async () => {
-      const token = await getToken()
-      if (!token) return
+      const token = await getToken();
+      if (!token) return;
       const stillPending = items.filter(
-        (m) => m.processing_status !== 'ready' && m.processing_status !== 'failed',
-      )
+        (m) =>
+          m.processing_status !== "ready" && m.processing_status !== "failed",
+      );
       await Promise.all(
         stillPending.map(async (m) => {
           try {
-            const status = await getMessageStatus(token, m.id)
+            const status = await getMessageStatus(token, m.id);
             setItems((prev) =>
               prev.map((it) =>
                 it.id === m.id
                   ? {
                       ...it,
                       processing_status:
-                        (status.processingStatus as Message['processing_status']) ??
+                        (status.processingStatus as Message["processing_status"]) ??
                         it.processing_status,
                       transcription_status:
-                        (status.transcriptionStatus as Message['transcription_status']) ??
+                        (status.transcriptionStatus as Message["transcription_status"]) ??
                         it.transcription_status,
                       transcript: status.transcript ?? it.transcript,
                     }
                   : it,
               ),
-            )
+            );
           } catch {
             /* transient — try again next tick */
           }
         }),
-      )
-    }, 5000)
+      );
+    }, 5000);
 
     return () => {
       if (pollRef.current) {
-        window.clearInterval(pollRef.current)
-        pollRef.current = null
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
       }
-    }
-  }, [items])
+    };
+  }, [items]);
 
-  const visible = items.filter((m) => filter === 'all' || m.type === filter)
+  const visible = items.filter((m) => filter === "all" || m.type === filter);
 
   // Current audience of the message being assigned, mapped to the modal's shape.
-  const assignSelection = assignmentsToAssignSelection(assigning?.assignments ?? [])
+  const assignSelection = assignmentsToAssignSelection(
+    assigning?.assignments ?? [],
+  );
 
   const handleDelete = async () => {
-    if (!confirmDelete) return
-    const token = await getToken()
+    if (!confirmDelete) return;
+    const token = await getToken();
     if (!token) {
-      showToast('Your session has expired. Please sign in again.', 'error')
-      return
+      showToast("Your session has expired. Please sign in again.", "error");
+      return;
     }
-    setDeleting(true)
+    setDeleting(true);
     try {
-      await deleteMessage(token, confirmDelete.id)
-      setItems((prev) => prev.filter((m) => m.id !== confirmDelete.id))
-      showToast('Message deleted', 'success')
-      setConfirmDelete(null)
+      await deleteMessage(token, confirmDelete.id);
+      setItems((prev) => prev.filter((m) => m.id !== confirmDelete.id));
+      showToast("Message deleted", "success");
+      setConfirmDelete(null);
     } catch (e) {
-      showToast(errorMessage(e, 'Could not delete the message.'), 'error')
+      showToast(errorMessage(e, "Could not delete the message."), "error");
     } finally {
-      setDeleting(false)
+      setDeleting(false);
     }
-  }
+  };
 
   // Fetch the full message (with assignments) so the edit modal can pre-fill
   // the audience. Falls back to the list item if the fetch fails.
   const handleEdit = async (m: Message) => {
-    const token = await getToken()
+    const token = await getToken();
     if (!token) {
-      setEditing(m)
-      return
+      setEditing(m);
+      return;
     }
     try {
-      const full = await getMessage(token, m.id)
-      setEditing(full)
+      const full = await getMessage(token, m.id);
+      setEditing(full);
     } catch {
-      setEditing(m)
+      setEditing(m);
     }
-  }
+  };
+
+  const handleRead = async (m: Message) => {
+    const token = await getToken();
+    if (!token) {
+      setReading(m);
+      return;
+    }
+    try {
+      const full = await getMessage(token, m.id);
+      setReading(full);
+    } catch {
+      setReading(m);
+    }
+  };
 
   // Fetch the full message (with assignments) so the assign modal can pre-fill
   // the current audience. Falls back to the list item if the fetch fails.
   const handleAssign = async (m: Message) => {
-    const token = await getToken()
+    const token = await getToken();
     if (!token) {
-      setAssigning(m)
-      return
+      setAssigning(m);
+      return;
     }
     try {
-      const full = await getMessage(token, m.id)
-      setAssigning(full)
+      const full = await getMessage(token, m.id);
+      setAssigning(full);
     } catch {
-      setAssigning(m)
+      setAssigning(m);
     }
-  }
+  };
 
   const handleSaveEdit = async (m: EditableMessage) => {
-    if (!m.id) return
-    const token = await getToken()
+    if (!m.id) return;
+    const token = await getToken();
     if (!token) {
-      showToast('Your session has expired. Please sign in again.', 'error')
-      throw new Error('No session')
+      showToast("Your session has expired. Please sign in again.", "error");
+      throw new Error("No session");
     }
     try {
       await updateMessage(token, m.id, {
         title: m.title,
         notes: m.notes || undefined,
         // Only text messages carry an editable body.
-        body: m.messageType === 'write' ? m.body : undefined,
-        assignments: buildAssignments(m.audience, m.selectedIndividualIds ?? []),
-      })
-      showToast('Message updated', 'success')
-      load()
+        body: m.messageType === "write" ? m.body : undefined,
+        assignments: buildAssignments(
+          m.audience,
+          m.selectedIndividualIds ?? [],
+        ),
+      });
+      showToast("Message updated", "success");
+      load();
     } catch (e) {
-      showToast(errorMessage(e, 'Could not update the message.'), 'error')
+      showToast(errorMessage(e, "Could not update the message."), "error");
       // Re-throw so the modal keeps its loading state cleared and stays open.
-      throw e
+      throw e;
     }
-  }
+  };
 
-  const handleSaveAssign = async (groups: string[], individualIds: string[]) => {
-    if (!assigning) return
-    const token = await getToken()
+  const handleSaveAssign = async (
+    groups: string[],
+    individualIds: string[],
+  ) => {
+    if (!assigning) return;
+    const token = await getToken();
     if (!token) {
-      showToast('Your session has expired. Please sign in again.', 'error')
-      return
+      showToast("Your session has expired. Please sign in again.", "error");
+      return;
     }
-    const assignments: Assignment[] = []
+    const assignments: Assignment[] = [];
     for (const g of groups) {
-      if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g])
+      if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
     }
     for (const id of individualIds) {
-      assignments.push({ scope: 'individual', recipientId: id })
+      assignments.push({ scope: "individual", recipientId: id });
     }
-    if (assignments.length === 0) assignments.push({ scope: 'assign_later' })
+    if (assignments.length === 0) assignments.push({ scope: "assign_later" });
     try {
-      await updateMessage(token, assigning.id, { assignments })
-      showToast('Recipients updated', 'success')
-      setAssigning(null)
+      await updateMessage(token, assigning.id, { assignments });
+      showToast("Recipients updated", "success");
+      setAssigning(null);
     } catch (e) {
-      showToast(errorMessage(e, 'Could not update recipients.'), 'error')
+      showToast(errorMessage(e, "Could not update recipients."), "error");
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -350,20 +386,20 @@ export default function MessagesPage() {
               fontFamily: '"Instrument Serif", serif',
               fontWeight: 400,
               fontSize: 32,
-              lineHeight: '36px',
-              color: '#101828',
+              lineHeight: "36px",
+              color: "#101828",
             }}
           >
             Messages
           </h1>
           <p
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 400,
               fontSize: 16,
-              lineHeight: '24px',
-              letterSpacing: '-0.31px',
-              color: '#4A5565',
+              lineHeight: "24px",
+              letterSpacing: "-0.31px",
+              color: "#4A5565",
             }}
           >
             Share your guidance and love for when it matters most
@@ -377,13 +413,13 @@ export default function MessagesPage() {
             width: 150,
             height: 36,
             borderRadius: 8,
-            background: '#4F46E5',
-            fontFamily: 'Inter, sans-serif',
+            background: "#4F46E5",
+            fontFamily: "Inter, sans-serif",
             fontWeight: 500,
             fontSize: 14,
-            lineHeight: '20px',
-            letterSpacing: '-0.15px',
-            color: '#FFFFFF',
+            lineHeight: "20px",
+            letterSpacing: "-0.15px",
+            color: "#FFFFFF",
           }}
         >
           <Plus className="w-4 h-4" strokeWidth={2.25} />
@@ -394,8 +430,8 @@ export default function MessagesPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
-          const Icon = f.icon
-          const active = filter === f.key
+          const Icon = f.icon;
+          const active = filter === f.key;
           return (
             <button
               key={f.key}
@@ -405,26 +441,26 @@ export default function MessagesPage() {
               style={{
                 minHeight: 36,
                 borderRadius: 10,
-                background: active ? '#4F39F6' : '#F3F4F6',
-                padding: '0 16px',
-                fontFamily: 'Inter, sans-serif',
+                background: active ? "#4F39F6" : "#F3F4F6",
+                padding: "0 16px",
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 500,
                 fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: active ? '#FFFFFF' : '#364153',
+                lineHeight: "20px",
+                letterSpacing: "-0.15px",
+                color: active ? "#FFFFFF" : "#364153",
               }}
             >
               {Icon && (
                 <Icon
                   className="w-4 h-4"
                   strokeWidth={2}
-                  color={active ? '#FFFFFF' : '#364153'}
+                  color={active ? "#FFFFFF" : "#364153"}
                 />
               )}
               {f.label}
             </button>
-          )
+          );
         })}
       </div>
 
@@ -437,14 +473,19 @@ export default function MessagesPage() {
               className="animate-pulse flex items-start gap-4"
               style={{
                 borderRadius: 14,
-                border: '1.25px solid rgba(0,0,0,0.1)',
-                background: '#FFFFFF',
+                border: "1.25px solid rgba(0,0,0,0.1)",
+                background: "#FFFFFF",
                 padding: 16,
               }}
             >
               <div
                 className="flex-shrink-0"
-                style={{ width: 80, height: 80, borderRadius: 10, background: '#EEF2FF' }}
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: 10,
+                  background: "#EEF2FF",
+                }}
               />
               <div className="flex-1 flex flex-col gap-2 pt-1">
                 <div className="h-4 bg-gray-200 rounded w-2/3" />
@@ -459,9 +500,9 @@ export default function MessagesPage() {
           className="flex flex-col items-center justify-center text-center gap-3"
           style={{
             borderRadius: 14,
-            border: '1.25px dashed rgba(0,0,0,0.12)',
-            background: '#FFFFFF',
-            padding: '48px 24px',
+            border: "1.25px dashed rgba(0,0,0,0.12)",
+            background: "#FFFFFF",
+            padding: "48px 24px",
           }}
         >
           <div
@@ -470,27 +511,27 @@ export default function MessagesPage() {
               width: 56,
               height: 56,
               borderRadius: 12,
-              background: 'linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)',
+              background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
             }}
           >
             <FileText className="w-7 h-7" color="#4F39F6" strokeWidth={2} />
           </div>
           <p
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 600,
               fontSize: 16,
-              color: '#101828',
+              color: "#101828",
             }}
           >
             No messages yet
           </p>
           <p
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 400,
               fontSize: 14,
-              color: '#4A5565',
+              color: "#4A5565",
             }}
           >
             Create your first message to share your guidance and love.
@@ -506,6 +547,7 @@ export default function MessagesPage() {
               onAssign={() => handleAssign(m)}
               onDelete={() => setConfirmDelete(m)}
               onPlay={() => setPlaying(m)}
+              onRead={() => handleRead(m)}
             />
           ))}
         </div>
@@ -523,21 +565,21 @@ export default function MessagesPage() {
         open={!!editing}
         onClose={() => setEditing(null)}
         headerTitle="Edit Message"
-        headerSubtitle={editing?.title ?? ''}
+        headerSubtitle={editing?.title ?? ""}
         initialMessage={
           editing
             ? {
                 id: editing.id,
                 ...assignmentsToAudience(editing.assignments),
                 messageType:
-                  editing.type === 'text'
-                    ? 'write'
-                    : editing.type === 'video'
-                    ? 'video'
-                    : 'audio',
+                  editing.type === "text"
+                    ? "write"
+                    : editing.type === "video"
+                      ? "video"
+                      : "audio",
                 title: editing.title,
-                notes: editing.notes ?? '',
-                body: editing.body ?? '',
+                notes: editing.notes ?? "",
+                body: editing.body ?? "",
               }
             : undefined
         }
@@ -546,7 +588,7 @@ export default function MessagesPage() {
       <AssignRecipientsModal
         open={!!assigning}
         onClose={() => setAssigning(null)}
-        messageTitle={assigning?.title ?? ''}
+        messageTitle={assigning?.title ?? ""}
         initialGroups={assignSelection.groups}
         initialIndividualIds={assignSelection.individualIds}
         onSave={handleSaveAssign}
@@ -554,6 +596,28 @@ export default function MessagesPage() {
 
       {playing && (
         <PlaybackModal message={playing} onClose={() => setPlaying(null)} />
+      )}
+
+      {reading && (
+        <CreateMessageModal
+          open={!!reading}
+          onClose={() => setReading(null)}
+          headerTitle={reading.title}
+          readOnly
+          initialMessage={{
+            id: reading.id,
+            ...assignmentsToAudience(reading.assignments),
+            messageType:
+              reading.type === "text"
+                ? "write"
+                : reading.type === "video"
+                  ? "video"
+                  : "audio",
+            title: reading.title,
+            notes: reading.notes ?? "",
+            body: reading.body ?? "",
+          }}
+        />
       )}
 
       {confirmDelete && (
@@ -565,7 +629,7 @@ export default function MessagesPage() {
         />
       )}
     </div>
-  )
+  );
 }
 
 /* ---------------------- Message card ---------------------- */
@@ -576,38 +640,42 @@ function MessageCard({
   onAssign,
   onDelete,
   onPlay,
+  onRead,
 }: {
-  item: Message
-  onEdit: () => void
-  onAssign: () => void
-  onDelete: () => void
-  onPlay: () => void
+  item: Message;
+  onEdit: () => void;
+  onAssign: () => void;
+  onDelete: () => void;
+  onPlay: () => void;
+  onRead: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    if (menuOpen) document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [menuOpen])
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        setMenuOpen(false);
+    };
+    if (menuOpen) document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
 
-  const Icon = item.type === 'audio' ? Mic : item.type === 'video' ? Video : FileText
-  const duration = formatDuration(item.duration_seconds)
-  const badge = STATUS_BADGE[item.processing_status]
+  const Icon =
+    item.type === "audio" ? Mic : item.type === "video" ? Video : FileText;
+  const duration = formatDuration(item.duration_seconds);
+  const badge = STATUS_BADGE[item.processing_status];
   const isPlayable =
-    (item.type === 'video' || item.type === 'audio') &&
-    item.processing_status === 'ready'
+    (item.type === "video" || item.type === "audio") &&
+    item.processing_status === "ready";
 
   return (
     <div
       className="relative flex items-start gap-4"
       style={{
         borderRadius: 14,
-        border: '1.25px solid rgba(0,0,0,0.1)',
-        background: '#FFFFFF',
+        border: "1.25px solid rgba(0,0,0,0.1)",
+        background: "#FFFFFF",
         padding: 16,
       }}
     >
@@ -615,22 +683,22 @@ function MessageCard({
       <button
         type="button"
         onClick={isPlayable ? onPlay : undefined}
-        aria-label={isPlayable ? 'Play message' : undefined}
+        aria-label={isPlayable ? "Play message" : undefined}
         className={`flex items-center justify-center flex-shrink-0 relative ${
-          isPlayable ? 'cursor-pointer group' : 'cursor-default'
+          isPlayable ? "cursor-pointer group" : "cursor-default"
         }`}
         style={{
           width: 80,
           height: 80,
           borderRadius: 10,
-          background: 'linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)',
+          background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
         }}
       >
         <Icon className="w-8 h-8" color="#4F39F6" strokeWidth={2} />
         {isPlayable && (
           <span
             className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ borderRadius: 10, background: 'rgba(79,57,246,0.85)' }}
+            style={{ borderRadius: 10, background: "rgba(79,57,246,0.85)" }}
           >
             <Play className="w-7 h-7 text-white fill-white" strokeWidth={2} />
           </span>
@@ -642,12 +710,12 @@ function MessageCard({
         <h3
           className="truncate pr-10"
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "Inter, sans-serif",
             fontWeight: 600,
             fontSize: 18,
-            lineHeight: '28px',
-            letterSpacing: '-0.44px',
-            color: '#101828',
+            lineHeight: "28px",
+            letterSpacing: "-0.44px",
+            color: "#101828",
           }}
         >
           {item.title}
@@ -655,12 +723,12 @@ function MessageCard({
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-1"
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "Inter, sans-serif",
             fontWeight: 400,
             fontSize: 14,
-            lineHeight: '20px',
-            letterSpacing: '-0.15px',
-            color: '#4A5565',
+            lineHeight: "20px",
+            letterSpacing: "-0.15px",
+            color: "#4A5565",
           }}
         >
           <span>{typeLabel(item.type)}</span>
@@ -677,10 +745,10 @@ function MessageCard({
               color: badge.color,
               fontSize: 11.8,
               fontWeight: 500,
-              lineHeight: '16px',
+              lineHeight: "16px",
             }}
           >
-            {item.processing_status !== 'ready' && (
+            {item.processing_status !== "ready" && (
               <Loader2 className="inline w-3 h-3 mr-1 animate-spin align-[-1px]" />
             )}
             {badge.label}
@@ -688,11 +756,11 @@ function MessageCard({
         </div>
         <p
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "Inter, sans-serif",
             fontWeight: 400,
             fontSize: 12,
-            lineHeight: '16px',
-            color: '#6A7282',
+            lineHeight: "16px",
+            color: "#6A7282",
           }}
         >
           Created {formatDate(item.created_at)}
@@ -721,53 +789,73 @@ function MessageCard({
             style={{
               width: 192,
               borderRadius: 10,
-              border: '1.25px solid #E5E7EB',
-              background: '#FFFFFF',
+              border: "1.25px solid #E5E7EB",
+              background: "#FFFFFF",
               padding: 5,
               boxShadow:
-                '0px 4px 6px -4px rgba(0,0,0,0.1), 0px 10px 15px -3px rgba(0,0,0,0.1)',
+                "0px 4px 6px -4px rgba(0,0,0,0.1), 0px 10px 15px -3px rgba(0,0,0,0.1)",
             }}
           >
             {isPlayable && (
               <MenuItem
-                icon={<Play className="w-4 h-4 text-[#364153]" strokeWidth={2} />}
+                icon={
+                  <Play className="w-4 h-4 text-[#364153]" strokeWidth={2} />
+                }
                 label="Play message"
                 onClick={() => {
-                  setMenuOpen(false)
-                  onPlay()
+                  setMenuOpen(false);
+                  onPlay();
+                }}
+              />
+            )}
+            {item.type === "text" && (
+              <MenuItem
+                icon={
+                  <Eye className="w-4 h-4 text-[#364153]" strokeWidth={2} />
+                }
+                label="Read message"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onRead();
                 }}
               />
             )}
             <MenuItem
-              icon={<Pencil className="w-4 h-4 text-[#364153]" strokeWidth={2} />}
+              icon={
+                <Pencil className="w-4 h-4 text-[#364153]" strokeWidth={2} />
+              }
               label="Edit message"
               onClick={() => {
-                setMenuOpen(false)
-                onEdit()
+                setMenuOpen(false);
+                onEdit();
               }}
             />
             <MenuItem
-              icon={<UserPlus className="w-4 h-4 text-[#364153]" strokeWidth={2} />}
+              icon={
+                <UserPlus className="w-4 h-4 text-[#364153]" strokeWidth={2} />
+              }
               label="Assign recipients"
               onClick={() => {
-                setMenuOpen(false)
-                onAssign()
+                setMenuOpen(false);
+                onAssign();
               }}
             />
             <MenuItem
-              icon={<Trash2 className="w-4 h-4 text-[#E7000B]" strokeWidth={2} />}
+              icon={
+                <Trash2 className="w-4 h-4 text-[#E7000B]" strokeWidth={2} />
+              }
               label="Delete message"
               danger
               onClick={() => {
-                setMenuOpen(false)
-                onDelete()
+                setMenuOpen(false);
+                onDelete();
               }}
             />
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function MenuItem({
@@ -776,10 +864,10 @@ function MenuItem({
   danger,
   onClick,
 }: {
-  icon: React.ReactNode
-  label: string
-  danger?: boolean
-  onClick: () => void
+  icon: React.ReactNode;
+  label: string;
+  danger?: boolean;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -787,19 +875,19 @@ function MenuItem({
       onClick={onClick}
       className="w-full flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-md"
       style={{
-        padding: '8px 10px',
-        fontFamily: 'Inter, sans-serif',
+        padding: "8px 10px",
+        fontFamily: "Inter, sans-serif",
         fontWeight: 500,
         fontSize: 14,
-        lineHeight: '20px',
-        letterSpacing: '-0.15px',
-        color: danger ? '#E7000B' : '#364153',
+        lineHeight: "20px",
+        letterSpacing: "-0.15px",
+        color: danger ? "#E7000B" : "#364153",
       }}
     >
       {icon}
       {label}
     </button>
-  )
+  );
 }
 
 /* ---------------------- Playback modal ---------------------- */
@@ -808,183 +896,141 @@ function PlaybackModal({
   message,
   onClose,
 }: {
-  message: Message
-  onClose: () => void
+  message: Message;
+  onClose: () => void;
 }) {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [video, setVideo] = useState<{ playbackId: string; token: string } | null>(null)
-  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [video, setVideo] = useState<{
+    playbackId: string;
+    token: string;
+  } | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true
-    ;(async () => {
-      const token = await getToken()
+    let active = true;
+    (async () => {
+      const token = await getToken();
       if (!token) {
         if (active) {
-          setError('Your session has expired. Please sign in again.')
-          setLoading(false)
+          setError("Your session has expired. Please sign in again.");
+          setLoading(false);
         }
-        return
+        return;
       }
       try {
-        if (message.type === 'video') {
+        if (message.type === "video") {
           const { token: playbackToken, playbackId } = await getPlaybackToken(
             token,
             message.id,
-          )
-          if (active) setVideo({ playbackId, token: playbackToken })
+          );
+          if (active) setVideo({ playbackId, token: playbackToken });
         } else {
-          const { signedUrl } = await getAudioUrl(token, message.id)
-          if (active) setAudioUrl(signedUrl)
+          const { signedUrl } = await getAudioUrl(token, message.id);
+          if (active) setAudioUrl(signedUrl);
         }
       } catch (e) {
-        if (active) setError(errorMessage(e, 'Could not load playback.'))
+        if (active) setError(errorMessage(e, "Could not load playback."));
       } finally {
-        if (active) setLoading(false)
+        if (active) setLoading(false);
       }
-    })()
+    })();
     return () => {
-      active = false
-    }
-  }, [message.id, message.type])
+      active = false;
+    };
+  }, [message.id, message.type]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onClose])
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
 
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: "rgba(0,0,0,0.4)" }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose()
+          if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
           className="relative bg-white w-full"
           style={{
-            maxWidth: 768,
+            maxWidth: 640,
             borderRadius: 16,
-            paddingBottom: 24,
-            boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.25)',
-            fontFamily: 'Inter, sans-serif',
+            boxShadow: "0px 25px 50px -12px rgba(0,0,0,0.25)",
+            fontFamily: "Inter, sans-serif",
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6 z-10"
-            style={{ width: 22, height: 22, opacity: 0.7 }}
-          >
-            <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
-          </button>
-
           <div
-            className="px-6 py-6 pr-12 sm:pr-14"
-            style={{ borderBottom: '0.8px solid #E5E7EB' }}
+            className="flex flex-col px-6 sm:px-8 pt-6 sm:pt-7 pb-6 sm:pb-7"
+            style={{ gap: 24 }}
           >
-            <h2
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 700,
-                fontSize: 23,
-                lineHeight: '32px',
-                color: '#101828',
-              }}
-            >
-              {message.title}
-            </h2>
-            <p
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 12.9,
-                lineHeight: '20px',
-                color: '#4A5565',
-              }}
-            >
-              {typeLabel(message.type)}
-            </p>
-          </div>
+            <MessagePlayerHeader
+              type={message.type === "video" ? "video" : "audio"}
+              recipientName={recipientLabel(message)}
+              messageTitle={message.title}
+              onClose={onClose}
+            />
 
-          <div className="px-6 pt-6">
             {loading ? (
               <div
                 className="w-full flex items-center justify-center"
-                style={{ minHeight: 240 }}
+                style={{ minHeight: 200 }}
               >
-                <Loader2 className="w-8 h-8 text-[#4F46E5] animate-spin" />
+                <Loader2 className="w-8 h-8 text-[#7C3AED] animate-spin" />
               </div>
             ) : error ? (
               <p className="text-sm text-red-600 text-center py-10">{error}</p>
-            ) : message.type === 'video' && video ? (
-              <div className="w-full overflow-hidden" style={{ borderRadius: 10 }}>
-                <MuxPlayer
-                  playbackId={video.playbackId}
-                  tokens={{ playback: video.token }}
-                  style={{ width: '100%', aspectRatio: '16 / 9' }}
-                  accentColor="#4F46E5"
-                />
-              </div>
+            ) : message.type === "video" && video ? (
+              <VideoPlayer
+                playbackId={video.playbackId}
+                playbackToken={video.token}
+                autoPlay
+              />
             ) : audioUrl ? (
-              <div
-                className="w-full flex flex-col items-center justify-center gap-4"
-                style={{
-                  minHeight: 200,
-                  borderRadius: 10,
-                  background: 'linear-gradient(135deg, #615FFF 0%, #9810FA 100%)',
-                  padding: 32,
-                }}
-              >
-                <Mic className="w-16 h-16 text-white" strokeWidth={1.5} />
-                <audio
-                  src={audioUrl}
-                  controls
-                  autoPlay
-                  className="w-full"
-                  onLoadedMetadata={fixAudioDuration}
-                />
-              </div>
+              <AudioPlayer
+                audioUrl={audioUrl}
+                categoryLabel="Audio message"
+                autoPlay
+              />
             ) : null}
 
             {message.transcript && (
-              <div className="mt-5">
+              <div>
                 <h3
                   className="mb-2"
                   style={{
-                    fontFamily: 'Inter, sans-serif',
+                    fontFamily: "Inter, sans-serif",
                     fontWeight: 600,
                     fontSize: 14,
-                    color: '#101828',
+                    color: "#101828",
                   }}
                 >
                   Transcript
                 </h3>
                 <p
                   style={{
-                    fontFamily: 'Inter, sans-serif',
+                    fontFamily: "Inter, sans-serif",
                     fontWeight: 400,
                     fontSize: 14,
-                    lineHeight: '22px',
-                    color: '#4A5565',
-                    whiteSpace: 'pre-wrap',
+                    lineHeight: "22px",
+                    color: "#4A5565",
+                    whiteSpace: "pre-wrap",
                   }}
                 >
                   {message.transcript}
@@ -995,7 +1041,7 @@ function PlaybackModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Confirm delete modal ---------------------- */
@@ -1006,36 +1052,36 @@ function ConfirmDeleteModal({
   onCancel,
   onConfirm,
 }: {
-  title: string
-  deleting: boolean
-  onCancel: () => void
-  onConfirm: () => void
+  title: string;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onCancel])
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onCancel]);
 
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: "rgba(0,0,0,0.4)" }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onCancel()
+        if (e.target === e.currentTarget) onCancel();
       }}
     >
       <div
         className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onCancel()
+          if (e.target === e.currentTarget) onCancel();
         }}
       >
         <div
@@ -1044,18 +1090,18 @@ function ConfirmDeleteModal({
             maxWidth: 420,
             borderRadius: 10,
             boxShadow:
-              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
-            fontFamily: 'Inter, sans-serif',
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
           }}
         >
           <div className="px-6 pt-6 pb-2">
             <h2
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 600,
                 fontSize: 19,
-                lineHeight: '28px',
-                color: '#101828',
+                lineHeight: "28px",
+                color: "#101828",
               }}
             >
               Delete this message?
@@ -1063,21 +1109,22 @@ function ConfirmDeleteModal({
             <p
               className="mt-2"
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 400,
                 fontSize: 14,
-                lineHeight: '20px',
-                color: '#717182',
+                lineHeight: "20px",
+                color: "#717182",
               }}
             >
-              &ldquo;{title}&rdquo; will be permanently removed. This cannot be undone.
+              &ldquo;{title}&rdquo; will be permanently removed. This cannot be
+              undone.
             </p>
           </div>
           <div
             className="flex items-center justify-end gap-3 px-6 py-4 mt-4"
             style={{
-              background: '#F9FAFB',
-              borderTop: '0.8px solid #E5E7EB',
+              background: "#F9FAFB",
+              borderTop: "0.8px solid #E5E7EB",
               borderBottomLeftRadius: 10,
               borderBottomRightRadius: 10,
             }}
@@ -1089,15 +1136,15 @@ function ConfirmDeleteModal({
               className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
               style={{
                 height: 36,
-                padding: '7.8px 15.8px',
+                padding: "7.8px 15.8px",
                 borderRadius: 8,
-                border: '1px solid rgba(0,0,0,0.1)',
-                background: '#FFFFFF',
-                fontFamily: 'Inter, sans-serif',
+                border: "1px solid rgba(0,0,0,0.1)",
+                background: "#FFFFFF",
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 500,
                 fontSize: 13.2,
-                lineHeight: '20px',
-                color: '#0A0A0A',
+                lineHeight: "20px",
+                color: "#0A0A0A",
               }}
             >
               Cancel
@@ -1109,22 +1156,22 @@ function ConfirmDeleteModal({
               className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
               style={{
                 height: 36,
-                padding: '8px 16px',
+                padding: "8px 16px",
                 borderRadius: 8,
-                background: '#E7000B',
-                fontFamily: 'Inter, sans-serif',
+                background: "#E7000B",
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 500,
                 fontSize: 14,
-                lineHeight: '20px',
-                color: '#FFFFFF',
+                lineHeight: "20px",
+                color: "#FFFFFF",
               }}
             >
               {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {deleting ? 'Deleting…' : 'Delete'}
+              {deleting ? "Deleting…" : "Delete"}
             </button>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

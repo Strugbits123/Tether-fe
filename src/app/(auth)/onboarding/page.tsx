@@ -1,5 +1,6 @@
 "use client"
 
+import posthog from 'posthog-js'
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
@@ -7,12 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
 import { createRecipient, getRecipients } from '@/lib/api/recipients'
 import { createReleaseManager, getReleaseManager } from '@/lib/api/release-managers'
-import {
-  getMessages,
-  createVideoUploadUrl,
-  createAudioUploadUrl,
-  confirmAudioUpload,
-} from '@/lib/api/messages'
+import { getMessages } from '@/lib/api/messages'
 import { requestDocUploadUrls, createDocumentsBatch } from '@/lib/api/documents'
 import { toRecipientRelationship, toReleaseManagerRelationship } from '@/lib/relationship'
 import Step1 from '@/components/onboarding/Step1'
@@ -34,9 +30,7 @@ async function getToken(): Promise<string | null> {
 const errorText = (err: unknown, fallback: string) =>
   err instanceof Error && err.message ? err.message : fallback
 
-const isMediaFile = (f: File) => f.type.startsWith('audio/') || f.type.startsWith('video/')
-
-/** Maps a browser MIME type to the document fileType the API accepts, or null if unsupported. */
+/** Maps a browser MIME type to the document fileType extension the API accepts, or null if unsupported. */
 function deriveDocFileType(mimeType: string): string | null {
   const map: Record<string, string> = {
     'application/pdf': 'pdf',
@@ -45,89 +39,69 @@ function deriveDocFileType(mimeType: string): string | null {
     'image/jpeg': 'jpg',
     'image/png': 'png',
     'image/heic': 'heic',
+    'audio/webm': 'webm',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/wav': 'wav',
+    'audio/ogg': 'ogg',
+    'audio/aac': 'aac',
+    'audio/x-m4a': 'm4a',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'video/x-msvideo': 'avi',
+    'video/mpeg': 'mpeg',
   }
   return map[mimeType] ?? null
 }
 
 /**
- * Uploads the files chosen on Step 5: documents go through the documents
- * upload-url + batch flow, while audio/video become messages. Everything is
- * assigned "assign_later" — recipients can be set later. Best-effort: a single
- * bad file won't abort the whole batch.
+ * Uploads all files chosen on Step 5 through the documents API.
+ * Audio and video now live in the documents vault instead of messages.
+ * Everything is assigned "assign_later" — recipients can be set later.
+ * Best-effort: a single failed file won't abort the whole batch.
  */
 async function uploadOnboardingFiles(token: string, files: File[]): Promise<void> {
-  const media = files.filter(isMediaFile)
-  const docs = files
-    .filter((f) => !isMediaFile(f))
+  const supported = files
     .map((file) => ({ file, fileType: deriveDocFileType(file.type) }))
     .filter((d): d is { file: File; fileType: string } => d.fileType !== null)
 
-  // Documents — request signed URLs, upload, then record the batch.
-  if (docs.length > 0) {
-    const uploadUrls = await requestDocUploadUrls(
-      token,
-      docs.map(({ file }) => ({
-        fileName: file.name,
-        fileType: file.type,
-        fileSizeBytes: file.size,
-      })),
-    )
-    const results = await Promise.allSettled(
-      uploadUrls.map(async (urlInfo) => {
-        const { file } = docs[urlInfo.fileIndex]
-        const res = await fetch(urlInfo.signedUploadUrl, {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': file.type },
-        })
-        if (!res.ok) throw new Error(`Upload failed for ${file.name}`)
-        return { urlInfo, file }
-      }),
-    )
-    const uploaded = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
-    if (uploaded.length > 0) {
-      await createDocumentsBatch(token, {
-        documents: uploaded.map(({ urlInfo, file }) => ({
-          storagePath: urlInfo.storagePath,
-          originalFilename: file.name,
-          fileType: deriveDocFileType(file.type) as string,
-          fileSizeBytes: file.size,
-        })),
-        assignments: ASSIGN_LATER,
-      })
-    }
-  }
+  if (supported.length === 0) return
 
-  // Audio / video — each becomes a message.
-  for (const file of media) {
-    if (file.type.startsWith('video/')) {
-      const { uploadUrl } = await createVideoUploadUrl(token, {
-        title: file.name || 'untitled',
-        assignments: ASSIGN_LATER,
-      })
-      const res = await fetch(uploadUrl, {
+  const uploadUrls = await requestDocUploadUrls(
+    token,
+    supported.map(({ file }) => ({
+      fileName: file.name,
+      fileType: file.type,
+      fileSizeBytes: file.size,
+    })),
+  )
+
+  const results = await Promise.allSettled(
+    uploadUrls.map(async (urlInfo) => {
+      const { file } = supported[urlInfo.fileIndex]
+      const res = await fetch(urlInfo.signedUploadUrl, {
         method: 'PUT',
         body: file,
         headers: { 'Content-Type': file.type },
       })
       if (!res.ok) throw new Error(`Upload failed for ${file.name}`)
-    } else {
-      const { signedUploadUrl, messageId } = await createAudioUploadUrl(token, {
-        title: file.name || 'untitled',
-        assignments: ASSIGN_LATER,
-        fileType: file.type,
-      })
-      const res = await fetch(signedUploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
-      })
-      if (!res.ok) throw new Error(`Upload failed for ${file.name}`)
-      await confirmAudioUpload(token, messageId, {
-        durationSeconds: 0,
+      return { urlInfo, file }
+    }),
+  )
+
+  const uploaded = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+  if (uploaded.length > 0) {
+    await createDocumentsBatch(token, {
+      documents: uploaded.map(({ urlInfo, file }) => ({
+        storagePath: urlInfo.storagePath,
+        originalFilename: file.name,
+        fileType: deriveDocFileType(file.type) as string,
         fileSizeBytes: file.size,
-      })
-    }
+        mimeType: file.type,
+      })),
+      assignments: ASSIGN_LATER,
+    })
   }
 }
 
@@ -168,7 +142,7 @@ export default function OnboardingPage() {
       try {
         setFetchedRecipients(await getRecipients(token))
       } catch { /* non-blocking — display-only */ }
-      // Only advance once the save actually succeeded.
+      posthog.capture('onboarding_step_completed', { step: 1, stepName: 'purposes' })
       setCurrentStep(2)
     } catch (err) {
       showToast(errorText(err, 'Could not save your selections. Please try again.'), 'error')
@@ -218,6 +192,7 @@ export default function OnboardingPage() {
           setReleaseManagerSaved(true)
         }
       } catch { /* non-blocking — display-only */ }
+      posthog.capture('onboarding_step_completed', { step: 2, stepName: 'add_recipients' })
       setCurrentStep(3)
     } catch (err) {
       showToast(errorText(err, 'Could not save your recipients. Please try again.'), 'error')
@@ -250,6 +225,7 @@ export default function OnboardingPage() {
         })
         setReleaseManagerSaved(true)
       }
+      posthog.capture('onboarding_step_completed', { step: 3, stepName: 'add_release_manager' })
       setCurrentStep(4)
     } catch (err) {
       showToast(errorText(err, 'Could not save your Release Manager. Please try again.'), 'error')
@@ -285,6 +261,7 @@ export default function OnboardingPage() {
         setFetchedMessages(msgs)
       }
     } catch { /* non-blocking */ }
+    posthog.capture('onboarding_step_completed', { step: 4, stepName: 'create_message' })
     setCurrentStep(5)
   }
 
@@ -332,6 +309,7 @@ export default function OnboardingPage() {
 
       await api.post('/users/onboarding/complete', {}, token)
 
+      posthog.capture('onboarding_step_completed', { step: 5, stepName: 'add_documents' })
       showToast('Welcome to Tether!', 'success')
       router.push('/dashboard?onboarded=true')
     } catch (err: any) {

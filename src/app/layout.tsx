@@ -1,8 +1,11 @@
 import type { Metadata } from 'next'
 import { Inter, Instrument_Serif } from 'next/font/google'
+import { Suspense } from 'react'
 import './globals.css'
 import { ToastProvider } from '@/lib/context/ToastContext'
 import { AuthProvider } from '@/lib/context/AuthContext'
+import PostHogProvider from '@/lib/posthog/PostHogProvider'
+import PostHogPageView from '@/lib/posthog/PostHogPageView'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -29,11 +32,16 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full font-sans bg-slate-50 text-slate-900 antialiased" suppressHydrationWarning>
-        <ToastProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </ToastProvider>
+        <PostHogProvider>
+          <Suspense fallback={null}>
+            <PostHogPageView />
+          </Suspense>
+          <ToastProvider>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </ToastProvider>
+        </PostHogProvider>
       </body>
     </html>
   )
