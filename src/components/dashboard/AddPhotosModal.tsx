@@ -63,6 +63,14 @@ const DOC_CATEGORIES = [
 
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/heic";
 const DOC_ACCEPT = ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic";
+const DOC_ALLOWED_MIME = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+]);
 const ONBOARDING_ACCEPT =
   ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,video/*,audio/*";
 const MAX_FILES = 10;
@@ -246,9 +254,20 @@ export default function AddPhotosModal({
       for (const f of incoming) {
         const key = `${f.name}::${f.size}::${f.lastModified}`;
         if (seen.has(key) && !isOnboarding) continue;
+        // Type check (drag-and-drop can bypass the picker's `accept` filter).
+        // Server-side validation is the source of truth; this is a UX layer.
+        if (isDoc && !isOnboarding) {
+          const okType =
+            DOC_ALLOWED_MIME.has(f.type) ||
+            /\.(pdf|docx?|jpe?g|png|heic)$/i.test(f.name);
+          if (!okType) {
+            errs.push("File type not supported");
+            continue;
+          }
+        }
         // In onboarding, allow audio/video without size check (backend limits apply)
         if (!isMediaFile(f) && f.size > maxBytes) {
-          errs.push(`${f.name} exceeds ${sizeLabel} limit`);
+          errs.push(isDoc ? "File exceeds 25MB limit" : `${f.name} exceeds ${sizeLabel} limit`);
           continue;
         }
         if (next.length >= maxAllowed) {
@@ -321,6 +340,23 @@ export default function AddPhotosModal({
     }
     if (isDoc && !category) {
       setErrors(["Please select a category."]);
+      return;
+    }
+    if (isDoc && !photoTitle.trim()) {
+      setErrors(["Title is required."]);
+      return;
+    }
+    // Photos (outside onboarding) must be assigned to at least one recipient
+    // (Assign Later counts) before they can be saved.
+    if (
+      !isDoc &&
+      !isOnboarding &&
+      selectedGroups.length === 0 &&
+      selectedIndividuals.length === 0
+    ) {
+      setErrors([
+        "Please select at least one recipient (or choose Assign Later).",
+      ]);
       return;
     }
 
@@ -405,6 +441,7 @@ export default function AddPhotosModal({
             fileType: deriveDocFileType(s.file.type),
             fileSizeBytes: s.file.size,
             mimeType: s.file.type,
+            title: photoTitle.trim(),
             category,
           })),
           note: notes || undefined,
@@ -746,7 +783,7 @@ export default function AddPhotosModal({
                 )}
 
                 {/* Title */}
-                {!isDoc && (
+                {(
                   <div className="flex flex-col gap-2">
                     <label
                       style={{
@@ -759,12 +796,16 @@ export default function AddPhotosModal({
                       }}
                     >
                       Title
+                      {isDoc && <span style={{ color: "#FB2C36" }}> *</span>}
                     </label>
                     <input
                       type="text"
                       value={photoTitle}
                       onChange={(e) => setPhotoTitle(e.target.value)}
-                      placeholder="e.g. Family reunion 2024"
+                      placeholder={
+                        isDoc ? "e.g. Insurance policy" : "e.g. Family reunion 2024"
+                      }
+                      maxLength={isDoc ? 150 : 120}
                       className="w-full focus:outline-none"
                       style={{
                         height: 44,
@@ -802,6 +843,7 @@ export default function AddPhotosModal({
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Add any additional information..."
                     rows={2}
+                    maxLength={isDoc ? 300 : 500}
                     className="w-full focus:outline-none resize-none"
                     style={{
                       minHeight: 64,
@@ -817,6 +859,18 @@ export default function AddPhotosModal({
                       color: "#0A0A0A",
                     }}
                   />
+                  <span
+                    className="self-end"
+                    style={{
+                      fontFamily: "Inter, sans-serif",
+                      fontWeight: 400,
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      color: "#99A1AF",
+                    }}
+                  >
+                    {notes.length}/{isDoc ? 300 : 500}
+                  </span>
                 </div>
 
                 {/* Recipients */}

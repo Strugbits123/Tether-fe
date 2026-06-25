@@ -72,8 +72,23 @@ export const getPhotos = (token: string, folderId?: string | null) => {
   return api.get<Photo[]>(`/photos${query}`, token);
 };
 
+export interface PhotoAssignment {
+  assignment_scope:
+    | "all"
+    | "group"
+    | "release_manager"
+    | "assign_later"
+    | "individual";
+  group_value: string | null;
+  recipient_id: string | null;
+}
+
+export interface PhotoDetail extends Photo {
+  assignments: PhotoAssignment[];
+}
+
 export const getPhoto = (token: string, id: string) =>
-  api.get<Photo>(`/photos/${id}`, token);
+  api.get<PhotoDetail>(`/photos/${id}`, token);
 
 export const updatePhoto = (
   token: string,
