@@ -5,6 +5,7 @@ import {
   BookOpen,
   FileText,
   Image,
+  Loader2,
   MessageSquare,
   Trash2,
   UserCheck,
@@ -154,6 +155,10 @@ export default function UnassignedPage() {
   const [assignTarget, setAssignTarget] = useState<UnassignedItem | null>(null);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { type: "single"; item: UnassignedItem } | { type: "bulk" } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = useCallback(async () => {
     const token = await getToken();
@@ -284,6 +289,18 @@ export default function UnassignedPage() {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.type === "single") await handleDelete(deleteTarget.item);
+      else await handleBulkDelete();
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
   const total = data?.counts.total ?? 0;
   const allSelected =
     !!data && data.items.length > 0 && selected.size === data.items.length;
@@ -390,7 +407,7 @@ export default function UnassignedPage() {
             </button>
             <button
               type="button"
-              onClick={handleBulkDelete}
+              onClick={() => setDeleteTarget({ type: "bulk" })}
               disabled={assigning}
               className="flex items-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-60"
               style={{
@@ -618,7 +635,7 @@ export default function UnassignedPage() {
 
                 <button
                   type="button"
-                  onClick={() => handleDelete(item)}
+                  onClick={() => setDeleteTarget({ type: "single", item })}
                   aria-label="Delete"
                   className="flex items-center justify-center cursor-pointer hover:bg-red-50 flex-shrink-0"
                   style={{
@@ -652,6 +669,146 @@ export default function UnassignedPage() {
         messageTitle={`${selected.size} selected item${selected.size !== 1 ? "s" : ""}`}
         onSave={handleBulkAssignSave}
       />
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          title={
+            deleteTarget.type === "bulk"
+              ? `Delete ${selected.size} item${selected.size !== 1 ? "s" : ""}?`
+              : "Delete this item?"
+          }
+          deleting={deleting}
+          onCancel={() => (deleting ? undefined : setDeleteTarget(null))}
+          onConfirm={confirmDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── delete confirmation modal ───────────────────────────── */
+
+function ConfirmDeleteModal({
+  title,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !deleting) onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onCancel, deleting]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: "rgba(0,0,0,0.4)" }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !deleting) onCancel();
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget && !deleting) onCancel();
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 400,
+            borderRadius: 10,
+            boxShadow:
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
+          }}
+        >
+          <div className="flex flex-col gap-5 px-6 py-6">
+            <div className="flex flex-col gap-2">
+              <h2
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
+                }}
+              >
+                {title}
+              </h2>
+              <p
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#717182",
+                }}
+              >
+                This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={deleting}
+                className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                style={{
+                  height: 36,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  color: "#0A0A0A",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onConfirm}
+                disabled={deleting}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 36,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  background: "#E7000B",
+                  opacity: deleting ? 0.5 : 1,
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  color: "#FFFFFF",
+                }}
+              >
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

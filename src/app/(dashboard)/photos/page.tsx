@@ -37,7 +37,7 @@ import {
   type Photo,
   type PhotoFolder,
 } from '@/lib/api/photos'
-import { buildAssignments } from '@/lib/utils/assignments'
+import { buildAssignments, assignmentsToSelection } from '@/lib/utils/assignments'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
 import AddPhotosModal from '@/components/dashboard/AddPhotosModal'
 
@@ -93,6 +93,7 @@ export default function PhotosPage() {
   const [editingFolder, setEditingFolder] = useState<PhotoFolder | null>(null)
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null)
   const [movingPhoto, setMovingPhoto] = useState<Photo | null>(null)
+  const [deletingPhoto, setDeletingPhoto] = useState<Photo | null>(null)
   const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null)
 
   const loadFolders = useCallback(async () => {
@@ -532,7 +533,7 @@ export default function PhotosPage() {
                   key={p.id}
                   photo={p}
                   onEdit={() => setEditingPhoto(p)}
-                  onDelete={() => handleDeletePhoto(p.id)}
+                  onDelete={() => setDeletingPhoto(p)}
                   onDownload={() => handleDownload(p.id)}
                   onMove={() => setMovingPhoto(p)}
                   onLightbox={() => handleOpenLightbox(p.id)}
@@ -546,7 +547,7 @@ export default function PhotosPage() {
                   key={p.id}
                   photo={p}
                   onEdit={() => setEditingPhoto(p)}
-                  onDelete={() => handleDeletePhoto(p.id)}
+                  onDelete={() => setDeletingPhoto(p)}
                   onDownload={() => handleDownload(p.id)}
                   onMove={() => setMovingPhoto(p)}
                 />
@@ -609,6 +610,155 @@ export default function PhotosPage() {
           onClose={() => setLightboxPhoto(null)}
         />
       )}
+
+      {deletingPhoto && (
+        <ConfirmDeletePhotoModal
+          onClose={() => setDeletingPhoto(null)}
+          onConfirm={async () => {
+            const id = deletingPhoto.id
+            setDeletingPhoto(null)
+            await handleDeletePhoto(id)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ---------------------- Delete confirmation ---------------------- */
+
+function ConfirmDeletePhotoModal({
+  onClose,
+  onConfirm,
+}: {
+  onClose: () => void
+  onConfirm: () => void | Promise<void>
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const handleConfirm = async () => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      await onConfirm()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 400,
+            borderRadius: 10,
+            boxShadow:
+              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <div className="flex flex-col gap-5 px-6 py-6">
+            <div className="flex flex-col gap-2">
+              <h2
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: '28px',
+                  letterSpacing: '-0.44px',
+                  color: '#101828',
+                }}
+              >
+                Delete this photo?
+              </h2>
+              <p
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#717182',
+                }}
+              >
+                This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={deleting}
+                className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#FFFFFF',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={deleting}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#E7000B',
+                  opacity: deleting ? 0.5 : 1,
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#FFFFFF',
+                }}
+              >
+                {deleting && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1685,9 +1835,13 @@ function EditPhotoModal({
   onClose: () => void
   onSave: (title: string, caption: string, groups: string[], individuals: string[]) => Promise<void>
 }) {
+  const TITLE_MAX = 120
+  const CAPTION_MAX = 500
+
   const [title, setTitle] = useState(photo.title || '')
   const [caption, setCaption] = useState(photo.caption || '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([])
   const [showIndividuals, setShowIndividuals] = useState(true)
@@ -1716,9 +1870,19 @@ function EditPhotoModal({
         const data = await getRecipients(token)
         if (active) setRecipients(data)
       } catch { /* non-fatal */ }
+      // Pre-fill the recipient selection from the photo's existing assignments
+      // so previously-chosen recipients show as selected on edit.
+      try {
+        const detail = await getPhoto(token, photo.id)
+        if (active) {
+          const { groups, individuals } = assignmentsToSelection(detail.assignments)
+          setSelectedGroups(groups)
+          setSelectedIndividuals(individuals)
+        }
+      } catch { /* non-fatal — selection just starts empty */ }
     })()
     return () => { active = false }
-  }, [])
+  }, [photo.id])
 
   const toggleGroup = (g: string) => {
     if (g === 'Assign Later') {
@@ -1744,6 +1908,15 @@ function EditPhotoModal({
 
   const handleSave = async () => {
     if (saving) return
+    if (!title.trim()) {
+      setError('Title is required.')
+      return
+    }
+    if (selectedGroups.length === 0 && selectedIndividuals.length === 0) {
+      setError('Please select at least one recipient (or choose Assign Later).')
+      return
+    }
+    setError(null)
     setSaving(true)
     try {
       await onSave(title, caption, selectedGroups, selectedIndividuals)
@@ -1816,13 +1989,14 @@ function EditPhotoModal({
                   color: '#0A0A0A',
                 }}
               >
-                Title
+                Title <span style={{ color: '#FB2C36' }}>*</span>
               </label>
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => { setTitle(e.target.value); if (error) setError(null) }}
                 placeholder="Photo title..."
+                maxLength={TITLE_MAX}
                 className="w-full focus:outline-none"
                 style={{
                   height: 44,
@@ -1858,6 +2032,7 @@ function EditPhotoModal({
                 onChange={(e) => setCaption(e.target.value)}
                 placeholder="Add a caption..."
                 rows={3}
+                maxLength={CAPTION_MAX}
                 className="w-full focus:outline-none resize-none"
                 style={{
                   minHeight: 80,
@@ -2013,6 +2188,20 @@ function EditPhotoModal({
                 </div>
               )}
             </div>
+
+            {error && (
+              <p
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 13,
+                  lineHeight: '18px',
+                  color: '#FB2C36',
+                }}
+              >
+                {error}
+              </p>
+            )}
 
             {/* Footer */}
             <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
