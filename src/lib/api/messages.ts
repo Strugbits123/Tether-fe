@@ -15,7 +15,6 @@ export interface Message {
   mux_playback_id?: string
   display_order: number
   created_at: string
-  audioSignedUrl?: string
   assignments?: MessageAssignment[]
 }
 
@@ -80,47 +79,6 @@ export const createTextMessage = (
     assignments: Assignment[]
   },
 ) => api.post<Message>('/messages', body, token)
-
-// Video — get Mux upload URL
-export const createVideoUploadUrl = (
-  token: string,
-  body: {
-    title: string
-    notes?: string
-    assignments: Assignment[]
-  },
-) =>
-  api.post<{ messageId: string; uploadUrl: string; muxUploadId: string }>(
-    '/messages/video/upload-url',
-    body,
-    token,
-  )
-
-// Audio — get Supabase Storage upload URL
-export const createAudioUploadUrl = (
-  token: string,
-  body: {
-    title: string
-    notes?: string
-    assignments: Assignment[]
-    fileType: string
-  },
-) =>
-  api.post<{ messageId: string; signedUploadUrl: string; storagePath: string }>(
-    '/messages/audio/upload-url',
-    body,
-    token,
-  )
-
-// Confirm audio upload
-export const confirmAudioUpload = (
-  token: string,
-  messageId: string,
-  body: {
-    durationSeconds: number
-    fileSizeBytes: number
-  },
-) => api.post<Message>(`/messages/${messageId}/confirm-upload`, body, token)
 
 // Poll processing status
 export const getMessageStatus = (token: string, messageId: string) =>

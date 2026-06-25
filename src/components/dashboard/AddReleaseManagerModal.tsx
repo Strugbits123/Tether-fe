@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -153,6 +154,7 @@ export default function AddReleaseManagerModal({
         relationship: toReleaseManagerRelationship(relationship),
         note: note.trim() || undefined,
       });
+      posthog.capture('release_manager_designated');
       showToast("Release Manager added successfully", "success");
       if (isOnboarding) {
         // Keep modal open — let user confirm and click Continue.

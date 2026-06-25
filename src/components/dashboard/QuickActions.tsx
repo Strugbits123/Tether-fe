@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { MessageSquare, FileText, Users, UserCheck, LucideIcon } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 import { notifyActivityChanged } from '@/lib/activity-helpers'
@@ -47,6 +48,7 @@ const actions: Action[] = [
 ]
 
 export default function QuickActions() {
+  const router = useRouter()
   const { refreshProfile } = useAuth()
   const [openAction, setOpenAction] = useState<ActionKey | null>(null)
 
@@ -105,7 +107,8 @@ export default function QuickActions() {
         {/* Highlighted: See Unassigned Content */}
         <button
           type="button"
-          className="flex items-center gap-3 rounded-[14px] p-4 text-left transition-colors hover:brightness-95"
+          onClick={() => router.push('/unassigned')}
+          className="flex items-center gap-3 rounded-[14px] p-4 text-left transition-colors hover:brightness-95 cursor-pointer"
           style={{
             background: '#FFFBEB',
             borderTop: '2px solid #FEE685',

@@ -8,7 +8,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { FiArrowLeft, FiLock } from 'react-icons/fi'
 import { HiOutlineSparkles } from 'react-icons/hi'
 import { createClient } from '@/lib/supabase/client'
-import { api } from '@/lib/api/client'
+import { api, ApiError } from '@/lib/api/client'
 
 /* ─── Allowed modes ─── */
 const VALID_MODES = ['signin', 'signup'] as const
@@ -117,49 +117,59 @@ function MainAuthForm({
     try {
       const supabase = createClient()
       if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-            data: { first_name: firstName, last_name: lastName },
-          },
-        })
-        if (error) {
+        let signupData: {
+          user_id: string | null
+          session: { access_token: string; refresh_token: string; expires_at: number } | null
+        }
+        try {
+          signupData = await api.post('/auth/signup', {
+            email,
+            password,
+            first_name: firstName,
+            last_name: lastName,
+          })
+        } catch (err) {
           setFormError(
-            error.message.toLowerCase().includes('already registered')
+            err instanceof ApiError && err.statusCode === 409
               ? DUPLICATE_EMAIL_MESSAGE
-              : error.message,
+              : err instanceof ApiError
+                ? err.message
+                : 'Something went wrong. Please try again.',
           )
           return
         }
-        // Supabase returns a user with an EMPTY identities array when the email is
-        // already registered & confirmed (anti-enumeration). Treat that as a duplicate.
-        if (data.user && (data.user.identities?.length ?? 0) === 0) {
-          setFormError(DUPLICATE_EMAIL_MESSAGE)
-          return
-        }
-        // Brand-new, already-active account (email confirmation disabled in Supabase) —
-        // a session exists immediately, so go straight into onboarding.
-        if (data.session) {
+        if (signupData.session) {
+          await supabase.auth.setSession({
+            access_token: signupData.session.access_token,
+            refresh_token: signupData.session.refresh_token,
+          })
           router.push('/onboarding')
           return
         }
-        // Otherwise the account is unconfirmed — either a fresh signup or an
-        // unconfirmed re-signup (Supabase re-sends the confirmation, identities > 0,
-        // email_verified false). Never the dashboard: send them to verify their email.
         router.push(`/verify-email?email=${encodeURIComponent(email)}`)
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) {
-          setFormError('Invalid email or password')
-          return
+        let loginData: {
+          access_token: string
+          refresh_token: string
+          expires_at: number
+          user: { id: string; email: string }
         }
         try {
-          await api.post('/auth/login', { email, password })
-        } catch {
-          // Non-blocking — login still works via Supabase
+          loginData = await api.post('/auth/login', { email, password })
+        } catch (err) {
+          setFormError(
+            err instanceof ApiError && err.statusCode === 401
+              ? 'Invalid email or password'
+              : err instanceof ApiError
+                ? err.message
+                : 'Something went wrong. Please try again.',
+          )
+          return
         }
+        await supabase.auth.setSession({
+          access_token: loginData.access_token,
+          refresh_token: loginData.refresh_token,
+        })
         showToast('Welcome back to Tether!', 'success')
         router.push('/dashboard')
       }
@@ -447,18 +457,7 @@ function MagicLinkForm({
     }
     setLoading(true)
     try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-          shouldCreateUser: false,
-        },
-      })
-      if (error) {
-        showToast(error.message, 'error')
-        return
-      }
+      await api.post('/auth/magic-link', { email })
       onSent(email)
     } catch (err: any) {
       showToast(err.message || 'Failed to send magic link', 'error')
@@ -798,14 +797,7 @@ function ForgotPasswordForm({
     }
     setLoading(true)
     try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      })
-      if (error) {
-        showToast(error.message, 'error')
-        return
-      }
+      await api.post('/auth/reset-password', { email })
       onSent(email)
     } catch (err: any) {
       showToast(err.message || 'Failed to send reset email', 'error')
@@ -971,23 +963,11 @@ export default function AuthModePage({
   }
 
   const resendMagicLink = async () => {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOtp({
-      email: flowEmail,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        shouldCreateUser: false,
-      },
-    })
-    if (error) throw new Error(error.message)
+    await api.post('/auth/magic-link', { email: flowEmail })
   }
 
   const resendResetLink = async () => {
-    const supabase = createClient()
-    const { error } = await supabase.auth.resetPasswordForEmail(flowEmail, {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    })
-    if (error) throw new Error(error.message)
+    await api.post('/auth/reset-password', { email: flowEmail })
   }
 
   return (

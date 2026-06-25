@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
 import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { api } from '@/lib/api/client'
+import { api, ApiError } from '@/lib/api/client'
 
 function RegisterForm() {
   const router = useRouter()
@@ -63,41 +63,61 @@ function RegisterForm() {
     try {
       const supabase = createClient()
       if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-            data: { first_name: firstName, last_name: lastName },
-          },
-        })
-        if (error) {
-          if (error.message.toLowerCase().includes('already registered')) {
-            showToast('An account with this email already exists.', 'error')
-          } else {
-            showToast(error.message, 'error')
-          }
+        let signupData: {
+          user_id: string | null
+          session: { access_token: string; refresh_token: string; expires_at: number } | null
+        }
+        try {
+          signupData = await api.post('/auth/signup', {
+            email,
+            password,
+            first_name: firstName,
+            last_name: lastName,
+          })
+        } catch (err) {
+          showToast(
+            err instanceof ApiError && err.statusCode === 409
+              ? 'An account with this email already exists.'
+              : err instanceof ApiError
+                ? err.message
+                : 'Something went wrong. Please try again.',
+            'error',
+          )
           return
         }
-        // Email confirmation disabled in Supabase — session exists immediately
-        if (data.session) {
+        if (signupData.session) {
+          await supabase.auth.setSession({
+            access_token: signupData.session.access_token,
+            refresh_token: signupData.session.refresh_token,
+          })
           router.push('/onboarding')
           return
         }
-        // Email confirmation required (or duplicate unconfirmed email — Supabase
-        // returns user: null, session: null with no error in that case)
         router.push(`/verify-email?email=${encodeURIComponent(email)}`)
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) {
-          showToast('Invalid email or password', 'error')
-          return
+        let loginData: {
+          access_token: string
+          refresh_token: string
+          expires_at: number
+          user: { id: string; email: string }
         }
         try {
-          await api.post('/auth/login', { email, password })
-        } catch {
-          // Non-blocking — login still works via Supabase
+          loginData = await api.post('/auth/login', { email, password })
+        } catch (err) {
+          showToast(
+            err instanceof ApiError && err.statusCode === 401
+              ? 'Invalid email or password'
+              : err instanceof ApiError
+                ? err.message
+                : 'Something went wrong. Please try again.',
+            'error',
+          )
+          return
         }
+        await supabase.auth.setSession({
+          access_token: loginData.access_token,
+          refresh_token: loginData.refresh_token,
+        })
         showToast('Welcome back to Tether!', 'success')
         router.push('/dashboard')
       }
