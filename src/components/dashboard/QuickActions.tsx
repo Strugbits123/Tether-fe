@@ -107,7 +107,7 @@ export default function QuickActions() {
         {/* Highlighted: See Unassigned Content */}
         <button
           type="button"
-          onClick={() => router.push('/documents?filter=unassigned')}
+          onClick={() => router.push('/unassigned')}
           className="flex items-center gap-3 rounded-[14px] p-4 text-left transition-colors hover:brightness-95 cursor-pointer"
           style={{
             background: '#FFFBEB',
