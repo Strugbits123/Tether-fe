@@ -105,9 +105,9 @@ const RECIPIENT_GROUP_ROWS = [
 const RECIPIENT_OPTIONS: Record<string, Assignment> = {
   "All recipients": { scope: "all" },
   "All family": { scope: "group", groupValue: "family" },
-  "All friends": { scope: "group", groupValue: "friends" },
+  "All friends": { scope: "group", groupValue: "friend" },
   "Release Manager": { scope: "release_manager" },
-  "All Others": { scope: "group", groupValue: "others" },
+  "All Others": { scope: "group", groupValue: "other" },
   "Assign later": { scope: "assign_later" },
 };
 

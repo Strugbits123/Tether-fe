@@ -48,9 +48,10 @@ export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
         audience.push('All recipients')
         break
       case 'group':
+        // Accept both the current singular values and legacy plural data.
         if (a.group_value === 'family') audience.push('All family')
-        else if (a.group_value === 'friends') audience.push('All friends')
-        else if (a.group_value === 'others') audience.push('All Others')
+        else if (a.group_value === 'friend' || a.group_value === 'friends') audience.push('All friends')
+        else if (a.group_value === 'other' || a.group_value === 'others') audience.push('All Others')
         break
       case 'release_manager':
         audience.push('Release Manager')

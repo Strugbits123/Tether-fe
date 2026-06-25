@@ -174,8 +174,8 @@ function assignmentsToSelections(assignments: DocumentDetail['assignments']): {
       groups.push(SCOPE_TO_GROUP[a.assignment_scope])
     } else if (a.assignment_scope === 'group') {
       if (a.group_value === 'family') groups.push('All Family')
-      else if (a.group_value === 'friends') groups.push('All Friends')
-      else if (a.group_value === 'others') groups.push('All Others')
+      else if (a.group_value === 'friend' || a.group_value === 'friends') groups.push('All Friends')
+      else if (a.group_value === 'other' || a.group_value === 'others') groups.push('All Others')
     } else if (a.assignment_scope === 'individual' && a.recipient_id) {
       individuals.push(a.recipient_id)
     }
