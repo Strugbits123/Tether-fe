@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Eye,
   FileText,
   Loader2,
   Mic,
@@ -168,6 +169,7 @@ export default function MessagesPage() {
   const [confirmDelete, setConfirmDelete] = useState<Message | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [playing, setPlaying] = useState<Message | null>(null);
+  const [reading, setReading] = useState<Message | null>(null);
 
   const load = useCallback(async () => {
     const token = await getToken();
@@ -287,6 +289,20 @@ export default function MessagesPage() {
       setEditing(full);
     } catch {
       setEditing(m);
+    }
+  };
+
+  const handleRead = async (m: Message) => {
+    const token = await getToken();
+    if (!token) {
+      setReading(m);
+      return;
+    }
+    try {
+      const full = await getMessage(token, m.id);
+      setReading(full);
+    } catch {
+      setReading(m);
     }
   };
 
@@ -531,6 +547,7 @@ export default function MessagesPage() {
               onAssign={() => handleAssign(m)}
               onDelete={() => setConfirmDelete(m)}
               onPlay={() => setPlaying(m)}
+              onRead={() => handleRead(m)}
             />
           ))}
         </div>
@@ -581,6 +598,28 @@ export default function MessagesPage() {
         <PlaybackModal message={playing} onClose={() => setPlaying(null)} />
       )}
 
+      {reading && (
+        <CreateMessageModal
+          open={!!reading}
+          onClose={() => setReading(null)}
+          headerTitle={reading.title}
+          readOnly
+          initialMessage={{
+            id: reading.id,
+            ...assignmentsToAudience(reading.assignments),
+            messageType:
+              reading.type === "text"
+                ? "write"
+                : reading.type === "video"
+                  ? "video"
+                  : "audio",
+            title: reading.title,
+            notes: reading.notes ?? "",
+            body: reading.body ?? "",
+          }}
+        />
+      )}
+
       {confirmDelete && (
         <ConfirmDeleteModal
           title={confirmDelete.title}
@@ -601,12 +640,14 @@ function MessageCard({
   onAssign,
   onDelete,
   onPlay,
+  onRead,
 }: {
   item: Message;
   onEdit: () => void;
   onAssign: () => void;
   onDelete: () => void;
   onPlay: () => void;
+  onRead: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -764,6 +805,18 @@ function MessageCard({
                 onClick={() => {
                   setMenuOpen(false);
                   onPlay();
+                }}
+              />
+            )}
+            {item.type === "text" && (
+              <MenuItem
+                icon={
+                  <Eye className="w-4 h-4 text-[#364153]" strokeWidth={2} />
+                }
+                label="Read message"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onRead();
                 }}
               />
             )}

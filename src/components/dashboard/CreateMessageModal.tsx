@@ -334,11 +334,21 @@ export default function CreateMessageModal({
   }
 
   // Fresh "New Message" flow → the 3-step wizard (type → content → details).
-  // Edit mode (initialMessage) and onboarding deep-links (initialStep) keep the
-  // legacy setup/record/write flow below.
   if (!initialMessage && !initialStep) {
     return (
       <CreateWizard headerTitle={headerTitle} onClose={handleClose} onCreated={onCreated} />
+    )
+  }
+
+  // Edit mode → EditWizard (same wizard UI as CreateWizard but skips TypeStep).
+  if (initialMessage && onSave) {
+    return (
+      <EditWizard
+        headerTitle={headerTitle}
+        initialMessage={initialMessage}
+        onSave={onSave}
+        onClose={handleClose}
+      />
     )
   }
 
@@ -506,12 +516,30 @@ function ReadOnlyMessage({
 
           {/* Header */}
           <div className="px-6 py-6 pr-12 sm:pr-14" style={{ borderBottom: '0.8px solid #E5E7EB' }}>
-            <h2 style={{ fontWeight: 700, fontSize: 23, lineHeight: '32px', color: '#101828' }}>
-              {headerTitle}
-            </h2>
-            <p style={{ fontWeight: 400, fontSize: 12.9, lineHeight: '20px', color: '#4A5565' }}>
+            <p
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 10.5,
+                letterSpacing: '1.4px',
+                textTransform: 'uppercase',
+                color: '#9CA3AF',
+                marginBottom: 4,
+              }}
+            >
               {typeLabel}
             </p>
+            <h2
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 700,
+                fontSize: 22,
+                lineHeight: '30px',
+                color: '#101828',
+              }}
+            >
+              {headerTitle}
+            </h2>
           </div>
 
           {/* Body */}
@@ -551,7 +579,7 @@ function ReadOnlyMessage({
                   Message
                 </span>
                 <div
-                  className="[&_ul]:list-disc [&_ul]:pl-7 [&_ol]:list-decimal [&_ol]:pl-7 overflow-y-auto"
+                  className="[&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-2 [&_li]:mb-1 [&_blockquote]:ml-10 overflow-y-auto"
                   style={{
                     maxHeight: 320,
                     borderRadius: 10,
@@ -2028,103 +2056,120 @@ function WriteMessageStep({
 
   return (
     <>
-      {/* Header */}
+      {/* Header — editorial style matching reference */}
       <div
-        className="px-6 sm:px-8 pt-7 pb-5 pr-12 sm:pr-14"
+        className="px-6 sm:px-8 pt-6 pb-5 pr-12 sm:pr-14"
         style={{ borderBottom: '0.8px solid #E5E7EB' }}
       >
+        <p
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 600,
+            fontSize: 10.5,
+            letterSpacing: '1.4px',
+            textTransform: 'uppercase',
+            color: '#9CA3AF',
+            marginBottom: 4,
+          }}
+        >
+          Written message for
+        </p>
         <h2
           style={{
             fontFamily: 'Inter, sans-serif',
             fontWeight: 700,
-            fontSize: 23,
-            lineHeight: '32px',
+            fontSize: 22,
+            lineHeight: '30px',
             color: '#101828',
           }}
         >
-          Write Message for {recipient}
+          {recipient}
+          {messageTitle.trim() && (
+            <span
+              style={{
+                fontWeight: 400,
+                fontStyle: 'italic',
+                color: '#6B7280',
+                marginLeft: 8,
+              }}
+            >
+              · {messageTitle}
+            </span>
+          )}
         </h2>
-        <p
-          style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 400,
-            fontSize: 12.9,
-            lineHeight: '20px',
-            color: '#4A5565',
-          }}
-        >
-          Your message will be preserved forever
-        </p>
       </div>
 
-      <div className="px-6 sm:px-8 pt-5 flex flex-col gap-4">
-        {/* Title row */}
+      <div className="px-6 sm:px-8 pt-5 flex flex-col gap-3">
+        {/* Title — large, clean heading input */}
         <input
           type="text"
           value={messageTitle}
           onChange={(e) => setMessageTitle(e.target.value)}
-          placeholder="Growing Up in Chicago"
+          placeholder="Give your message a title…"
           className="w-full focus:outline-none"
           style={{
-            height: 36,
-            borderRadius: 8,
-            background: '#F3F3F5',
-            padding: '4px 20px',
             fontFamily: 'Georgia, serif',
             fontWeight: 700,
-            fontSize: 14,
-            lineHeight: '20px',
-            color: '#0A0A0A',
+            fontSize: 22,
+            lineHeight: '30px',
+            color: '#101828',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: '1.5px solid #E5E7EB',
+            paddingBottom: 8,
           }}
         />
 
-        {/* Notes row — shown only when notes were added in setup */}
+        {/* Notes row — only when notes were added upstream */}
         {messageNotes.trim().length > 0 && (
           <textarea
             value={messageNotes}
             onChange={(e) => setMessageNotes(e.target.value)}
-            placeholder="Add any additional information..."
+            placeholder="Add any additional notes…"
             rows={2}
             className="w-full focus:outline-none resize-none"
             style={{
-              minHeight: 36,
-              borderRadius: 8,
-              background: '#F3F3F5',
-              padding: '8px 20px',
               fontFamily: 'Inter, sans-serif',
               fontWeight: 400,
-              fontSize: 14,
+              fontSize: 13,
               lineHeight: '20px',
-              letterSpacing: '-0.15px',
-              color: '#0A0A0A',
+              color: '#4A5565',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '1px solid #E5E7EB',
+              paddingBottom: 6,
             }}
           />
         )}
 
-        {/* Toolbar */}
+        {/* Toolbar — contained in a light bar */}
         <div
-          className="flex flex-wrap items-center gap-1 pb-2"
-          style={{ borderBottom: '1.25px solid #E5E7EB' }}
+          className="flex flex-wrap items-center gap-0.5 px-2 py-1.5"
+          style={{
+            background: '#F3F4F6',
+            borderRadius: 8,
+            border: '1px solid #E5E7EB',
+          }}
         >
           <ToolbarBtn onClick={() => exec('bold')} active={active.bold} label="Bold">
-            <Bold className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <Bold className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn onClick={() => exec('italic')} active={active.italic} label="Italic">
-            <Italic className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <Italic className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn
             onClick={() => exec('underline')}
             active={active.underline}
             label="Underline"
           >
-            <Underline className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <Underline className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn
             onClick={() => exec('strikeThrough')}
             active={active.strikeThrough}
             label="Strikethrough"
           >
-            <Strikethrough className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <Strikethrough className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
 
           <Divider />
@@ -2134,21 +2179,21 @@ function WriteMessageStep({
             active={active.justifyLeft}
             label="Align left"
           >
-            <AlignLeft className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <AlignLeft className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn
             onClick={() => exec('justifyCenter')}
             active={active.justifyCenter}
             label="Align center"
           >
-            <AlignCenter className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <AlignCenter className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn
             onClick={() => exec('justifyRight')}
             active={active.justifyRight}
             label="Align right"
           >
-            <AlignRight className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <AlignRight className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
 
           <Divider />
@@ -2158,23 +2203,23 @@ function WriteMessageStep({
             active={active.insertUnorderedList}
             label="Bulleted list"
           >
-            <List className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <List className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn
             onClick={() => exec('insertOrderedList')}
             active={active.insertOrderedList}
             label="Numbered list"
           >
-            <ListOrdered className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <ListOrdered className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
 
           <Divider />
 
           <ToolbarBtn onClick={() => adjustIndent(-1)} label="Decrease indent">
-            <Outdent className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <Outdent className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
           <ToolbarBtn onClick={() => adjustIndent(1)} label="Increase indent">
-            <Indent className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2.25} />
+            <Indent className="w-4 h-4 text-[#374151]" strokeWidth={2.25} />
           </ToolbarBtn>
 
           <Divider />
@@ -2182,7 +2227,7 @@ function WriteMessageStep({
           <ColorPicker onPick={(color) => exec('foreColor', color)} />
         </div>
 
-        {/* Editor */}
+        {/* Editor — clean, borderless feel */}
         <div
           ref={editorRef}
           contentEditable
@@ -2191,59 +2236,23 @@ function WriteMessageStep({
           onKeyUp={refreshActive}
           onMouseUp={refreshActive}
           className="w-full focus:outline-none overflow-y-auto [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-2 [&_li]:mb-1 [&_blockquote]:ml-10 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
-          data-placeholder="Growing up in Chicago during the 1960s and 70s was an experience that shaped everything I became…"
+          data-placeholder="Start writing your message…"
           style={{
-            minHeight: 274,
-            maxHeight: 360,
-            borderRadius: 10,
-            border: '1.25px solid #E5E7EB',
+            minHeight: 240,
+            maxHeight: 340,
+            borderRadius: 8,
+            border: '1px solid #E5E7EB',
             background: '#FFFFFF',
-            padding: '16px',
+            padding: '14px 16px',
             fontFamily: 'Georgia, serif',
             fontWeight: 400,
             fontSize: 16,
-            lineHeight: '26px',
+            lineHeight: '28px',
             color: '#101828',
-            boxShadow:
-              '0px 1px 2px -1px rgba(0,0,0,0.1), 0px 1px 3px 0px rgba(0,0,0,0.1)',
             scrollbarWidth: 'thin',
             scrollbarColor: '#D1D5DC transparent',
           }}
         />
-
-        {/* Word count / last saved */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-[#6A7282]" strokeWidth={2} />
-            <span
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: '#6A7282',
-              }}
-            >
-              {wordCount} words
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#6A7282]" strokeWidth={2} />
-            <span
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: '#6A7282',
-              }}
-            >
-              {lastSaved ? `Last saved: ${lastSaved}` : 'Not saved yet'}
-            </span>
-          </div>
-        </div>
 
         {formError && (
           <p
@@ -2260,57 +2269,87 @@ function WriteMessageStep({
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer — word count left, actions right */}
       <div
-        className="flex flex-wrap items-center justify-end gap-3 mt-6"
+        className="flex items-center justify-between flex-wrap gap-3 mt-4"
         style={{
           background: '#F9FAFB',
           borderTop: '0.8px solid #E5E7EB',
-          padding: '15px 40px',
+          padding: '12px 24px 12px 28px',
           borderBottomLeftRadius: 16,
           borderBottomRightRadius: 16,
         }}
       >
-        <button
-          type="button"
-          onClick={onCancel}
-          className="cursor-pointer hover:bg-gray-50"
-          style={{
-            width: 77.6,
-            height: 36,
-            padding: '7.8px 15.8px',
-            borderRadius: 8,
-            border: '1px solid rgba(0,0,0,0.1)',
-            background: '#FFFFFF',
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 500,
-            fontSize: 13.2,
-            lineHeight: '20px',
-            color: '#0A0A0A',
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSaveClick}
-          disabled={saving}
-          className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
-          style={{
-            height: 36,
-            padding: '8px 16px',
-            borderRadius: 8,
-            background: '#4F46E5',
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 500,
-            fontSize: 14,
-            lineHeight: '20px',
-            color: '#FFFFFF',
-          }}
-        >
-          {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-          {saving ? 'Saving…' : 'Save and Continue'}
-        </button>
+        {/* Left: word count + last saved */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-[#9CA3AF]" strokeWidth={2} />
+            <span
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                color: '#9CA3AF',
+              }}
+            >
+              {wordCount} words
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-[#9CA3AF]" strokeWidth={2} />
+            <span
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                color: '#9CA3AF',
+              }}
+            >
+              {lastSaved ? `Saved ${lastSaved}` : 'Not saved yet'}
+            </span>
+          </div>
+        </div>
+
+        {/* Right: Cancel + Save */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="cursor-pointer hover:bg-gray-100"
+            style={{
+              height: 36,
+              padding: '0 16px',
+              borderRadius: 8,
+              border: '1px solid rgba(0,0,0,0.1)',
+              background: '#FFFFFF',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 14,
+              color: '#374151',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveClick}
+            disabled={saving}
+            className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-80 disabled:cursor-not-allowed"
+            style={{
+              height: 36,
+              padding: '0 18px',
+              borderRadius: 8,
+              background: '#4F46E5',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 14,
+              color: '#FFFFFF',
+            }}
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving ? 'Saving…' : 'Save and Continue'}
+          </button>
+        </div>
       </div>
     </>
   )
@@ -2716,6 +2755,167 @@ function CreateWizard({
   )
 }
 
+function EditWizard({
+  headerTitle,
+  initialMessage,
+  onSave,
+  onClose,
+}: {
+  headerTitle: string
+  initialMessage: EditableMessage
+  onSave: (message: EditableMessage) => void | Promise<void>
+  onClose: () => void
+}) {
+  const startStep = initialMessage.messageType === 'write' ? 'content' : 'details'
+  const [step, setStep] = useState<'content' | 'details'>(startStep)
+
+  const [body, setBody] = useState(initialMessage.body ?? '')
+  const [title, setTitle] = useState(initialMessage.title)
+  const [notes, setNotes] = useState(initialMessage.notes)
+  const [audience, setAudience] = useState<string[]>(initialMessage.audience)
+  const [individuals, setIndividuals] = useState<string[]>(
+    initialMessage.selectedIndividualIds ?? [],
+  )
+
+  const [recipients, setRecipients] = useState<Recipient[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const data = await getRecipients(token)
+        if (active) setRecipients(data)
+      } catch {
+        /* non-fatal */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const handleSave = async () => {
+    if (submitting) return
+    setError(null)
+    setSubmitting(true)
+    try {
+      await onSave({
+        id: initialMessage.id,
+        audience,
+        selectedIndividualIds: individuals,
+        messageType: initialMessage.messageType,
+        title,
+        notes,
+        body,
+      })
+      onClose()
+    } catch {
+      setError('Could not save. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const maxWidth = step === 'content' ? 775 : 672
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth,
+            borderRadius: 16,
+            paddingBottom: 24,
+            boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.25)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute cursor-pointer top-5 right-5 sm:top-6 sm:right-6 z-10"
+            style={{ width: 22, height: 22, opacity: 0.7 }}
+          >
+            <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
+          </button>
+
+          {step === 'content' && initialMessage.messageType === 'write' && (
+            <WriteMessageStep
+              recipient="your loved one"
+              initialTitle={title}
+              initialNotes={notes}
+              initialBody={body}
+              saving={submitting}
+              onCancel={onClose}
+              onSave={(data) => {
+                setTitle(data.title)
+                setNotes(data.notes)
+                setBody(data.body)
+                setStep('details')
+              }}
+            />
+          )}
+
+          {step === 'details' && (
+            <DetailsStep
+              type={initialMessage.messageType}
+              title={title}
+              setTitle={setTitle}
+              notes={notes}
+              setNotes={setNotes}
+              audience={audience}
+              setAudience={setAudience}
+              selectedIndividualIds={individuals}
+              setSelectedIndividualIds={setIndividuals}
+              recipients={recipients}
+              submitting={submitting}
+              uploadStatus=""
+              error={error}
+              onBack={
+                initialMessage.messageType === 'write'
+                  ? () => setStep('content')
+                  : onClose
+              }
+              onSubmit={handleSave}
+              submitLabel="Save Changes"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TypeStep({
   headerTitle,
   initialType,
@@ -2832,6 +3032,7 @@ function DetailsStep({
   error,
   onBack,
   onSubmit,
+  submitLabel,
 }: {
   type: MessageType
   title: string
@@ -2848,6 +3049,7 @@ function DetailsStep({
   error: string | null
   onBack: () => void
   onSubmit: () => void
+  submitLabel?: string
 }) {
   const [titleError, setTitleError] = useState<string | null>(null)
   const [showIndividuals, setShowIndividuals] = useState(selectedIndividualIds.length > 0)
@@ -3195,9 +3397,7 @@ function DetailsStep({
           {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
           {submitting
             ? uploadStatus || 'Saving…'
-            : type === 'write'
-            ? 'Save Message'
-            : 'Save and Upload'}
+            : submitLabel ?? (type === 'write' ? 'Save Message' : 'Save and Upload')}
         </button>
       </div>
     </>

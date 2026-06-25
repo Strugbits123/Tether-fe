@@ -27,8 +27,8 @@ const SPEEDS = [1, 1.5, 2, 0.5];
 // Match the audio player's palette: purple progress (#7C3AED), red play
 // button + seek handle (#EF4444), neutral-gray transport icons.
 const ACCENT = "#7C3AED";
-const PLAY_RED = "#EF4444";
-const PLAY_GLOW = "0 0 16px 2px rgba(239,68,68,0.5)";
+const PLAY_RED = "#7C3AED";
+const PLAY_GLOW = "0 0 16px 2px rgba(124,58,237,0.5)";
 const ICON_GRAY = "#374151";
 
 function formatTime(sec: number): string {
@@ -251,6 +251,7 @@ export default function VideoPlayer({
           className="video-seek flex-1"
           style={{
             background: `linear-gradient(to right, ${ACCENT} ${seekPercent}%, #E5E7EB ${seekPercent}%)`,
+            accentColor: "#7C3AED",
           }}
         />
         <span
@@ -268,7 +269,7 @@ export default function VideoPlayer({
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: PLAY_RED,
+              background: ACCENT,
               display: "inline-block",
             }}
           />

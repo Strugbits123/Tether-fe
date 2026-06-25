@@ -61,7 +61,7 @@ export default function AudioPlayer({
       height: 60,
       waveColor: "#D1D5DB",
       progressColor: "#7C3AED",
-      cursorColor: "#EF4444",
+      cursorColor: "#7C3AED",
       cursorWidth: 2,
       barWidth: 3,
       barGap: 2,
@@ -122,21 +122,35 @@ export default function AudioPlayer({
       <div className="flex items-center" style={{ gap: 20 }}>
         {/* Vinyl record */}
         <div
-          className={`flex-shrink-0 ${isPlaying ? "vinyl-spin" : ""}`}
+          className={`flex-shrink-0 vinyl-disc ${isPlaying ? "vinyl-spin" : ""}`}
           style={{
+            position: "relative",
             width: 88,
             height: 88,
             borderRadius: "50%",
             background:
-              "repeating-radial-gradient(circle at center, #5B21B6 0px, #5B21B6 2px, #6D28D9 3px, #6D28D9 5px)",
+              "conic-gradient(from 0deg, #2e1065 0deg, #4c1d95 30deg, #6d28d9 60deg, #7c3aed 90deg, #a78bfa 110deg, #7c3aed 130deg, #5b21b6 160deg, #3730a3 190deg, #4338ca 220deg, #6d28d9 260deg, #a78bfa 290deg, #6d28d9 320deg, #2e1065 360deg)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(76,29,149,0.35)",
+            boxShadow: "0 2px 12px rgba(109,40,217,0.5)",
           }}
         >
+          {/* inner radial overlay for depth */}
+          <div
+            style={{
+              position: "absolute",
+              width: 88,
+              height: 88,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 38% 38%, rgba(167,139,250,0.35) 0%, transparent 55%), radial-gradient(circle at center, rgba(30,27,75,0.4) 30%, transparent 70%)",
+              pointerEvents: "none",
+            }}
+          />
           <span
             style={{
+              position: "relative",
               width: 14,
               height: 14,
               borderRadius: "50%",
@@ -197,7 +211,8 @@ export default function AudioPlayer({
         aria-label="Seek"
         className="seek-range w-full"
         style={{
-          background: `linear-gradient(to right, #EF4444 ${seekPercent}%, #E5E7EB ${seekPercent}%)`,
+          background: `linear-gradient(to right, #7C3AED ${seekPercent}%, #E5E7EB ${seekPercent}%)`,
+          accentColor: "#7C3AED",
         }}
       />
 
@@ -241,8 +256,8 @@ export default function AudioPlayer({
               width: 56,
               height: 56,
               borderRadius: "50%",
-              background: "#EF4444",
-              boxShadow: "0 0 16px 2px rgba(239,68,68,0.5)",
+              background: "#7C3AED",
+              boxShadow: "0 0 16px 2px rgba(124,58,237,0.5)",
             }}
           >
             {isPlaying ? (
@@ -344,7 +359,7 @@ export default function AudioPlayer({
           width: 14px;
           height: 14px;
           border-radius: 50%;
-          background: #ef4444;
+          background: #7c3aed;
           border: 2px solid #ffffff;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
           cursor: pointer;
@@ -353,7 +368,7 @@ export default function AudioPlayer({
           width: 14px;
           height: 14px;
           border-radius: 50%;
-          background: #ef4444;
+          background: #7c3aed;
           border: 2px solid #ffffff;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
           cursor: pointer;
