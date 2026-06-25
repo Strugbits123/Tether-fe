@@ -235,7 +235,7 @@ const FEATURES: Feature[] = [
       "Built-in review window for safety and peace of mind",
       "Every action logged and permanently on record",
     ],
-    image: "/images/LandingPage/corefeaturesection/Img3.png",
+    image: "/images/LandingPage/CoreFeatureSection/Img3.png",
     imageAlt: "Release Manager feature",
     imageOnRight: true,
   },
