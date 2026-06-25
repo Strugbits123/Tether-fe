@@ -162,7 +162,7 @@ export default function AddRecipientsModal({
         relationship: toRecipientRelationship(relationship),
         note: note.trim() || undefined,
       });
-      posthog.capture('recipient_added', { relationship });
+      posthog.capture("recipient_added", { relationship });
       showToast("Recipient added successfully", "success");
       if (isOnboarding) {
         // Keep modal open — let user add more or click Continue.

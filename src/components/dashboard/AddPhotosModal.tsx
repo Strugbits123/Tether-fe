@@ -285,11 +285,13 @@ export default function AddPhotosModal({
     setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const handleMediaAsDocument = async (file: File, token: string) => {
-    const [urlInfo] = await requestDocUploadUrls(token, [{
-      fileName: file.name,
-      fileType: file.type,
-      fileSizeBytes: file.size,
-    }]);
+    const [urlInfo] = await requestDocUploadUrls(token, [
+      {
+        fileName: file.name,
+        fileType: file.type,
+        fileSizeBytes: file.size,
+      },
+    ]);
     const res = await fetch(urlInfo.signedUploadUrl, {
       method: "PUT",
       body: file,
@@ -297,13 +299,15 @@ export default function AddPhotosModal({
     });
     if (!res.ok) throw new Error("Upload failed. Please try again.");
     await createDocumentsBatch(token, {
-      documents: [{
-        storagePath: urlInfo.storagePath,
-        originalFilename: file.name,
-        fileType: file.type.split("/")[1] || "bin",
-        fileSizeBytes: file.size,
-        mimeType: file.type,
-      }],
+      documents: [
+        {
+          storagePath: urlInfo.storagePath,
+          originalFilename: file.name,
+          fileType: file.type.split("/")[1] || "bin",
+          fileSizeBytes: file.size,
+          mimeType: file.type,
+        },
+      ],
       assignments: [{ scope: "assign_later" }],
     });
   };
