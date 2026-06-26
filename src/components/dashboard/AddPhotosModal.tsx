@@ -267,7 +267,11 @@ export default function AddPhotosModal({
         }
         // In onboarding, allow audio/video without size check (backend limits apply)
         if (!isMediaFile(f) && f.size > maxBytes) {
-          errs.push(isDoc ? "File exceeds 25MB limit" : `${f.name} exceeds ${sizeLabel} limit`);
+          errs.push(
+            isDoc
+              ? "File exceeds 25MB limit"
+              : `${f.name} exceeds ${sizeLabel} limit`,
+          );
           continue;
         }
         if (next.length >= maxAllowed) {
@@ -783,7 +787,7 @@ export default function AddPhotosModal({
                 )}
 
                 {/* Title */}
-                {(
+                {
                   <div className="flex flex-col gap-2">
                     <label
                       style={{
@@ -803,7 +807,9 @@ export default function AddPhotosModal({
                       value={photoTitle}
                       onChange={(e) => setPhotoTitle(e.target.value)}
                       placeholder={
-                        isDoc ? "e.g. Insurance policy" : "e.g. Family reunion 2024"
+                        isDoc
+                          ? "e.g. Insurance policy"
+                          : "e.g. Family reunion 2024"
                       }
                       maxLength={isDoc ? 150 : 120}
                       className="w-full focus:outline-none"
@@ -822,7 +828,7 @@ export default function AddPhotosModal({
                       }}
                     />
                   </div>
-                )}
+                }
 
                 {/* Caption */}
                 <div className="flex flex-col gap-2">
