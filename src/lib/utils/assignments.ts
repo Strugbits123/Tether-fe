@@ -8,8 +8,8 @@ export const GROUP_ASSIGNMENT_MAP: Record<string, Assignment> = {
   'Assign Later': { scope: 'assign_later' },
   'All Recipients': { scope: 'all' },
   'All Family': { scope: 'group', groupValue: 'family' },
-  'All Friends': { scope: 'group', groupValue: 'friends' },
-  'All Others': { scope: 'group', groupValue: 'others' },
+  'All Friends': { scope: 'group', groupValue: 'friend' },
+  'All Others': { scope: 'group', groupValue: 'other' },
   'Release Manager': { scope: 'release_manager' },
 }
 
@@ -39,6 +39,42 @@ export function buildAssignments(
   }
 
   return assignments
+}
+
+/** Reverse of buildAssignments: maps stored assignment rows back to the modal's
+ *  checkbox selection (group labels + individual recipient ids). */
+export function assignmentsToSelection(
+  assignments: {
+    assignment_scope: string
+    group_value: string | null
+    recipient_id: string | null
+  }[] = [],
+): { groups: string[]; individuals: string[] } {
+  const groups: string[] = []
+  const individuals: string[] = []
+  for (const a of assignments) {
+    switch (a.assignment_scope) {
+      case 'all':
+        groups.push('All Recipients')
+        break
+      case 'release_manager':
+        groups.push('Release Manager')
+        break
+      case 'assign_later':
+        groups.push('Assign Later')
+        break
+      case 'group':
+        // Accept both the current singular values and legacy plural data.
+        if (a.group_value === 'family') groups.push('All Family')
+        else if (a.group_value === 'friend' || a.group_value === 'friends') groups.push('All Friends')
+        else if (a.group_value === 'other' || a.group_value === 'others') groups.push('All Others')
+        break
+      case 'individual':
+        if (a.recipient_id) individuals.push(a.recipient_id)
+        break
+    }
+  }
+  return { groups, individuals }
 }
 
 export function formatFileSize(bytes: number): string {

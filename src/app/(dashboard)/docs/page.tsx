@@ -174,8 +174,8 @@ function assignmentsToSelections(assignments: DocumentDetail['assignments']): {
       groups.push(SCOPE_TO_GROUP[a.assignment_scope])
     } else if (a.assignment_scope === 'group') {
       if (a.group_value === 'family') groups.push('All Family')
-      else if (a.group_value === 'friends') groups.push('All Friends')
-      else if (a.group_value === 'others') groups.push('All Others')
+      else if (a.group_value === 'friend' || a.group_value === 'friends') groups.push('All Friends')
+      else if (a.group_value === 'other' || a.group_value === 'others') groups.push('All Others')
     } else if (a.assignment_scope === 'individual' && a.recipient_id) {
       individuals.push(a.recipient_id)
     }
@@ -847,8 +847,10 @@ function EditDocumentModal({
   const { showToast } = useToast()
   const { groups: initGroups, individuals: initIndividuals } = assignmentsToSelections(doc.assignments)
 
+  const [title, setTitle] = useState(doc.title ?? '')
   const [notes, setNotes] = useState(doc.note ?? '')
   const [category, setCategory] = useState(doc.category ?? '')
+  const [error, setError] = useState<string | null>(null)
   const [selectedGroups, setSelectedGroups] = useState<string[]>(initGroups)
   const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>(initIndividuals)
   const [showIndividuals, setShowIndividuals] = useState(true)
@@ -901,9 +903,15 @@ function EditDocumentModal({
   const handleSubmit = async () => {
     const token = await getToken()
     if (!token) return
+    if (!title.trim()) {
+      setError('Title is required.')
+      return
+    }
+    setError(null)
     setUpdating(true)
     try {
       await updateDocument(token, doc.id, {
+        title: title.trim(),
         note: notes || undefined,
         category: category || undefined,
         assignments: buildAssignments(selectedGroups, selectedIndividuals),
@@ -1014,6 +1022,42 @@ function EditDocumentModal({
               </span>
             </div>
 
+            {/* Title */}
+            <div className="flex flex-col gap-2">
+              <label
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '14px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Title <span style={{ color: '#FB2C36' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); if (error) setError(null) }}
+                placeholder="Document title..."
+                maxLength={150}
+                className="w-full focus:outline-none"
+                style={{
+                  height: 44,
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#F3F3F5',
+                  padding: '4px 12px',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              />
+            </div>
+
             {/* Category */}
             <div className="flex flex-col gap-2">
               <label
@@ -1081,6 +1125,7 @@ function EditDocumentModal({
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Add any additional information..."
                 rows={2}
+                maxLength={300}
                 className="w-full focus:outline-none resize-none"
                 style={{
                   minHeight: 64,
@@ -1096,6 +1141,18 @@ function EditDocumentModal({
                   color: '#0A0A0A',
                 }}
               />
+              <span
+                className="self-end"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 12,
+                  lineHeight: '16px',
+                  color: '#99A1AF',
+                }}
+              >
+                {notes.length}/300
+              </span>
             </div>
 
             {/* Recipients */}
@@ -1250,6 +1307,21 @@ function EditDocumentModal({
               )}
             </div>
           </div>
+
+          {error && (
+            <p
+              className="px-5 sm:px-6"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                lineHeight: '18px',
+                color: '#FB2C36',
+              }}
+            >
+              {error}
+            </p>
+          )}
 
           {/* Footer */}
           <div
