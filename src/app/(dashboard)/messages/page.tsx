@@ -85,8 +85,10 @@ function assignmentsToAssignSelection(assignments: MessageAssignment[] = []): {
       case "group":
         // Accept both the current singular values and legacy plural data.
         if (a.group_value === "family") groups.push("All Family");
-        else if (a.group_value === "friend" || a.group_value === "friends") groups.push("All Friends");
-        else if (a.group_value === "other" || a.group_value === "others") groups.push("All Others");
+        else if (a.group_value === "friend" || a.group_value === "friends")
+          groups.push("All Friends");
+        else if (a.group_value === "other" || a.group_value === "others")
+          groups.push("All Others");
         break;
       case "release_manager":
         groups.push("Release Manager");
