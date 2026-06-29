@@ -29,11 +29,13 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/context/ToastContext";
-import { type Assignment, createTextMessage } from "@/lib/api/messages";
 import {
-  requestDocUploadUrls,
-  createDocumentsBatch,
-} from "@/lib/api/documents";
+  type Assignment,
+  createTextMessage,
+  createVideoUploadUrl,
+  createAudioUploadUrl,
+  confirmAudioUpload,
+} from "@/lib/api/messages";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
 import AudioRecordingWaveform from "@/components/audio/AudioRecordingWaveform";
 import AudioPlaybackWaveform from "@/components/audio/AudioPlaybackWaveform";
@@ -1655,41 +1657,43 @@ function RecordStep({
       return;
     }
 
-    const mimeType = kind === "video" ? "video/webm" : "audio/webm";
-    const ext = kind === "video" ? "webm" : "webm";
-    const filename = `${title || "recording"}.${ext}`;
+    const effectiveAssignments = assignments ?? [{ scope: "assign_later" }];
 
     try {
       setUploadStatus("Uploading…");
-      const [urlInfo] = await requestDocUploadUrls(token, [
-        {
-          fileName: filename,
-          fileType: mimeType,
+      if (kind === "video") {
+        const { uploadUrl } = await createVideoUploadUrl(token, {
+          title: title || "Untitled",
+          notes: notes || undefined,
+          assignments: effectiveAssignments,
+        });
+        const res = await fetch(uploadUrl, {
+          method: "PUT",
+          body: blob,
+          headers: { "Content-Type": "video/webm" },
+        });
+        if (!res.ok) throw new Error("Upload failed. Please try again.");
+      } else {
+        const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
+          title: title || "Untitled",
+          notes: notes || undefined,
+          assignments: effectiveAssignments,
+          fileType: "audio/webm",
+        });
+        const res = await fetch(signedUploadUrl, {
+          method: "PUT",
+          body: blob,
+          headers: { "Content-Type": "audio/webm" },
+        });
+        if (!res.ok) throw new Error("Upload failed. Please try again.");
+        await confirmAudioUpload(token, messageId, {
+          durationSeconds: Math.round(duration),
           fileSizeBytes: blob.size,
-        },
-      ]);
-      const res = await fetch(urlInfo.signedUploadUrl, {
-        method: "PUT",
-        body: blob,
-        headers: { "Content-Type": mimeType },
-      });
-      if (!res.ok) throw new Error("Upload failed. Please try again.");
-      await createDocumentsBatch(token, {
-        documents: [
-          {
-            storagePath: urlInfo.storagePath,
-            originalFilename: filename,
-            fileType: ext,
-            fileSizeBytes: blob.size,
-            mimeType,
-            title: title || undefined,
-          },
-        ],
-        assignments: assignments ?? [{ scope: "assign_later" }],
-      });
+        });
+      }
       setUploadStatus("Ready!");
-      posthog.capture("media_uploaded", { type: kind });
-      showToast("Recording saved", "success");
+      posthog.capture("message_created", { type: kind });
+      showToast("Message saved", "success");
       cleanup();
       onDone();
     } catch (e) {
@@ -2708,68 +2712,37 @@ function CreateWizard({
         posthog.capture("message_created", { type: "write" });
       } else if (type === "video" && videoBlob) {
         setUploadStatus("Uploading…");
-        const mimeType = "video/webm";
-        const filename = `${title || "recording"}.webm`;
-        const [urlInfo] = await requestDocUploadUrls(token, [
-          {
-            fileName: filename,
-            fileType: mimeType,
-            fileSizeBytes: videoBlob.size,
-          },
-        ]);
-        const res = await fetch(urlInfo.signedUploadUrl, {
+        const { uploadUrl } = await createVideoUploadUrl(token, {
+          title,
+          notes: notes || undefined,
+          assignments,
+        });
+        const res = await fetch(uploadUrl, {
           method: "PUT",
           body: videoBlob,
-          headers: { "Content-Type": mimeType },
+          headers: { "Content-Type": "video/webm" },
         });
         if (!res.ok) throw new Error("Upload failed. Please try again.");
-        await createDocumentsBatch(token, {
-          documents: [
-            {
-              storagePath: urlInfo.storagePath,
-              originalFilename: filename,
-              fileType: "webm",
-              fileSizeBytes: videoBlob.size,
-              mimeType,
-              title: title || undefined,
-            },
-          ],
-          note: notes || undefined,
-          assignments,
-        });
-        posthog.capture("media_uploaded", { type: "video" });
+        posthog.capture("message_created", { type: "video" });
       } else if (type === "audio" && audioBlob) {
         setUploadStatus("Uploading…");
-        const mimeType = "audio/webm";
-        const filename = `${title || "recording"}.webm`;
-        const [urlInfo] = await requestDocUploadUrls(token, [
-          {
-            fileName: filename,
-            fileType: mimeType,
-            fileSizeBytes: audioBlob.size,
-          },
-        ]);
-        const res = await fetch(urlInfo.signedUploadUrl, {
+        const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
+          title,
+          notes: notes || undefined,
+          assignments,
+          fileType: "audio/webm",
+        });
+        const res = await fetch(signedUploadUrl, {
           method: "PUT",
           body: audioBlob,
-          headers: { "Content-Type": mimeType },
+          headers: { "Content-Type": "audio/webm" },
         });
         if (!res.ok) throw new Error("Upload failed. Please try again.");
-        await createDocumentsBatch(token, {
-          documents: [
-            {
-              storagePath: urlInfo.storagePath,
-              originalFilename: filename,
-              fileType: "webm",
-              fileSizeBytes: audioBlob.size,
-              mimeType,
-              title: title || undefined,
-            },
-          ],
-          note: notes || undefined,
-          assignments,
+        await confirmAudioUpload(token, messageId, {
+          durationSeconds: Math.round(duration),
+          fileSizeBytes: audioBlob.size,
         });
-        posthog.capture("media_uploaded", { type: "audio" });
+        posthog.capture("message_created", { type: "audio" });
       }
       showToast("Saved successfully", "success");
       onCreated?.();
