@@ -4,10 +4,10 @@ import Image from "next/image";
 import { BsFillPlayFill } from "react-icons/bs";
 
 const BULLETS = [
-  "Easily build and share your personal story",
-  "Store and share photos, documents, and files",
+  "Share the story of your life - organized by chapters",
+  "Securely store and share photos, documents, and files",
   "Make video, audio, and written messages for loved ones",
-  "Automated delivery when the time comes",
+  "Automated delivery to the right people when the time comes",
 ];
 
 export default function HeroSection() {
