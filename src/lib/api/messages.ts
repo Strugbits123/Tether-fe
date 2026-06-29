@@ -81,6 +81,44 @@ export const createTextMessage = (
   },
 ) => api.post<Message>('/messages', body, token)
 
+// Video — get a Mux direct-upload URL (creates the message row).
+export const createVideoUploadUrl = (
+  token: string,
+  body: {
+    title: string
+    notes?: string
+    assignments: Assignment[]
+  },
+) =>
+  api.post<{ messageId: string; uploadUrl: string; muxUploadId: string }>(
+    '/messages/video/upload-url',
+    body,
+    token,
+  )
+
+// Audio — get a Supabase Storage signed upload URL (creates the message row).
+export const createAudioUploadUrl = (
+  token: string,
+  body: {
+    title: string
+    notes?: string
+    assignments: Assignment[]
+    fileType: string
+  },
+) =>
+  api.post<{ messageId: string; signedUploadUrl: string; storagePath: string }>(
+    '/messages/audio/upload-url',
+    body,
+    token,
+  )
+
+// Finalize an audio upload (sets duration + size, marks ready).
+export const confirmAudioUpload = (
+  token: string,
+  messageId: string,
+  body: { durationSeconds: number; fileSizeBytes: number },
+) => api.post<Message>(`/messages/${messageId}/confirm-upload`, body, token)
+
 // Poll processing status
 export const getMessageStatus = (token: string, messageId: string) =>
   api.get<{
