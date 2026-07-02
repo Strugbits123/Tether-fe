@@ -99,6 +99,7 @@ export interface ChapterDetail {
   audio_duration_seconds: number | null
   audio_mime_type: string | null
   transcription_status: TranscriptionStatus | null
+  recipient_note: string | null
   created_at: string
   updated_at: string
   exhibits: ChapterExhibit[]
@@ -244,15 +245,16 @@ export const setChapterAssignments = (
   token: string,
   chapterId: string,
   assignments: ChapterAssignmentInput[],
-  // NOTE (pending backend): the `note` is a per-chapter message shown to
-  // recipients before they read the chapter. The endpoint does not persist it
-  // yet — see the backend request in the recipients page. It is sent (and
-  // omitted when empty) so it starts working as soon as the API accepts it.
+  // Per-chapter message shown to recipients before they read the chapter,
+  // persisted to `chapters.recipient_note`. Semantics:
+  //   note === undefined → key omitted → existing note left unchanged
+  //   note === ''         → sent as ''  → note cleared (null) on the backend
+  //   note === 'text'     → sent        → note saved
   note?: string,
 ) =>
-  api.post<{ assignments: ChapterAssignment[]; count: number }>(
+  api.post<{ assignments: ChapterAssignment[]; count: number; note?: string | null }>(
     `/chapters/${chapterId}/assignments`,
-    { assignments, ...(note && note.trim() ? { note: note.trim() } : {}) },
+    { assignments, ...(note !== undefined ? { note: note.trim() } : {}) },
     token,
   )
 

@@ -78,6 +78,7 @@ export default function ChapterRecipientsPage() {
       ])
       setChapterTitle(chapter.title)
       setRecipients(people)
+      setNote(chapter.recipient_note ?? '')
       const { groups: g, individuals } = assignmentsToSelection(
         (chapter.assignments ?? []).map((a) => ({
           assignment_scope: a.assignment_scope,
