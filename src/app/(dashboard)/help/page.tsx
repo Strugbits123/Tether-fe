@@ -12,6 +12,7 @@ import {
   Globe,
   HelpCircle,
   Lightbulb,
+  Loader2,
   Lock,
   Mail,
   MessageSquare,
@@ -24,8 +25,41 @@ import {
   Video,
   X,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import { ApiError } from '@/lib/api/client'
+import { getScreenshotUploadUrl, submitFeedback } from '@/lib/api/feedback'
 
 const SUPPORT_EMAIL = 'Support@jointether.com'
+
+/* ---------------------- Feedback helpers ---------------------- */
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+const ALLOWED_SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
+
+/** Uploads a screenshot via the signed URL and returns its storage path. */
+async function uploadScreenshot(token: string, file: File): Promise<string> {
+  const { upload_url, storage_path } = await getScreenshotUploadUrl(token, {
+    file_name: file.name,
+    file_type: file.type,
+    file_size_bytes: file.size,
+  })
+  const put = await fetch(upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  })
+  if (!put.ok) throw new Error('Screenshot upload failed')
+  return storage_path
+}
 
 /* ---------------------- Data ---------------------- */
 
@@ -922,8 +956,14 @@ function Dropdown({
   )
 }
 
-function UploadButton() {
-  const [fileName, setFileName] = useState<string | null>(null)
+function UploadButton({
+  file,
+  onFile,
+}: {
+  file: File | null
+  onFile: (file: File | null) => void
+}) {
+  const { showToast } = useToast()
   return (
     <label
       className="flex items-center justify-center cursor-pointer hover:bg-gray-50"
@@ -952,13 +992,26 @@ function UploadButton() {
           whiteSpace: 'nowrap',
         }}
       >
-        {fileName ?? 'Upload screenshot'}
+        {file?.name ?? 'Upload screenshot'}
       </span>
       <input
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+        onChange={(e) => {
+          const selected = e.target.files?.[0] ?? null
+          e.target.value = ''
+          if (!selected) return
+          if (!ALLOWED_SCREENSHOT_TYPES.includes(selected.type)) {
+            showToast('Please choose a JPEG, PNG or WebP image.', 'error')
+            return
+          }
+          if (selected.size > MAX_SCREENSHOT_BYTES) {
+            showToast('Screenshot must be 5 MB or smaller.', 'error')
+            return
+          }
+          onFile(selected)
+        }}
       />
     </label>
   )
@@ -970,19 +1023,22 @@ function ModalFooter({
   submitLabel,
   submitColor,
   disabled,
+  busy,
 }: {
   onCancel: () => void
   onSubmit: () => void
   submitLabel: string
   submitColor: string
   disabled: boolean
+  busy?: boolean
 }) {
   return (
     <div className="flex items-center justify-end" style={{ paddingTop: 8, gap: 12 }}>
       <button
         type="button"
         onClick={onCancel}
-        className="cursor-pointer hover:bg-gray-50"
+        disabled={busy}
+        className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
         style={{
           height: 36,
           padding: '8px 16px',
@@ -1003,14 +1059,14 @@ function ModalFooter({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={disabled}
-        className={disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:opacity-90'}
+        disabled={disabled || busy}
+        className={disabled || busy ? 'cursor-not-allowed' : 'cursor-pointer hover:opacity-90'}
         style={{
           height: 36,
           padding: '8px 16px',
           borderRadius: 8,
           background: submitColor,
-          opacity: disabled ? 0.5 : 1,
+          opacity: disabled || busy ? 0.5 : 1,
           fontFamily: 'Inter, sans-serif',
           fontWeight: 500,
           fontSize: 14,
@@ -1018,8 +1074,13 @@ function ModalFooter({
           letterSpacing: '-0.15px',
           textAlign: 'center',
           color: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
         }}
       >
+        {busy && <Loader2 className="w-4 h-4 animate-spin" />}
         {submitLabel}
       </button>
     </div>
@@ -1029,9 +1090,36 @@ function ModalFooter({
 /* ---------------------- Modals ---------------------- */
 
 function FeedbackModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const { showToast } = useToast()
   const [type, setType] = useState('')
   const [feedback, setFeedback] = useState('')
+  const [screenshot, setScreenshot] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
   const valid = type !== '' && feedback.trim() !== ''
+
+  const handleSubmit = async () => {
+    if (!valid || busy) return
+    setBusy(true)
+    const token = await getToken()
+    if (!token) {
+      setBusy(false)
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    try {
+      const screenshot_path = screenshot ? await uploadScreenshot(token, screenshot) : undefined
+      await submitFeedback(token, {
+        type: 'general_feedback',
+        page_context: type.toLowerCase(),
+        body: feedback.trim(),
+        ...(screenshot_path ? { screenshot_path } : {}),
+      })
+      onSubmit()
+    } catch (e) {
+      setBusy(false)
+      showToast(e instanceof ApiError ? e.message : 'Could not submit your feedback.', 'error')
+    }
+  }
 
   return (
     <ModalShell maxWidth={512} onClose={onClose}>
@@ -1052,14 +1140,15 @@ function FeedbackModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (
         </div>
         <div className="flex flex-col" style={{ gap: 8 }}>
           <FieldLabel>Screenshot (optional)</FieldLabel>
-          <UploadButton />
+          <UploadButton file={screenshot} onFile={setScreenshot} />
         </div>
         <ModalFooter
           onCancel={onClose}
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit}
           submitLabel="Submit Feedback"
           submitColor="#00A63E"
           disabled={!valid}
+          busy={busy}
         />
       </div>
     </ModalShell>
@@ -1067,9 +1156,32 @@ function FeedbackModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (
 }
 
 function FeatureModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const { showToast } = useToast()
   const [feature, setFeature] = useState('')
   const [benefit, setBenefit] = useState('')
+  const [busy, setBusy] = useState(false)
   const valid = feature.trim() !== '' && benefit.trim() !== ''
+
+  const handleSubmit = async () => {
+    if (!valid || busy) return
+    setBusy(true)
+    const token = await getToken()
+    if (!token) {
+      setBusy(false)
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    try {
+      await submitFeedback(token, {
+        type: 'feature_request',
+        body: `Feature: ${feature.trim()}\n\nBenefit: ${benefit.trim()}`,
+      })
+      onSubmit()
+    } catch (e) {
+      setBusy(false)
+      showToast(e instanceof ApiError ? e.message : 'Could not submit your request.', 'error')
+    }
+  }
 
   return (
     <ModalShell maxWidth={512} onClose={onClose}>
@@ -1089,10 +1201,11 @@ function FeatureModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: ()
         </div>
         <ModalFooter
           onCancel={onClose}
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit}
           submitLabel="Submit Feature Request"
           submitColor="#9810FA"
           disabled={!valid}
+          busy={busy}
         />
       </div>
     </ModalShell>
@@ -1100,9 +1213,36 @@ function FeatureModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: ()
 }
 
 function BugModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const { showToast } = useToast()
   const [location, setLocation] = useState('')
   const [description, setDescription] = useState('')
+  const [screenshot, setScreenshot] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
   const valid = location !== '' && description.trim() !== ''
+
+  const handleSubmit = async () => {
+    if (!valid || busy) return
+    setBusy(true)
+    const token = await getToken()
+    if (!token) {
+      setBusy(false)
+      showToast('Your session has expired. Please sign in again.', 'error')
+      return
+    }
+    try {
+      const screenshot_path = screenshot ? await uploadScreenshot(token, screenshot) : undefined
+      await submitFeedback(token, {
+        type: 'bug_report',
+        page_context: location,
+        body: description.trim(),
+        ...(screenshot_path ? { screenshot_path } : {}),
+      })
+      onSubmit()
+    } catch (e) {
+      setBusy(false)
+      showToast(e instanceof ApiError ? e.message : 'Could not submit your bug report.', 'error')
+    }
+  }
 
   return (
     <ModalShell maxWidth={512} onClose={onClose}>
@@ -1127,14 +1267,15 @@ function BugModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => 
         </div>
         <div className="flex flex-col" style={{ gap: 8 }}>
           <FieldLabel>Screenshot (optional)</FieldLabel>
-          <UploadButton />
+          <UploadButton file={screenshot} onFile={setScreenshot} />
         </div>
         <ModalFooter
           onCancel={onClose}
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit}
           submitLabel="Submit Bug Report"
           submitColor="#E7000B"
           disabled={!valid}
+          busy={busy}
         />
       </div>
     </ModalShell>
