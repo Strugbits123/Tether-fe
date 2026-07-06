@@ -1,5 +1,6 @@
 "use client";
-
+// requires: npm install dompurify @types/dompurify
+import DOMPurify from "dompurify";
 import posthog from "posthog-js";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -630,7 +631,7 @@ function ReadOnlyMessage({
                     color: "#101828",
                   }}
                   dangerouslySetInnerHTML={{
-                    __html: message.body || "<em>(empty)</em>",
+                    __html: DOMPurify.sanitize(message.body || "<em>(empty)</em>"),
                   }}
                 />
               </div>

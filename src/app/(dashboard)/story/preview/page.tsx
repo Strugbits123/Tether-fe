@@ -1,5 +1,6 @@
 'use client'
-
+// requires: npm install dompurify @types/dompurify
+import DOMPurify from 'dompurify'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Printer, Volume2, X } from 'lucide-react'
@@ -263,7 +264,7 @@ function ChapterBlock({ chapter, onError }: { chapter: PreviewChapter; onError: 
       <div
         className="[&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-2 [&_li]:mb-1"
         style={{ fontFamily: 'Georgia, serif', fontWeight: 400, fontSize: 16, lineHeight: '26px', color: '#101828' }}
-        dangerouslySetInnerHTML={{ __html: chapter.body ?? '' }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(chapter.body ?? '') }}
       />
 
       {/* Exhibit images */}

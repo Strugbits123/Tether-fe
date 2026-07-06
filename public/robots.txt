@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /dashboard
+Disallow: /messages
+Disallow: /photos
+Disallow: /docs
+Disallow: /story
+Disallow: /access
+Disallow: /onboarding
+Allow: /
