@@ -62,7 +62,8 @@ const DOC_CATEGORIES = [
 ];
 
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/heic";
-const DOC_ACCEPT = ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic";
+const DOC_ACCEPT =
+  ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,.mp4,.mov,.m4v,.webm,.mp3,.wav,.m4a,.aac";
 const DOC_ALLOWED_MIME = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -70,6 +71,17 @@ const DOC_ALLOWED_MIME = new Set([
   "image/jpeg",
   "image/png",
   "image/heic",
+  // video
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/webm",
+  // audio
+  "audio/mpeg",
+  "audio/wav",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/aac",
 ]);
 const ONBOARDING_ACCEPT =
   ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,video/*,audio/*";
@@ -259,6 +271,7 @@ export default function AddPhotosModal({
         if (isDoc && !isOnboarding) {
           const okType =
             DOC_ALLOWED_MIME.has(f.type) ||
+            isMediaFile(f) ||
             /\.(pdf|docx?|jpe?g|png|heic)$/i.test(f.name);
           if (!okType) {
             errs.push("File type not supported");
