@@ -1,5 +1,4 @@
 "use client";
-// requires: npm install dompurify @types/dompurify
 import DOMPurify from "dompurify";
 import posthog from "posthog-js";
 import React, { useEffect, useRef, useState } from "react";
@@ -108,9 +107,9 @@ const RECIPIENT_GROUP_ROWS = [
 const RECIPIENT_OPTIONS: Record<string, Assignment> = {
   "All recipients": { scope: "all" },
   "All family": { scope: "group", groupValue: "family" },
-  "All friends": { scope: "group", groupValue: "friend" },
+  "All friends": { scope: "group", groupValue: "friends" },
   "Release Manager": { scope: "release_manager" },
-  "All Others": { scope: "group", groupValue: "other" },
+  "All Others": { scope: "group", groupValue: "others" },
   "Assign later": { scope: "assign_later" },
 };
 

@@ -19,6 +19,7 @@ import {
   Search,
   Trash2,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -197,11 +198,19 @@ export default function PhotosPage() {
     loadFolders();
   };
 
-  const handleSaveFolder = async (id: string, name: string): Promise<void> => {
+  const handleSaveFolder = async (
+    id: string,
+    name: string,
+    groups: string[],
+    individualIds: string[],
+  ): Promise<void> => {
     const token = await getToken();
     if (!token) return;
-    await renameFolder(token, id, { name: name.trim() });
-    showToast("Folder renamed", "success");
+    await renameFolder(token, id, {
+      name: name.trim(),
+      assignments: buildAssignments(groups, individualIds),
+    });
+    showToast("Folder updated", "success");
     setEditingFolder(null);
     loadFolders();
   };
@@ -529,18 +538,45 @@ export default function PhotosPage() {
                 : (activeFolder?.name ?? "Photos")}{" "}
               Photos
             </h3>
-            <span
-              style={{
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: "20px",
-                letterSpacing: "-0.15px",
-                color: "#6A7282",
-              }}
-            >
-              {filteredPhotos.length} photos
-            </span>
+            <div className="flex items-center gap-3">
+              <span
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#6A7282",
+                }}
+              >
+                {filteredPhotos.length} photos
+              </span>
+              {activeFolderId !== "uncategorized" && (() => {
+                const rc = (activeFolder?.assignments ?? []).filter(
+                  (a) => a.assignment_scope !== "assign_later",
+                ).length;
+                return rc > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1"
+                    style={{
+                      fontFamily: "Inter, sans-serif",
+                      fontWeight: 400,
+                      fontSize: 14,
+                      lineHeight: "20px",
+                      letterSpacing: "-0.15px",
+                      color: "#6A7282",
+                    }}
+                  >
+                    <Users
+                      style={{ width: 14, height: 14, flexShrink: 0 }}
+                      color="#6A7282"
+                      strokeWidth={2}
+                    />
+                    {rc} {rc === 1 ? "recipient" : "recipients"}
+                  </span>
+                ) : null;
+              })()}
+            </div>
           </div>
 
           {/* Photo content */}
@@ -629,7 +665,9 @@ export default function PhotosPage() {
         <EditFolderModal
           folder={editingFolder}
           onClose={() => setEditingFolder(null)}
-          onSave={(name) => handleSaveFolder(editingFolder.id, name)}
+          onSave={(name, groups, individualIds) =>
+            handleSaveFolder(editingFolder.id, name, groups, individualIds)
+          }
         />
       )}
 
@@ -832,6 +870,7 @@ function ConfirmDeletePhotoModal({
 function FolderRow({
   folder,
   count,
+  recipientCount,
   active,
   onSelect,
   onEdit,
@@ -840,6 +879,7 @@ function FolderRow({
 }: {
   folder: FolderItem;
   count: number;
+  recipientCount?: number;
   active: boolean;
   onSelect: () => void;
   onEdit: () => void;
@@ -900,6 +940,28 @@ function FolderRow({
       >
         {folder.name}
       </span>
+      {recipientCount !== undefined && recipientCount > 0 && (
+        <span
+          className="inline-flex items-center"
+          title={`${recipientCount} recipient${recipientCount === 1 ? "" : "s"}`}
+          style={{
+            gap: 3,
+            fontFamily: "Inter, sans-serif",
+            fontWeight: 500,
+            fontSize: 12,
+            lineHeight: "16px",
+            color: "#6A7282",
+            flexShrink: 0,
+          }}
+        >
+          <Users
+            style={{ width: 13, height: 13, flexShrink: 0 }}
+            color="#6A7282"
+            strokeWidth={2}
+          />
+          {recipientCount}
+        </span>
+      )}
       <span
         style={{
           fontFamily: "Inter, sans-serif",
@@ -1853,12 +1915,28 @@ function EditFolderModal({
   onClose,
   onSave,
 }: {
-  folder: { id: string; name: string };
+  folder: PhotoFolder;
   onClose: () => void;
-  onSave: (name: string) => Promise<void>;
+  onSave: (
+    name: string,
+    groups: string[],
+    individualIds: string[],
+  ) => Promise<void>;
 }) {
   const [name, setName] = useState(folder.name);
   const [saving, setSaving] = useState(false);
+  const initial = assignmentsToSelection(folder.assignments);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    initial.groups,
+  );
+  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>(
+    initial.individuals,
+  );
+  const [showIndividuals, setShowIndividuals] = useState(
+    initial.individuals.length > 0,
+  );
+  const [search, setSearch] = useState("");
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1873,13 +1951,45 @@ function EditFolderModal({
     };
   }, [onClose]);
 
-  const canSave = name.trim().length > 0 && name.trim() !== folder.name;
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const data = await getRecipients(token);
+        if (active) setRecipients(data);
+      } catch {
+        /* non-fatal */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleGroup = (g: string) =>
+    setSelectedGroups((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+    );
+  const toggleIndividual = (id: string) => {
+    setSelectedGroups((prev) => prev.filter((x) => x !== "Assign Later"));
+    setSelectedIndividuals((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const filteredIndividuals = recipients.filter((i) =>
+    i.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  const canSave = name.trim().length > 0;
 
   const handleSave = async () => {
     if (!canSave || saving) return;
     setSaving(true);
     try {
-      await onSave(name);
+      await onSave(name, selectedGroups, selectedIndividuals);
     } catch {
       /* error already toasted by parent */
     } finally {
@@ -1941,25 +2051,210 @@ function EditFolderModal({
               </button>
             </div>
 
-            {/* Input */}
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full focus:outline-none"
-              style={{
-                height: 35.996,
-                borderRadius: 8,
-                border: "1.25px solid rgba(0,0,0,0.1)",
-                background: "#F3F3F5",
-                padding: "4px 12px",
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 400,
-                fontSize: 14,
-                letterSpacing: "-0.15px",
-                color: "#0A0A0A",
-              }}
-            />
+            {/* Folder name */}
+            <div className="flex flex-col" style={{ gap: 10 }}>
+              <label
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "14px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                }}
+              >
+                Folder Name <span style={{ color: "#FF0000" }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full focus:outline-none"
+                style={{
+                  height: 44,
+                  borderRadius: 8,
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#F3F3F5",
+                  padding: "4px 12px",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                }}
+              />
+            </div>
+
+            {/* Add Recipients */}
+            <div className="flex flex-col" style={{ gap: 15 }}>
+              <label
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 600,
+                  fontSize: 16,
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
+                }}
+              >
+                Recipients
+              </label>
+
+              <div className="flex flex-col" style={{ gap: 10 }}>
+                {GROUP_OPTIONS.map((g) => {
+                  const isAssignLater = g === "Assign Later";
+                  const selected = selectedGroups.includes(g);
+                  return (
+                    <GroupRow
+                      key={g}
+                      label={g}
+                      selected={selected}
+                      variant={isAssignLater ? "yellow" : "default"}
+                      onToggle={() => toggleGroup(g)}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Select Individuals toggle */}
+              <button
+                type="button"
+                onClick={() => setShowIndividuals((s) => !s)}
+                className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
+                style={{
+                  height: 36,
+                  borderRadius: 8,
+                  border: "1.1px solid #4F46E5",
+                  background: "#EEF2FF",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  color: "#4F46E5",
+                }}
+              >
+                {showIndividuals ? (
+                  <ChevronUp
+                    className="w-4 h-4"
+                    color="#4F46E5"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <ChevronDown
+                    className="w-4 h-4"
+                    color="#4F46E5"
+                    strokeWidth={2}
+                  />
+                )}
+                Select Individuals
+              </button>
+
+              {showIndividuals && (
+                <div className="flex flex-col gap-2">
+                  <div
+                    className="w-full flex items-center gap-2"
+                    style={{
+                      height: 36,
+                      borderRadius: 8,
+                      background: "#F3F3F5",
+                      padding: "4px 12px",
+                    }}
+                  >
+                    <Search
+                      className="w-4 h-4 text-[#717182] flex-shrink-0"
+                      strokeWidth={2}
+                    />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by name..."
+                      className="flex-1 bg-transparent outline-none min-w-0"
+                      style={{
+                        fontFamily: "Inter, sans-serif",
+                        fontWeight: 400,
+                        fontSize: 14,
+                        lineHeight: "20px",
+                        color: "#0A0A0A",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    className="flex flex-col gap-2 overflow-y-auto"
+                    style={{
+                      maxHeight: 150,
+                      borderRadius: 10,
+                      border: "1.1px solid rgba(0,0,0,0.1)",
+                      background: "#F9FAFB",
+                      padding: "8px",
+                    }}
+                  >
+                    {filteredIndividuals.length === 0 ? (
+                      <p
+                        className="text-center py-4"
+                        style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: 13,
+                          color: "#717182",
+                        }}
+                      >
+                        {recipients.length === 0
+                          ? "No recipients yet."
+                          : "No matches."}
+                      </p>
+                    ) : (
+                      filteredIndividuals.map((p) => {
+                        const selected = selectedIndividuals.includes(p.id);
+                        return (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => toggleIndividual(p.id)}
+                            className="w-full flex items-center gap-2 cursor-pointer"
+                            style={{
+                              borderRadius: 8,
+                              background: selected ? "#E0E7FF" : "#FFFFFF",
+                              border: selected
+                                ? "1px solid #4F46E5"
+                                : "1px solid transparent",
+                              padding: "8px",
+                            }}
+                          >
+                            <CheckBox checked={selected} />
+                            <div className="flex flex-col items-start flex-1 min-w-0">
+                              <span
+                                className="truncate"
+                                style={{
+                                  fontFamily: "Inter, sans-serif",
+                                  fontWeight: 500,
+                                  fontSize: 14,
+                                  lineHeight: "20px",
+                                  color: "#0A0A0A",
+                                }}
+                              >
+                                {p.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: "Inter, sans-serif",
+                                  fontWeight: 400,
+                                  fontSize: 12,
+                                  lineHeight: "16px",
+                                  color: "#717182",
+                                }}
+                              >
+                                {p.relationship}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Footer */}
             <div
@@ -2775,7 +3070,7 @@ function LightboxModal({
           className="w-full flex items-center justify-center overflow-hidden"
           style={{
             borderRadius: 12,
-            background: "#1a1a1a",
+            // background: "#1a1a1a",
             maxHeight: "70vh",
           }}
         >

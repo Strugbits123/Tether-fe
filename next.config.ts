@@ -11,6 +11,17 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    // In development (and any non-HTTPS backend like the current staging API),
+    // the browser must be allowed to reach http://localhost and ws://localhost.
+    // In production the API/Supabase are HTTPS, covered by `https:`/`wss:`.
+    const isDev = process.env.NODE_ENV !== 'production';
+    const connectSrc = [
+      "'self'",
+      'https:',
+      'wss:',
+      ...(isDev ? ['http://localhost:*', 'ws://localhost:*'] : []),
+    ].join(' ');
+
     return [
       {
         source: '/(.*)',
@@ -23,11 +34,12 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://app.posthog.com https://*.sentry.io",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.posthog.com https://*.i.posthog.com https://*.sentry.io",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "media-src 'self' blob: https:",
-              "connect-src 'self' https: wss:",
+              "worker-src 'self' blob:",
+              `connect-src ${connectSrc}`,
               "font-src 'self' data:",
               "frame-ancestors 'none'",
             ].join('; '),

@@ -1,5 +1,4 @@
 'use client'
-// requires: npm install dompurify @types/dompurify
 import DOMPurify from 'dompurify'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'

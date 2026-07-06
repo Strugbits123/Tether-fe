@@ -359,7 +359,9 @@ export default function AddPhotosModal({
       setErrors(["Please select a category."]);
       return;
     }
-    if (isDoc && !photoTitle.trim()) {
+    // Title is only required for a single document. When multiple files are
+    // uploaded the title field is hidden and each file's name is used instead.
+    if (isDoc && files.length === 1 && !photoTitle.trim()) {
       setErrors(["Title is required."]);
       return;
     }
@@ -458,7 +460,10 @@ export default function AddPhotosModal({
             fileType: deriveDocFileType(s.file.type),
             fileSizeBytes: s.file.size,
             mimeType: s.file.type,
-            title: photoTitle.trim(),
+            title:
+              files.length > 1
+                ? s.file.name.replace(/\.[^.]+$/, "") || s.file.name
+                : photoTitle.trim(),
             category,
           })),
           note: notes || undefined,
@@ -473,7 +478,7 @@ export default function AddPhotosModal({
             width: s.dims.width || undefined,
             height: s.dims.height || undefined,
             title:
-              photoTitle.trim() ||
+              (files.length > 1 ? "" : photoTitle.trim()) ||
               s.file.name.replace(/\.[^.]+$/, "") ||
               undefined,
           })),
@@ -799,8 +804,9 @@ export default function AddPhotosModal({
                   </div>
                 )}
 
-                {/* Title */}
-                {
+                {/* Title — hidden when multiple files are selected; each
+                    file's own filename is used as its title instead. */}
+                {files.length <= 1 && (
                   <div className="flex flex-col gap-2">
                     <label
                       style={{
@@ -841,7 +847,7 @@ export default function AddPhotosModal({
                       }}
                     />
                   </div>
-                }
+                )}
 
                 {/* Caption */}
                 <div className="flex flex-col gap-2">

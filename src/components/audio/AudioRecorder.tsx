@@ -57,7 +57,9 @@ export default function AudioRecorder({
   const blobRef = useRef<Blob | null>(initialBlob ?? null);
   const durationRef = useRef(initialDuration ?? 0);
   const elapsedRef = useRef(0);
-  const [previewBlob, setPreviewBlob] = useState<Blob | null>(initialBlob ?? null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(
+    initialBlob ?? null,
+  );
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -345,8 +347,8 @@ export default function AudioRecorder({
                   width: 56,
                   height: 56,
                   borderRadius: "50%",
-                  background: "#EF4444",
-                  boxShadow: "0 0 0 6px rgba(239,68,68,0.15)",
+                  background: "#7C3AED",
+                  boxShadow: "0 0 0 6px rgba(124, 58, 237, 0.15)",
                 }}
               >
                 <span
@@ -396,8 +398,8 @@ export default function AudioRecorder({
                   width: 56,
                   height: 56,
                   borderRadius: "50%",
-                  background: "#EF4444",
-                  boxShadow: "0 0 0 6px rgba(239,68,68,0.15)",
+                  background: "#7C3AED",
+                  boxShadow: "0 0 0 6px rgba(124, 58, 237, 0.15)",
                 }}
               >
                 <Mic className="w-6 h-6 text-white" strokeWidth={2} />
