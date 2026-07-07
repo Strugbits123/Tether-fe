@@ -1108,10 +1108,16 @@ function FeedbackModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (
     }
     try {
       const screenshot_path = screenshot ? await uploadScreenshot(token, screenshot) : undefined
+      const FEEDBACK_TYPE_MAP: Record<string, 'praise' | 'suggestion' | 'complaint' | 'question'> = {
+        'Positive Feedback': 'praise',
+        Suggestion: 'suggestion',
+        Concern: 'complaint',
+        Question: 'question',
+      }
       await submitFeedback(token, {
         type: 'general_feedback',
-        page_context: type.toLowerCase(),
-        body: feedback.trim(),
+        feedback_type: FEEDBACK_TYPE_MAP[type] ?? 'other',
+        description: feedback.trim(),
         ...(screenshot_path ? { screenshot_path } : {}),
       })
       onSubmit()
@@ -1174,7 +1180,8 @@ function FeatureModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: ()
     try {
       await submitFeedback(token, {
         type: 'feature_request',
-        body: `Feature: ${feature.trim()}\n\nBenefit: ${benefit.trim()}`,
+        feature_description: feature.trim(),
+        feature_benefit: benefit.trim(),
       })
       onSubmit()
     } catch (e) {
@@ -1233,8 +1240,8 @@ function BugModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => 
       const screenshot_path = screenshot ? await uploadScreenshot(token, screenshot) : undefined
       await submitFeedback(token, {
         type: 'bug_report',
-        page_context: location,
-        body: description.trim(),
+        location,
+        description: description.trim(),
         ...(screenshot_path ? { screenshot_path } : {}),
       })
       onSubmit()

@@ -119,7 +119,7 @@ const TYPE_CONFIG: Record<
     badgeColor: "#9A3412",
     label: "photo",
   },
-  memoir: {
+  chapter: {
     Icon: BookOpen,
     iconBg: "#CFFAFE",
     iconColor: "#0891B2",
@@ -140,7 +140,7 @@ const TABS: {
   { key: "message", label: "Messages", countKey: "message" },
   { key: "document", label: "Documents", countKey: "document" },
   { key: "photo", label: "Photos", countKey: "photo" },
-  { key: "memoir", label: "Memoir", countKey: "memoir" },
+  { key: "chapter", label: "Memoir", countKey: "chapter" },
 ];
 
 /* ─── page ────────────────────────────────────────────────── */

@@ -12,12 +12,29 @@ export const getScreenshotUploadUrl = (
     token,
   )
 
-export const submitFeedback = (
-  token: string,
-  data: {
-    type: FeedbackType
-    page_context?: string
-    body: string
-    screenshot_path?: string
-  },
-) => api.post<{ id: string; type: FeedbackType; message: string }>('/feedback', data, token)
+// Payload shape mirrors the backend SubmitFeedbackDto exactly. The API uses
+// forbidNonWhitelisted, so field names must match per feedback type.
+export type GeneralFeedbackType =
+  | 'praise'
+  | 'suggestion'
+  | 'complaint'
+  | 'question'
+  | 'other'
+
+export type FeedbackPayload =
+  | { type: 'bug_report'; location?: string; description: string; screenshot_path?: string }
+  | {
+      type: 'feature_request'
+      feature_description: string
+      feature_benefit: string
+      screenshot_path?: string
+    }
+  | {
+      type: 'general_feedback'
+      feedback_type?: GeneralFeedbackType
+      description: string
+      screenshot_path?: string
+    }
+
+export const submitFeedback = (token: string, data: FeedbackPayload) =>
+  api.post<{ id: string; type: FeedbackType; message: string }>('/feedback', data, token)
