@@ -270,6 +270,13 @@ export default function HelpPage() {
         {/* Book a time */}
         <button
           type="button"
+          onClick={() =>
+            window.open(
+              'https://calendly.com/rj-jointether/tether-support',
+              '_blank',
+              'noopener,noreferrer',
+            )
+          }
           className="cursor-pointer hover:opacity-90 self-start"
           style={{
             height: 36,

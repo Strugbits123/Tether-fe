@@ -1,7 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+// Renamed from middleware.ts — Next.js 16 deprecated the `middleware` file
+// convention in favour of `proxy`.
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -27,7 +29,20 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const protectedPaths = ['/dashboard', '/settings', '/messages', '/documents', '/photos', '/story', '/recipients', '/onboarding']
+  // Protected dashboard routes. Note: the route is `/docs` (not `/documents`);
+  // `/access` and `/unassigned` are also authenticated.
+  const protectedPaths = [
+    '/dashboard',
+    '/settings',
+    '/messages',
+    '/docs',
+    '/photos',
+    '/story',
+    '/access',
+    '/unassigned',
+    '/recipients',
+    '/onboarding',
+  ]
   const isProtected = protectedPaths.some(path =>
     request.nextUrl.pathname.startsWith(path)
   )
