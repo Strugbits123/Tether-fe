@@ -7,6 +7,7 @@ import { useToast } from '@/lib/context/ToastContext'
 import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
+import { collectSignupAttribution } from '@/lib/attribution'
 
 function RegisterForm() {
   const router = useRouter()
@@ -73,6 +74,7 @@ function RegisterForm() {
             password,
             first_name: firstName,
             last_name: lastName,
+            ...collectSignupAttribution(),
           })
         } catch (err) {
           showToast(

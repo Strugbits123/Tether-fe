@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic } from "lucide-react";
+import { Mic, X } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import RecordPlugin from "wavesurfer.js/dist/plugins/record.esm.js";
 import MessagePlayerHeader from "@/components/messages/MessagePlayerHeader";
@@ -185,15 +185,14 @@ export default function AudioRecorder({
       className="flex flex-col px-6 sm:px-8 pt-6 sm:pt-7 pb-6 sm:pb-7"
       style={{ gap: 24 }}
     >
-      <MessagePlayerHeader
-        type="audio"
-        recipientName={recipientName}
-        messageTitle={messageTitle}
-        onClose={onClose}
-      />
-
       {phase === "preview" && previewBlob ? (
         <>
+          <MessagePlayerHeader
+            type="audio"
+            recipientName={recipientName}
+            messageTitle={messageTitle}
+            onClose={onClose}
+          />
           <AudioPlayer audioBlob={previewBlob} categoryLabel="Audio message" />
           <div className="flex flex-col sm:flex-row gap-3">
             <button
@@ -234,55 +233,71 @@ export default function AudioRecorder({
       ) : (
         <>
           {/* Status + timer */}
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            <div className="flex items-center" style={{ gap: 8 }}>
-              <span
-                className={phase === "recording" ? "recording-dot" : ""}
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  background: phase === "recording" ? "#EF4444" : "#D1D5DB",
-                  display: "inline-block",
-                }}
-              />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col" style={{ gap: 6 }}>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <span
+                  className={phase === "recording" ? "recording-dot" : ""}
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: phase === "recording" ? "#EF4444" : "#D1D5DB",
+                    display: "inline-block",
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "1.5px",
+                    color: phase === "recording" ? "#EF4444" : "#9CA3AF",
+                  }}
+                >
+                  {phase === "recording" ? "RECORDING…" : "READY TO RECORD"}
+                </span>
+              </div>
               <span
                 style={{
                   fontFamily: "Inter, sans-serif",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.5px",
-                  color: phase === "recording" ? "#EF4444" : "#9CA3AF",
+                  fontSize: 48,
+                  fontWeight: 700,
+                  lineHeight: "52px",
+                  color: "#111827",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {phase === "recording" ? "RECORDING…" : "READY TO RECORD"}
+                {formatTime(elapsed)}
               </span>
+              {phase === "recording" && (
+                <span
+                  style={{
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: 13,
+                    fontWeight: 400,
+                    color: "#9CA3AF",
+                  }}
+                >
+                  {formatTime(remaining)} remaining
+                </span>
+              )}
             </div>
-            <span
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-gray-200 transition-colors"
               style={{
-                fontFamily: "Inter, sans-serif",
-                fontSize: 48,
-                fontWeight: 700,
-                lineHeight: "52px",
-                color: "#111827",
-                fontVariantNumeric: "tabular-nums",
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                background: "#F3F4F6",
               }}
             >
-              {formatTime(elapsed)}
-            </span>
-            {phase === "recording" && (
-              <span
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: 13,
-                  fontWeight: 400,
-                  color: "#9CA3AF",
-                }}
-              >
-                {formatTime(remaining)} remaining
-              </span>
-            )}
+              <X className="w-4 h-4 text-gray-500" strokeWidth={2} />
+            </button>
           </div>
 
           {/* Waveform area */}
