@@ -1,6 +1,5 @@
 "use client";
 
-import posthog from "posthog-js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -62,7 +61,8 @@ const DOC_CATEGORIES = [
 ];
 
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/heic";
-const DOC_ACCEPT = ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic";
+const DOC_ACCEPT =
+  ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,.mp4,.mov,.m4v,.webm,.mp3,.wav,.m4a,.aac";
 const DOC_ALLOWED_MIME = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -70,6 +70,17 @@ const DOC_ALLOWED_MIME = new Set([
   "image/jpeg",
   "image/png",
   "image/heic",
+  // video
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/webm",
+  // audio
+  "audio/mpeg",
+  "audio/wav",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/aac",
 ]);
 const ONBOARDING_ACCEPT =
   ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,video/*,audio/*";
@@ -259,6 +270,7 @@ export default function AddPhotosModal({
         if (isDoc && !isOnboarding) {
           const okType =
             DOC_ALLOWED_MIME.has(f.type) ||
+            isMediaFile(f) ||
             /\.(pdf|docx?|jpe?g|png|heic)$/i.test(f.name);
           if (!okType) {
             errs.push("File type not supported");
@@ -346,7 +358,9 @@ export default function AddPhotosModal({
       setErrors(["Please select a category."]);
       return;
     }
-    if (isDoc && !photoTitle.trim()) {
+    // Title is only required for a single document. When multiple files are
+    // uploaded the title field is hidden and each file's name is used instead.
+    if (isDoc && files.length === 1 && !photoTitle.trim()) {
       setErrors(["Title is required."]);
       return;
     }
@@ -445,7 +459,10 @@ export default function AddPhotosModal({
             fileType: deriveDocFileType(s.file.type),
             fileSizeBytes: s.file.size,
             mimeType: s.file.type,
-            title: photoTitle.trim(),
+            title:
+              files.length > 1
+                ? s.file.name.replace(/\.[^.]+$/, "") || s.file.name
+                : photoTitle.trim(),
             category,
           })),
           note: notes || undefined,
@@ -460,7 +477,7 @@ export default function AddPhotosModal({
             width: s.dims.width || undefined,
             height: s.dims.height || undefined,
             title:
-              photoTitle.trim() ||
+              (files.length > 1 ? "" : photoTitle.trim()) ||
               s.file.name.replace(/\.[^.]+$/, "") ||
               undefined,
           })),
@@ -470,11 +487,6 @@ export default function AddPhotosModal({
         });
       }
 
-      if (isDoc) {
-        posthog.capture("documents_uploaded", { count: succeeded.length });
-      } else {
-        posthog.capture("photos_uploaded", { count: succeeded.length });
-      }
       showToast(
         `${succeeded.length} ${noun}${succeeded.length > 1 ? "s" : ""} uploaded`,
         "success",
@@ -786,8 +798,9 @@ export default function AddPhotosModal({
                   </div>
                 )}
 
-                {/* Title */}
-                {
+                {/* Title — hidden when multiple files are selected; each
+                    file's own filename is used as its title instead. */}
+                {files.length <= 1 && (
                   <div className="flex flex-col gap-2">
                     <label
                       style={{
@@ -828,7 +841,7 @@ export default function AddPhotosModal({
                       }}
                     />
                   </div>
-                }
+                )}
 
                 {/* Caption */}
                 <div className="flex flex-col gap-2">

@@ -22,6 +22,11 @@ export interface PhotoFolder {
   name: string;
   photoCount: number;
   created_at: string;
+  assignments?: {
+    assignment_scope: string;
+    group_value: string | null;
+    recipient_id: string | null;
+  }[];
 }
 
 export interface FoldersResponse {
@@ -122,7 +127,7 @@ export const getFolders = (token: string) =>
 export const renameFolder = (
   token: string,
   folderId: string,
-  body: { name: string },
+  body: { name: string; assignments?: Assignment[] },
 ) => api.patch<PhotoFolder>(`/photos/folders/${folderId}`, body, token);
 
 export const deleteFolder = (token: string, folderId: string) =>

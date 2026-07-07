@@ -1,93 +1,138 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Clock,
   Download,
   Grid3x3,
   List,
+  Loader2,
   Mic,
   Pencil,
   Plus,
   Settings,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import {
+  listChapters,
+  type ChapterAssignment,
+  type ChapterListItem,
+  type ChapterStats,
+} from '@/lib/api/chapters'
+import { ApiError } from '@/lib/api/client'
 
-/* ---------------------- Types & data ---------------------- */
+/* ---------------------- Helpers ---------------------- */
 
-type ChapterStatus = 'complete' | 'in-progress' | 'draft'
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  })
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  family: 'All Family',
+  friends: 'All Friends',
+  others: 'All Others',
+}
+
+/** Splits a chapter's assignments into group chips + individual initials. */
+function summarizeAssignments(assignments: ChapterAssignment[]): {
+  groups: string[]
+  initials: string[]
+  noRecipients: boolean
+} {
+  const groups: string[] = []
+  const initials: string[] = []
+  for (const a of assignments) {
+    switch (a.assignment_scope) {
+      case 'all':
+        groups.push('All Recipients')
+        break
+      case 'release_manager':
+        groups.push('Release Manager')
+        break
+      case 'group':
+        if (a.group_value && GROUP_LABELS[a.group_value])
+          groups.push(GROUP_LABELS[a.group_value])
+        break
+      case 'individual':
+        initials.push(initialsOf(a.recipient_name ?? ''))
+        break
+    }
+  }
+  const noRecipients =
+    groups.length === 0 &&
+    initials.length === 0 // covers assign_later and empty
+  return { groups, initials, noRecipients }
+}
+
+/* ---------------------- Display types ---------------------- */
+
+type DisplayStatus = 'complete' | 'in-progress' | 'draft'
 type ChapterKind = 'text' | 'voice'
 
-interface Chapter {
+interface DisplayChapter {
+  id: string
   number: number
   title: string
   kind: ChapterKind
   period: string
-  status: ChapterStatus
+  status: DisplayStatus
   words: string | null
   date: string
   groups: string[]
   initials: string[]
   extra: number
-  noRecipients?: boolean
+  noRecipients: boolean
 }
 
-const CHAPTERS: Chapter[] = [
-  {
-    number: 1,
-    title: 'Growing Up in Chicago',
-    kind: 'text',
-    period: '1965 – 1978',
-    status: 'complete',
-    words: '1,247',
-    date: 'Mar 28, 2026',
-    groups: ['All Family', 'All Friends', 'All Recipients', 'Release Manager', 'All Others'],
-    initials: ['KH', 'EM', 'WI'],
-    extra: 4,
-  },
-  {
-    number: 2,
-    title: 'Growing Up in Chicago',
-    kind: 'voice',
-    period: '1982',
-    status: 'complete',
-    words: '1,247',
-    date: 'Mar 30, 2026',
-    groups: ['All Friends'],
-    initials: ['KH', 'WI'],
-    extra: 0,
-  },
-  {
-    number: 3,
-    title: 'Growing Up in Chicago',
-    kind: 'text',
-    period: '1988 – 2005',
-    status: 'in-progress',
-    words: '1,247',
-    date: 'April 03, 2026',
-    groups: ['All Family', 'All Friends', 'All Recipients'],
-    initials: ['KH', 'EM', 'WI'],
-    extra: 4,
-  },
-  {
-    number: 4,
-    title: 'Growing Up in Chicago',
-    kind: 'text',
-    period: '2008 – 2012',
-    status: 'draft',
-    words: null,
-    date: 'April 30, 2026',
-    groups: [],
-    initials: [],
-    extra: 0,
-    noRecipients: true,
-  },
-]
+const MAX_INITIALS = 3
 
-const STATUS_CONFIG: Record<ChapterStatus, { label: string; bg: string; text: string; bold: boolean }> = {
-  complete: { label: 'Complete', bg: '#DCFCE7', text: '#008236', bold: false },
-  'in-progress': { label: 'In Progress', bg: '#E0E7FF', text: '#432DD7', bold: false },
-  draft: { label: 'Draft', bg: '#FEF3C6', text: '#BB4D00', bold: false },
+function toDisplay(c: ChapterListItem, index: number): DisplayChapter {
+  const { groups, initials, noRecipients } = summarizeAssignments(c.assignments)
+  const status: DisplayStatus =
+    c.status === 'in_progress' ? 'in-progress' : c.status
+  return {
+    id: c.id,
+    number: index + 1,
+    title: c.title,
+    kind: c.type,
+    period: c.date_label ?? '',
+    status,
+    words: c.status === 'draft' && c.word_count === 0
+      ? null
+      : c.word_count.toLocaleString('en-US'),
+    date: formatDate(c.created_at),
+    groups,
+    initials: initials.slice(0, MAX_INITIALS),
+    extra: Math.max(0, initials.length - MAX_INITIALS),
+    noRecipients,
+  }
+}
+
+const STATUS_CONFIG: Record<DisplayStatus, { label: string; bg: string; text: string }> = {
+  complete: { label: 'Complete', bg: '#DCFCE7', text: '#008236' },
+  'in-progress': { label: 'In Progress', bg: '#E0E7FF', text: '#432DD7' },
+  draft: { label: 'Draft', bg: '#FEF3C6', text: '#BB4D00' },
 }
 
 const GROUP_COLORS: Record<string, { bg: string; text: string }> = {
@@ -102,13 +147,43 @@ const GROUP_COLORS: Record<string, { bg: string; text: string }> = {
 
 export default function StoryPage() {
   const router = useRouter()
+  const { showToast } = useToast()
   const [layout, setLayout] = useState<'grid' | 'list'>('grid')
+  const [chapters, setChapters] = useState<DisplayChapter[]>([])
+  const [stats, setStats] = useState<ChapterStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    const token = await getToken()
+    if (!token) {
+      setError('Your session has expired. Please sign in again.')
+      setLoading(false)
+      return
+    }
+    try {
+      const data = await listChapters(token)
+      setChapters(data.chapters.map(toDisplay))
+      setStats(data.stats)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to load your story.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const openChapter = (id: string) => router.push(`/story/${id}`)
 
   return (
     <div className="flex flex-col gap-6">
       {/* Header row */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        {/* Left: title + subtitle + chips */}
         <div className="flex flex-col" style={{ gap: 8, maxWidth: 623 }}>
           <h1
             style={{
@@ -134,7 +209,6 @@ export default function StoryPage() {
             Your life in your words — organized into chapters your family will read for generations.
           </p>
 
-          {/* Chips row */}
           <div className="flex items-center flex-wrap" style={{ gap: 11.99 }}>
             <span
               className="inline-flex items-center justify-center"
@@ -151,7 +225,7 @@ export default function StoryPage() {
                 color: '#432DD7',
               }}
             >
-              {CHAPTERS.length} chapters
+              {chapters.length} {chapters.length === 1 ? 'chapter' : 'chapters'}
             </span>
             <button
               type="button"
@@ -242,18 +316,33 @@ export default function StoryPage() {
 
       {/* Content: cards + progress panel */}
       <div className="flex flex-col lg:flex-row" style={{ gap: 24 }}>
-        {/* Cards area */}
         <div className="flex-1 min-w-0">
-          {layout === 'grid' ? (
+          {loading ? (
+            <div className="flex items-center justify-center" style={{ minHeight: 240 }}>
+              <Loader2 className="w-6 h-6 animate-spin text-[#4F39F6]" />
+            </div>
+          ) : error ? (
+            <EmptyState
+              title="Couldn’t load your story"
+              body={error}
+              action={{ label: 'Try again', onClick: load }}
+            />
+          ) : chapters.length === 0 ? (
+            <EmptyState
+              title="No chapters yet"
+              body="Start your story by adding your first chapter."
+              action={{ label: 'Add a chapter', onClick: () => router.push('/story/new') }}
+            />
+          ) : layout === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: 20 }}>
-              {CHAPTERS.map((c) => (
-                <ChapterGridCard key={c.number} chapter={c} />
+              {chapters.map((c) => (
+                <ChapterGridCard key={c.id} chapter={c} onOpen={() => openChapter(c.id)} />
               ))}
             </div>
           ) : (
             <div className="flex flex-col" style={{ gap: 15 }}>
-              {CHAPTERS.map((c) => (
-                <ChapterListCard key={c.number} chapter={c} />
+              {chapters.map((c) => (
+                <ChapterListCard key={c.id} chapter={c} onOpen={() => openChapter(c.id)} />
               ))}
             </div>
           )}
@@ -261,9 +350,78 @@ export default function StoryPage() {
 
         {/* Progress panel */}
         <div className="w-full lg:w-[286px] flex-shrink-0">
-          <ProgressPanel />
+          <ProgressPanel stats={stats} totalChapters={chapters.length} showToast={showToast} />
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ---------------------- Empty / error state ---------------------- */
+
+function EmptyState({
+  title,
+  body,
+  action,
+}: {
+  title: string
+  body: string
+  action: { label: string; onClick: () => void }
+}) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center text-center"
+      style={{
+        minHeight: 240,
+        borderRadius: 14,
+        border: '1.25px dashed #D1D5DC',
+        background: '#FFFFFF',
+        padding: 32,
+        gap: 12,
+      }}
+    >
+      <h3
+        style={{
+          fontFamily: '"Instrument Serif", serif',
+          fontWeight: 400,
+          fontSize: 24,
+          lineHeight: '28px',
+          color: '#101828',
+        }}
+      >
+        {title}
+      </h3>
+      <p
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 400,
+          fontSize: 14,
+          lineHeight: '20px',
+          color: '#4A5565',
+          maxWidth: 360,
+        }}
+      >
+        {body}
+      </p>
+      <button
+        type="button"
+        onClick={action.onClick}
+        className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90"
+        style={{
+          height: 35.996,
+          padding: '8px 16px',
+          borderRadius: 8,
+          background: '#4F39F6',
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          fontSize: 14,
+          lineHeight: '20px',
+          letterSpacing: '-0.15px',
+          color: '#FFFFFF',
+        }}
+      >
+        {action.label}
+      </button>
     </div>
   )
 }
@@ -303,6 +461,7 @@ function TypeBadge({ kind }: { kind: ChapterKind }) {
 }
 
 function PeriodPill({ period }: { period: string }) {
+  if (!period) return null
   return (
     <span
       className="inline-flex items-center justify-center"
@@ -325,7 +484,7 @@ function PeriodPill({ period }: { period: string }) {
   )
 }
 
-function StatusPill({ status }: { status: ChapterStatus }) {
+function StatusPill({ status }: { status: DisplayStatus }) {
   const cfg = STATUS_CONFIG[status]
   return (
     <span
@@ -369,7 +528,7 @@ function DateLabel({ date }: { date: string }) {
   )
 }
 
-function AssignedTo({ chapter }: { chapter: Chapter }) {
+function AssignedTo({ chapter }: { chapter: DisplayChapter }) {
   if (chapter.noRecipients) {
     return (
       <span
@@ -423,9 +582,9 @@ function AssignedTo({ chapter }: { chapter: Chapter }) {
             </span>
           )
         })}
-        {chapter.initials.map((init) => (
+        {chapter.initials.map((init, i) => (
           <span
-            key={init}
+            key={`${init}-${i}`}
             className="inline-flex items-center justify-center flex-shrink-0"
             style={{
               width: 23.98,
@@ -467,9 +626,10 @@ function AssignedTo({ chapter }: { chapter: Chapter }) {
 
 /* ---------------------- Grid card ---------------------- */
 
-function ChapterGridCard({ chapter }: { chapter: Chapter }) {
+function ChapterGridCard({ chapter, onOpen }: { chapter: DisplayChapter; onOpen: () => void }) {
   return (
     <div
+      onClick={onOpen}
       className="flex flex-col cursor-pointer hover:shadow-sm transition-shadow"
       style={{
         borderRadius: 14,
@@ -478,7 +638,6 @@ function ChapterGridCard({ chapter }: { chapter: Chapter }) {
         padding: 20,
       }}
     >
-      {/* Top: chapter no. + date */}
       <div className="flex items-center justify-between gap-2">
         <span
           style={{
@@ -494,7 +653,6 @@ function ChapterGridCard({ chapter }: { chapter: Chapter }) {
         <DateLabel date={chapter.date} />
       </div>
 
-      {/* Title + type badge */}
       <div className="flex items-start justify-between gap-3" style={{ marginTop: 15 }}>
         <h2
           style={{
@@ -513,13 +671,11 @@ function ChapterGridCard({ chapter }: { chapter: Chapter }) {
         </div>
       </div>
 
-      {/* Period + status */}
       <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: 16 }}>
         <PeriodPill period={chapter.period} />
         <StatusPill status={chapter.status} />
       </div>
 
-      {/* Word count / continue writing */}
       <div style={{ marginTop: 16 }}>
         {chapter.words ? (
           <span
@@ -535,9 +691,7 @@ function ChapterGridCard({ chapter }: { chapter: Chapter }) {
             {chapter.words} words
           </span>
         ) : (
-          <button
-            type="button"
-            className="cursor-pointer hover:opacity-80"
+          <span
             style={{
               fontFamily: 'Inter, sans-serif',
               fontWeight: 500,
@@ -546,22 +700,14 @@ function ChapterGridCard({ chapter }: { chapter: Chapter }) {
               lineHeight: '20px',
               letterSpacing: '-0.15px',
               color: '#4F46E5',
-              background: 'transparent',
             }}
           >
             Continue Writing
-          </button>
+          </span>
         )}
       </div>
 
-      {/* Divider + assigned to */}
-      <div
-        style={{
-          marginTop: 16,
-          paddingTop: 16,
-          borderTop: '1.25px solid #F3F4F6',
-        }}
-      >
+      <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1.25px solid #F3F4F6' }}>
         <AssignedTo chapter={chapter} />
       </div>
     </div>
@@ -570,9 +716,10 @@ function ChapterGridCard({ chapter }: { chapter: Chapter }) {
 
 /* ---------------------- List card ---------------------- */
 
-function ChapterListCard({ chapter }: { chapter: Chapter }) {
+function ChapterListCard({ chapter, onOpen }: { chapter: DisplayChapter; onOpen: () => void }) {
   return (
     <div
+      onClick={onOpen}
       className="flex flex-col cursor-pointer hover:shadow-sm transition-shadow"
       style={{
         borderRadius: 14,
@@ -582,9 +729,7 @@ function ChapterListCard({ chapter }: { chapter: Chapter }) {
         gap: 13,
       }}
     >
-      {/* Top row: number + main info + date */}
       <div className="flex items-start" style={{ gap: 16 }}>
-        {/* Chapter number block */}
         <div className="flex flex-col items-center flex-shrink-0" style={{ width: 63.98 }}>
           <span
             style={{
@@ -612,7 +757,6 @@ function ChapterListCard({ chapter }: { chapter: Chapter }) {
           </span>
         </div>
 
-        {/* Main info */}
         <div className="flex flex-col flex-1 min-w-0" style={{ gap: 7.99 }}>
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <h2
@@ -631,73 +775,60 @@ function ChapterListCard({ chapter }: { chapter: Chapter }) {
           </div>
 
           <div className="flex items-center flex-wrap" style={{ gap: 16 }}>
-            <span
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: '#4A5565',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {chapter.period}
-            </span>
+            {chapter.period && (
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#4A5565',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {chapter.period}
+              </span>
+            )}
+            <StatusPill status={chapter.status} />
             {chapter.words ? (
-              <>
-                <StatusPill status={chapter.status} />
-                <span
-                  style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 400,
-                    fontSize: 14,
-                    lineHeight: '20px',
-                    letterSpacing: '-0.15px',
-                    color: '#4A5565',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {chapter.words} words
-                </span>
-              </>
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#4A5565',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {chapter.words} words
+              </span>
             ) : (
-              <>
-                <StatusPill status={chapter.status} />
-                <button
-                  type="button"
-                  className="cursor-pointer hover:opacity-80"
-                  style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 500,
-                    fontStyle: 'italic',
-                    fontSize: 14,
-                    lineHeight: '20px',
-                    letterSpacing: '-0.15px',
-                    color: '#4F46E5',
-                    background: 'transparent',
-                  }}
-                >
-                  Continue Writing
-                </button>
-              </>
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontStyle: 'italic',
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#4F46E5',
+                }}
+              >
+                Continue Writing
+              </span>
             )}
           </div>
         </div>
 
-        {/* Date */}
         <div className="flex-shrink-0">
           <DateLabel date={chapter.date} />
         </div>
       </div>
 
-      {/* Assigned to */}
-      <div
-        style={{
-          paddingTop: 9,
-          borderTop: '1px solid #F3F4F6',
-        }}
-      >
+      <div style={{ paddingTop: 9, borderTop: '1px solid #F3F4F6' }}>
         <AssignedTo chapter={chapter} />
       </div>
     </div>
@@ -706,9 +837,19 @@ function ChapterListCard({ chapter }: { chapter: Chapter }) {
 
 /* ---------------------- Progress panel ---------------------- */
 
-function ProgressPanel() {
+function ProgressPanel({
+  stats,
+  totalChapters,
+  showToast,
+}: {
+  stats: ChapterStats | null
+  totalChapters: number
+  showToast: (m: string, t?: 'success' | 'error' | 'info') => void
+}) {
   const router = useRouter()
-  const percent = 50
+  const completed = stats?.completed_chapters ?? 0
+  const total = stats?.total_chapters ?? totalChapters
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0
 
   return (
     <div
@@ -734,46 +875,50 @@ function ProgressPanel() {
         Progress
       </h3>
 
-      {/* Donut */}
       <div className="flex items-center justify-center" style={{ height: 124 }}>
         <ProgressDonut percent={percent} />
       </div>
 
-      {/* Stats */}
       <div className="flex flex-col" style={{ gap: 11.99 }}>
-        <StatRow label="Chapters written" value="2" />
-        <StatRow label="Total words" value="2,773" />
-        <StatRow label="Recipients assigned" value="3" />
+        <StatRow label="Chapters written" value={String(completed)} />
+        <StatRow label="Total words" value={(stats?.total_words ?? 0).toLocaleString('en-US')} />
+        <StatRow label="Recipients assigned" value={String(stats?.recipients_assigned ?? 0)} />
       </div>
 
-      {/* Info box */}
-      <div
-        style={{
-          borderRadius: 10,
-          border: '1.25px solid #E0E7FF',
-          background: '#EEF2FF',
-          padding: '13.24px 13.24px 13.24px 13.24px',
-        }}
-      >
-        <p
+      {total > 0 && completed < total && (
+        <div
           style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 400,
-            fontSize: 12,
-            lineHeight: '16px',
-            color: '#312C85',
+            borderRadius: 10,
+            border: '1.25px solid #E0E7FF',
+            background: '#EEF2FF',
+            padding: 13.24,
           }}
         >
-          Add 2 more chapters to give your family a complete picture of your life
-        </p>
-      </div>
+          <p
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 400,
+              fontSize: 12,
+              lineHeight: '16px',
+              color: '#312C85',
+            }}
+          >
+            Complete {total - completed} more {total - completed === 1 ? 'chapter' : 'chapters'} to give your family a complete picture of your life
+          </p>
+        </div>
+      )}
 
-      {/* Buttons */}
       <div className="flex flex-col" style={{ gap: 7.99 }}>
         <PanelButton
           icon={<Download style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />}
           label="Download Memoir"
-          onClick={() => router.push('/story/preview')}
+          onClick={() => {
+            if (total === 0) {
+              showToast('Add a chapter before downloading your memoir.', 'info')
+              return
+            }
+            router.push('/story/preview')
+          }}
         />
         <PanelButton
           icon={<Settings style={{ width: 16, height: 16 }} color="#0A0A0A" strokeWidth={2} />}
@@ -857,7 +1002,6 @@ function ProgressDonut({ percent }: { percent: number }) {
   const c = size / 2
   const circumference = 2 * Math.PI * r
 
-  // Two separate rounded arcs with a small gap at each junction.
   const gapDeg = 8
   const progSpanDeg = Math.max(0, (percent / 100) * (360 - 2 * gapDeg))
   const trackSpanDeg = Math.max(0, ((100 - percent) / 100) * (360 - 2 * gapDeg))
@@ -865,14 +1009,12 @@ function ProgressDonut({ percent }: { percent: number }) {
   const progLen = (progSpanDeg / 360) * circumference
   const trackLen = (trackSpanDeg / 360) * circumference
 
-  // Sequence clockwise from the top: gap → progress → gap → track.
   const progRotate = -90 + gapDeg
   const trackRotate = -90 + progSpanDeg + 2 * gapDeg
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Unfilled track arc */}
         <circle
           cx={c}
           cy={c}
@@ -884,7 +1026,6 @@ function ProgressDonut({ percent }: { percent: number }) {
           strokeDasharray={`${trackLen} ${circumference}`}
           transform={`rotate(${trackRotate} ${c} ${c})`}
         />
-        {/* Filled progress arc */}
         <circle
           cx={c}
           cy={c}

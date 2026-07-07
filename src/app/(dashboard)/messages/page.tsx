@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Eye,
   FileText,
+  MessageSquare,
   Loader2,
   Mic,
   MoreVertical,
@@ -61,8 +62,8 @@ const STATUS_BADGE: Record<
 const ASSIGN_GROUP_MAP: Record<string, Assignment> = {
   "All Recipients": { scope: "all" },
   "All Family": { scope: "group", groupValue: "family" },
-  "All Friends": { scope: "group", groupValue: "friend" },
-  "All Others": { scope: "group", groupValue: "other" },
+  "All Friends": { scope: "group", groupValue: "friends" },
+  "All Others": { scope: "group", groupValue: "others" },
   "Release Manager": { scope: "release_manager" },
 };
 
@@ -426,7 +427,7 @@ export default function MessagesPage() {
           }}
         >
           <Plus className="w-4 h-4" strokeWidth={2.25} />
-          New Messages
+          New Message
         </button>
       </div>
 
@@ -517,7 +518,11 @@ export default function MessagesPage() {
               background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
             }}
           >
-            <FileText className="w-7 h-7" color="#4F39F6" strokeWidth={2} />
+            <MessageSquare
+              className="w-7 h-7"
+              color="#4F39F6"
+              strokeWidth={2}
+            />
           </div>
           <p
             style={{

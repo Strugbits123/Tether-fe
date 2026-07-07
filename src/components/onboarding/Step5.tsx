@@ -27,14 +27,14 @@ const fileTypeCards = [
   {
     icon: Mic,
     label: 'Audio Files',
-    accept: '.mp3,.wav',
-    types: 'MP3, WAV',
+    accept: '.mp3,.wav,.m4a,.aac',
+    types: 'MP3, WAV, M4A, AAC',
   },
   {
     icon: Video,
     label: 'Video Files',
-    accept: '.mov,.mp4',
-    types: 'MOV, MP4',
+    accept: '.mp4,.mov,.m4v,.webm',
+    types: 'MP4, MOV, M4V, WEBM',
   },
 ]
 

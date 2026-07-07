@@ -67,8 +67,8 @@ function buildAssignments(groups: string[], individualIds: string[]): Assignment
     "Assign later": { scope: "assign_later" },
     "All Recipients": { scope: "all" },
     "All Family": { scope: "group", groupValue: "family" },
-    "All Friends": { scope: "group", groupValue: "friend" },
-    "All Others": { scope: "group", groupValue: "other" },
+    "All Friends": { scope: "group", groupValue: "friends" },
+    "All Others": { scope: "group", groupValue: "others" },
     "Release Manager": { scope: "release_manager" },
   };
   if (groups.includes("Assign later")) return [{ scope: "assign_later" }];
@@ -119,7 +119,7 @@ const TYPE_CONFIG: Record<
     badgeColor: "#9A3412",
     label: "photo",
   },
-  memoir: {
+  chapter: {
     Icon: BookOpen,
     iconBg: "#CFFAFE",
     iconColor: "#0891B2",
@@ -140,7 +140,7 @@ const TABS: {
   { key: "message", label: "Messages", countKey: "message" },
   { key: "document", label: "Documents", countKey: "document" },
   { key: "photo", label: "Photos", countKey: "photo" },
-  { key: "memoir", label: "Memoir", countKey: "memoir" },
+  { key: "chapter", label: "Memoir", countKey: "chapter" },
 ];
 
 /* ─── page ────────────────────────────────────────────────── */
