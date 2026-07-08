@@ -479,7 +479,11 @@ function RecordStep({
       onError('Your session has expired. Please sign in again.')
       return
     }
-    const fileType = blob.type || 'audio/webm'
+    // MediaRecorder reports e.g. "audio/webm;codecs=opus"; strip the codec
+    // parameter so the Content-Type matches the storage bucket's allowed MIME
+    // list (which stores the base type, "audio/webm") — otherwise Supabase
+    // Storage rejects the upload with 415 invalid_mime_type.
+    const fileType = (blob.type || 'audio/webm').split(';')[0].trim()
     const ext = fileType.includes('mp4') ? 'mp4' : fileType.includes('ogg') ? 'ogg' : 'webm'
     const fileName = `recording.${ext}`
     try {
