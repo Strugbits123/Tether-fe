@@ -4,20 +4,20 @@ Next.js frontend for Tether — Digital Legacy Platform
 
 ## Tech Stack
 
-| Layer | Library / Service |
-|---|---|
-| Framework | Next.js 16 (App Router) + React 19 + TypeScript (strict) |
-| Styling | Tailwind CSS v4 |
-| Auth & Storage | Supabase SSR (`@supabase/ssr`) |
-| Video playback | Mux (`@mux/mux-player-react`) |
-| Audio waveforms | WaveSurfer.js + `@wavesurfer/react` |
-| Icons | Lucide React |
-| Error monitoring | Sentry (`@sentry/nextjs`) |
-| Analytics | PostHog (`posthog-js` + `posthog-js/react`) |
-| HTML sanitization | DOMPurify (rich-text rendering) |
-| Icons (extra) | React Icons |
-| Billing | Stripe (`@stripe/stripe-js`) |
-| Hosting | Vercel |
+| Layer             | Library / Service                                        |
+| ----------------- | -------------------------------------------------------- |
+| Framework         | Next.js 16 (App Router) + React 19 + TypeScript (strict) |
+| Styling           | Tailwind CSS v4                                          |
+| Auth & Storage    | Supabase SSR (`@supabase/ssr`)                           |
+| Video playback    | Mux (`@mux/mux-player-react`)                            |
+| Audio waveforms   | WaveSurfer.js + `@wavesurfer/react`                      |
+| Icons             | Lucide React                                             |
+| Error monitoring  | Sentry (`@sentry/nextjs`)                                |
+| Analytics         | PostHog (`posthog-js` + `posthog-js/react`)              |
+| HTML sanitization | DOMPurify (rich-text rendering)                          |
+| Icons (extra)     | React Icons                                              |
+| Billing           | Stripe (`@stripe/stripe-js`)                             |
+| Hosting           | Vercel                                                   |
 
 The frontend talks to a NestJS REST API. Every response uses one of two envelopes
 (`{ success, data }` or `{ success: false, statusCode, message }`); `src/lib/api/client.ts`
@@ -27,7 +27,6 @@ is the single place that unwraps them.
 
 - Node.js 20+
 - npm
-- Access to 1Password Teams vault (Tether)
 
 ## Local Setup
 
@@ -35,7 +34,7 @@ is the single place that unwraps them.
 git clone https://github.com/Strugbits123/Tether-fe.git
 cd tether-web
 npm install
-cp .env.example .env.local   # fill in values from 1Password
+cp .env.example .env.local
 npm run dev                  # http://localhost:3000
 ```
 
@@ -46,20 +45,20 @@ See `.env.example` for all required variables.
 
 ## Branch Strategy
 
-| Branch | Target | Environment |
-|---|---|---|
-| `feature/*` | → `develop` (via PR) | — |
-| `develop` | → `Tether-Inc/Tether-Front-End` `develop` | Staging |
-| `main` | → `Tether-Inc/Tether-Front-End` `main` | Production |
+| Branch      | Target                                    | Environment |
+| ----------- | ----------------------------------------- | ----------- |
+| `feature/*` | → `develop` (via PR)                      | —           |
+| `develop`   | → `Tether-Inc/Tether-Front-End` `develop` | Staging     |
+| `main`      | → `Tether-Inc/Tether-Front-End` `main`    | Production  |
 
 All PRs require CodeRabbit review before merge.
 
 ## Deployment
 
-| Environment | Trigger | URL |
-|---|---|---|
-| Staging | Auto-deploy on `Tether-Inc/develop` update | https://staging.jointether.com |
-| Production | Auto-deploy on `Tether-Inc/main` update | https://jointether.com |
+| Environment | Trigger                                    | URL                            |
+| ----------- | ------------------------------------------ | ------------------------------ |
+| Staging     | Auto-deploy on `Tether-Inc/develop` update | https://staging.jointether.com |
+| Production  | Auto-deploy on `Tether-Inc/main` update    | https://jointether.com         |
 
 ## Project Structure
 
@@ -103,38 +102,38 @@ src/
 
 ## Pages
 
-| Route | Description |
-|---|---|
-| `/` | Marketing landing page |
-| `/(auth)/[mode]` | Sign-in / sign-up |
-| `/(auth)/verify-email` | Email verification prompt + resend |
-| `/(auth)/update-password` | Password reset |
-| `/(auth)/onboarding` | 5-step guided onboarding wizard |
-| `/(dashboard)/dashboard` | Home — stats, setup checklist, quick actions, activity |
-| `/(dashboard)/messages` | Messages list — create, edit, read, play audio/video/text |
-| `/(dashboard)/photos` | Photos — upload, folders, lightbox, edit, assign |
-| `/(dashboard)/docs` | Documents & files — upload, manage, assign |
-| `/(dashboard)/story` | Memoir — chapter list, editor (`new`, `[id]`), `preview`, `settings` |
-| `/(dashboard)/access` | Recipients and release manager CRUD |
-| `/(dashboard)/help` | Feedback & support — bug report, feature request, general feedback |
+| Route                     | Description                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `/`                       | Marketing landing page                                                                                        |
+| `/(auth)/[mode]`          | Sign-in / sign-up                                                                                             |
+| `/(auth)/verify-email`    | Email verification prompt + resend                                                                            |
+| `/(auth)/update-password` | Password reset                                                                                                |
+| `/(auth)/onboarding`      | 5-step guided onboarding wizard                                                                               |
+| `/(dashboard)/dashboard`  | Home — stats, setup checklist, quick actions, activity                                                        |
+| `/(dashboard)/messages`   | Messages list — create, edit, read, play audio/video/text                                                     |
+| `/(dashboard)/photos`     | Photos — upload, folders, lightbox, edit, assign                                                              |
+| `/(dashboard)/docs`       | Documents & files — upload, manage, assign                                                                    |
+| `/(dashboard)/story`      | Memoir — chapter list, editor (`new`, `[id]`), `preview`, `settings`                                          |
+| `/(dashboard)/access`     | Recipients and release manager CRUD                                                                           |
+| `/(dashboard)/help`       | Feedback & support — bug report, feature request, general feedback                                            |
 | `/(dashboard)/unassigned` | Unassigned content — filter by type, bulk assign/delete (the "Memoir" tab filters the `chapter` content type) |
 
 ## API Modules (`src/lib/api`)
 
-| Module | Endpoints covered |
-|---|---|
-| `client.ts` | Base `request()`, `api.{get,post,patch,delete}`, `ApiError` |
-| `users.ts` | `GET /users/me`, profile update |
-| `recipients.ts` | `/recipients` CRUD |
-| `release-managers.ts` | `/release-managers` CRUD |
-| `messages.ts` | `/messages` CRUD, playback tokens, audio signed URLs, status polling |
-| `documents.ts` | `/documents` — signed upload URLs, batch create, list, delete |
-| `photos.ts` | `/photos` — signed upload URLs, batch create, list, delete |
-| `chapters.ts` | `/chapters` — text/voice chapters, autosave, reorder, exhibits, assignments |
-| `memoir.ts` | `/memoir` — preview, PDF/text export, per-chapter TTS narration |
-| `content.ts` | `GET /content/unassigned`, `POST /content/bulk-assign`, `POST /content/bulk-delete` |
-| `activity.ts` | `GET /activity` feed |
-| `feedback.ts` | `/feedback` — screenshot upload URL, submit feedback |
+| Module                | Endpoints covered                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `client.ts`           | Base `request()`, `api.{get,post,patch,delete}`, `ApiError`                         |
+| `users.ts`            | `GET /users/me`, profile update                                                     |
+| `recipients.ts`       | `/recipients` CRUD                                                                  |
+| `release-managers.ts` | `/release-managers` CRUD                                                            |
+| `messages.ts`         | `/messages` CRUD, playback tokens, audio signed URLs, status polling                |
+| `documents.ts`        | `/documents` — signed upload URLs, batch create, list, delete                       |
+| `photos.ts`           | `/photos` — signed upload URLs, batch create, list, delete                          |
+| `chapters.ts`         | `/chapters` — text/voice chapters, autosave, reorder, exhibits, assignments         |
+| `memoir.ts`           | `/memoir` — preview, PDF/text export, per-chapter TTS narration                     |
+| `content.ts`          | `GET /content/unassigned`, `POST /content/bulk-assign`, `POST /content/bulk-delete` |
+| `activity.ts`         | `GET /activity` feed                                                                |
+| `feedback.ts`         | `/feedback` — screenshot upload URL, submit feedback                                |
 
 `client.ts` is the **single source of truth** for success/failure. It unwraps `data` on
 success and throws a typed `ApiError(statusCode, message)` for every failure class
@@ -143,18 +142,18 @@ success and throws a typed `ApiError(statusCode, message)` for every failure cla
 
 ## Key Components (`src/components/dashboard`)
 
-| Component | Purpose |
-|---|---|
-| `CreateMessageModal` | 3-step wizard (type → content → details) for new messages; `EditWizard` for edits |
-| `AssignRecipientsModal` | Shared recipient assignment modal (groups + individuals) |
-| `AddPhotosModal` | Photo upload with folder support |
-| `AddRecipientsModal` | Recipient create/edit form |
-| `AddReleaseManagerModal` | Release manager create/edit form |
-| `FinishProfileModal` | Profile completion prompt |
-| `QuickActions` | Dashboard quick-action cards |
-| `SetupSteps` / `OnboardingWidget` | Setup checklist, mirrors onboarding completion |
-| `WelcomeBanner` | Shown while onboarding is incomplete |
-| `ActivityFeed` / `StatCard` | Dashboard data widgets |
+| Component                         | Purpose                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| `CreateMessageModal`              | 3-step wizard (type → content → details) for new messages; `EditWizard` for edits |
+| `AssignRecipientsModal`           | Shared recipient assignment modal (groups + individuals)                          |
+| `AddPhotosModal`                  | Photo upload with folder support                                                  |
+| `AddRecipientsModal`              | Recipient create/edit form                                                        |
+| `AddReleaseManagerModal`          | Release manager create/edit form                                                  |
+| `FinishProfileModal`              | Profile completion prompt                                                         |
+| `QuickActions`                    | Dashboard quick-action cards                                                      |
+| `SetupSteps` / `OnboardingWidget` | Setup checklist, mirrors onboarding completion                                    |
+| `WelcomeBanner`                   | Shown while onboarding is incomplete                                              |
+| `ActivityFeed` / `StatCard`       | Dashboard data widgets                                                            |
 
 ## Auth Flow
 
@@ -182,11 +181,11 @@ Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
 
 ## Message Types
 
-| Type | Recording | Player |
-|---|---|---|
-| Text | `WriteMessageStep` (contentEditable rich-text editor) | `ReadOnlyMessage` modal |
-| Audio | `AudioRecorder` (WaveSurfer + MediaRecorder) | `AudioPlayer` (WaveSurfer, custom controls) |
-| Video | `RecordStep` (MediaRecorder) | `VideoPlayer` (Mux, custom controls) |
+| Type  | Recording                                             | Player                                      |
+| ----- | ----------------------------------------------------- | ------------------------------------------- |
+| Text  | `WriteMessageStep` (contentEditable rich-text editor) | `ReadOnlyMessage` modal                     |
+| Audio | `AudioRecorder` (WaveSurfer + MediaRecorder)          | `AudioPlayer` (WaveSurfer, custom controls) |
+| Video | `RecordStep` (MediaRecorder)                          | `VideoPlayer` (Mux, custom controls)        |
 
 ## Security
 
