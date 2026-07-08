@@ -13,13 +13,15 @@ Next.js frontend for Tether — Digital Legacy Platform
 | Audio waveforms | WaveSurfer.js + `@wavesurfer/react` |
 | Icons | Lucide React |
 | Error monitoring | Sentry (`@sentry/nextjs`) |
-| Analytics | PostHog (`posthog-js`) |
+| Analytics | PostHog (`posthog-js` + `posthog-js/react`) |
+| HTML sanitization | DOMPurify (rich-text rendering) |
+| Icons (extra) | React Icons |
 | Billing | Stripe (`@stripe/stripe-js`) |
 | Hosting | Vercel |
 
 The frontend talks to a NestJS REST API. Every response uses one of two envelopes
-(`{ success, data }` or `{ success: false, statusCode, message }`) — see
-[`API_REFERENCE.md`](./API_REFERENCE.md) for the full contract.
+(`{ success, data }` or `{ success: false, statusCode, message }`); `src/lib/api/client.ts`
+is the single place that unwraps them.
 
 ## Prerequisites
 
@@ -75,7 +77,9 @@ src/
 │   │   ├── messages/            # Messages: create/edit/play audio, video & text
 │   │   ├── photos/              # Photos: upload, folders, lightbox, assign
 │   │   ├── docs/                # Documents & files: upload, manage, assign
+│   │   ├── story/               # Memoir: chapters (new/[id]), preview, settings
 │   │   ├── access/              # Recipients & release manager management
+│   │   ├── help/                # Feedback / support (bug, feature, general)
 │   │   └── unassigned/          # Unassigned content: bulk assign / bulk delete
 │   └── auth/callback/           # Supabase OAuth (PKCE) callback handler
 ├── components/
@@ -90,6 +94,8 @@ src/
 ├── lib/
 │   ├── supabase/                # Browser and server Supabase clients
 │   ├── api/                     # Typed API client + per-resource modules (see below)
+│   ├── posthog/                 # PostHogProvider + PostHogPageView (manual pageviews)
+│   ├── attribution.ts           # First-touch UTM/referrer capture
 │   ├── context/                 # AuthContext, ToastContext
 │   └── utils/                   # assignments, retry, audio duration helpers
 └── types/                       # Shared TypeScript types
@@ -108,7 +114,9 @@ src/
 | `/(dashboard)/messages` | Messages list — create, edit, read, play audio/video/text |
 | `/(dashboard)/photos` | Photos — upload, folders, lightbox, edit, assign |
 | `/(dashboard)/docs` | Documents & files — upload, manage, assign |
+| `/(dashboard)/story` | Memoir — chapter list, editor (`new`, `[id]`), `preview`, `settings` |
 | `/(dashboard)/access` | Recipients and release manager CRUD |
+| `/(dashboard)/help` | Feedback & support — bug report, feature request, general feedback |
 | `/(dashboard)/unassigned` | Unassigned content — filter by type, bulk assign/delete (the "Memoir" tab filters the `chapter` content type) |
 
 ## API Modules (`src/lib/api`)
@@ -122,8 +130,11 @@ src/
 | `messages.ts` | `/messages` CRUD, playback tokens, audio signed URLs, status polling |
 | `documents.ts` | `/documents` — signed upload URLs, batch create, list, delete |
 | `photos.ts` | `/photos` — signed upload URLs, batch create, list, delete |
+| `chapters.ts` | `/chapters` — text/voice chapters, autosave, reorder, exhibits, assignments |
+| `memoir.ts` | `/memoir` — preview, PDF/text export, per-chapter TTS narration |
 | `content.ts` | `GET /content/unassigned`, `POST /content/bulk-assign`, `POST /content/bulk-delete` |
 | `activity.ts` | `GET /activity` feed |
+| `feedback.ts` | `/feedback` — screenshot upload URL, submit feedback |
 
 `client.ts` is the **single source of truth** for success/failure. It unwraps `data` on
 success and throws a typed `ApiError(statusCode, message)` for every failure class
@@ -191,12 +202,17 @@ Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
   using server-validated `supabase.auth.getUser()`.
 - **Auth tokens** — held by the Supabase browser client; the API client
   (`client.ts`) attaches `Authorization: Bearer <access_token>` per request.
-- **Replay/analytics tooling** is configured to mask all inputs and text so no
-  user content is captured in session recordings.
+- **Analytics/replay privacy** — PostHog (`src/lib/posthog/PostHogProvider.tsx`) runs
+  with `person_profiles: 'identified_only'`, and session recording masks all inputs
+  (`maskAllInputs`) and all text (`maskTextSelector: '*'`), so no user content is
+  captured. Pageviews are captured manually (`capture_pageview: false` +
+  `PostHogPageView`) so client-side route changes are tracked correctly. PostHog is
+  a no-op when `NEXT_PUBLIC_POSTHOG_KEY` is unset (e.g. local dev).
 
 ## Sprint Progress
 
 - **Sprint 1** ✅ — Auth, onboarding, dashboard shell
 - **Sprint 2** ✅ — Messages (text/video/audio), recipients, release manager, photos & documents, centralised API client
 - **Sprint 3** ✅ — Unassigned content page, message read/edit wizard, audio/video player polish, editorial write-message UI
-- **Sprint 4–10** — See sprint execution plan
+- **Sprint 4** ✅ — Memoir (`/story`): chapter editor, voice chapters, preview, PDF/text export, TTS narration; feedback/help page; PostHog analytics + first-touch attribution
+- **Sprint 5–10** — See sprint execution plan
