@@ -357,6 +357,7 @@ export default function DocsPage() {
   const [uploading, setUploading] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<DocumentDetail | null>(null);
   const [editingDoc, setEditingDoc] = useState<DocumentDetail | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<ApiDoc | null>(null);
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
 
   const loadStats = async () => {
@@ -388,14 +389,17 @@ export default function DocsPage() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Data-fetch-on-mount / on-filter-change. The setState calls inside these
+  // fetchers run after an await (never synchronously in the effect body), and
+  // the fetchers are intentionally excluded from the dep arrays.
+  /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
   useEffect(() => {
     loadStats();
   }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadDocuments();
   }, [categoryFilter, filter]);
+  /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
   const handleCategoryClick = (apiKey: string) => {
     setCategoryFilter((prev) => (prev === apiKey ? undefined : apiKey));
@@ -858,7 +862,7 @@ export default function DocsPage() {
               onView={() => handleViewDocument(doc.id)}
               onEdit={() => handleOpenEdit(doc)}
               onDownload={() => handleDownload(doc.id)}
-              onDelete={() => handleDeleteDocument(doc.id)}
+              onDelete={() => setDeletingDoc(doc)}
             />
           ))}
         </div>
@@ -876,7 +880,7 @@ export default function DocsPage() {
               doc={doc}
               onEdit={() => handleOpenEdit(doc)}
               onDownload={() => handleDownload(doc.id)}
-              onDelete={() => handleDeleteDocument(doc.id)}
+              onDelete={() => setDeletingDoc(doc)}
             />
           ))}
         </div>
@@ -913,11 +917,205 @@ export default function DocsPage() {
           onUpdated={handleRefresh}
         />
       )}
+
+      {/* Delete confirmation */}
+      {deletingDoc && (
+        <ConfirmDeleteDocModal
+          doc={deletingDoc}
+          onClose={() => setDeletingDoc(null)}
+          onConfirm={async () => {
+            const id = deletingDoc.id;
+            setDeletingDoc(null);
+            await handleDeleteDocument(id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------------------- Delete confirmation ---------------------- */
+
+function ConfirmDeleteDocModal({
+  doc,
+  onClose,
+  onConfirm,
+}: {
+  doc: ApiDoc;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const handleConfirm = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: "rgba(0,0,0,0.4)" }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 400,
+            borderRadius: 10,
+            boxShadow:
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
+          }}
+        >
+          <div className="flex flex-col gap-5 px-6 py-6">
+            <div className="flex flex-col gap-2">
+              <h2
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
+                }}
+              >
+                Delete this document?
+              </h2>
+              <p
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#717182",
+                }}
+              >
+                &ldquo;{doc.title}&rdquo; will be permanently removed. This cannot
+                be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={deleting}
+                className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                style={{
+                  height: 35.996,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={deleting}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 35.996,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  background: "#E7000B",
+                  opacity: deleting ? 0.5 : 1,
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#FFFFFF",
+                }}
+              >
+                {deleting && (
+                  <Loader2
+                    style={{ width: 14, height: 14 }}
+                    className="animate-spin"
+                  />
+                )}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ---------------------- Document view modal ---------------------- */
+
+function Cell({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col" style={{ gap: 4 }}>
+      <span
+        style={{
+          fontFamily: "Inter, sans-serif",
+          fontWeight: 600,
+          fontSize: 13,
+          lineHeight: "18px",
+          color: "#4A5565",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontFamily: "Inter, sans-serif",
+          fontWeight: 400,
+          fontSize: 15,
+          lineHeight: "22px",
+          color: "#101828",
+        }}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
 
 function DocumentViewModal({
   doc,
@@ -953,39 +1151,6 @@ function DocumentViewModal({
       document.body.style.overflow = prev;
     };
   }, [onClose]);
-
-  const Cell = ({
-    label,
-    children,
-  }: {
-    label: string;
-    children: React.ReactNode;
-  }) => (
-    <div className="flex flex-col" style={{ gap: 4 }}>
-      <span
-        style={{
-          fontFamily: "Inter, sans-serif",
-          fontWeight: 600,
-          fontSize: 13,
-          lineHeight: "18px",
-          color: "#4A5565",
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontFamily: "Inter, sans-serif",
-          fontWeight: 400,
-          fontSize: 15,
-          lineHeight: "22px",
-          color: "#101828",
-        }}
-      >
-        {children}
-      </span>
-    </div>
-  );
 
   return (
     <div

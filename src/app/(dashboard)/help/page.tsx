@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/context/AuthContext'
 import { useToast } from '@/lib/context/ToastContext'
 import { ApiError } from '@/lib/api/client'
 import { getScreenshotUploadUrl, submitFeedback } from '@/lib/api/feedback'
@@ -112,6 +113,12 @@ const FAQS: string[] = [
 type ModalKind = 'feedback' | 'feature' | 'bug' | 'thanks' | null
 
 export default function HelpPage() {
+  const { profile, user } = useAuth()
+  const firstName =
+    profile?.first_name?.trim() ||
+    user?.user_metadata?.first_name ||
+    user?.email?.split('@')[0] ||
+    ''
   const [activeCategory, setActiveCategory] = useState('All Questions')
   const [openFaq, setOpenFaq] = useState<number | null>(null)
   const [modal, setModal] = useState<ModalKind>(null)
@@ -450,7 +457,7 @@ export default function HelpPage() {
         <FeatureModal onClose={() => setModal(null)} onSubmit={() => setModal('thanks')} />
       )}
       {modal === 'bug' && <BugModal onClose={() => setModal(null)} onSubmit={() => setModal('thanks')} />}
-      {modal === 'thanks' && <ThanksModal onClose={() => setModal(null)} />}
+      {modal === 'thanks' && <ThanksModal name={firstName} onClose={() => setModal(null)} />}
     </div>
   )
 }
@@ -1296,7 +1303,7 @@ function BugModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => 
   )
 }
 
-function ThanksModal({ onClose }: { onClose: () => void }) {
+function ThanksModal({ name, onClose }: { name: string; onClose: () => void }) {
   return (
     <ModalShell maxWidth={448} onClose={onClose}>
       <div className="flex flex-col items-center" style={{ gap: 16, padding: '7px 0' }}>
@@ -1318,7 +1325,7 @@ function ThanksModal({ onClose }: { onClose: () => void }) {
             color: '#101828',
           }}
         >
-          Thank you, RJ.
+          {name ? `Thank you, ${name}.` : 'Thank you.'}
         </h2>
         <p
           style={{

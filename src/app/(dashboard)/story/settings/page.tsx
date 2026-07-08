@@ -71,7 +71,10 @@ export default function StorySettingsPage() {
     }
   }, [showToast])
 
+  // Data-fetch-on-mount: setState inside load() runs after an await, never
+  // synchronously in the effect body.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])
 
@@ -97,6 +100,10 @@ export default function StorySettingsPage() {
     if (saving) return
     if (!metaChanged && !orderChanged) {
       router.push('/story')
+      return
+    }
+    if (!title.trim()) {
+      showToast('Please enter a story title.', 'error')
       return
     }
     setSaving(true)
@@ -317,9 +324,9 @@ export default function StorySettingsPage() {
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || !title.trim()}
             onClick={handleSave}
-            className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-60"
+            className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
               height: 35.99,
               padding: '8px 16px',
