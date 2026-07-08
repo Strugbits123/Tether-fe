@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import DOMPurify from 'dompurify'
 import {
   AlignCenter,
   AlignLeft,
@@ -100,7 +101,10 @@ export default function ChapterEditorPage() {
     }
   }, [chapterId])
 
+  // Data-fetch-on-mount: setState inside load() runs after an await, never
+  // synchronously in the effect body.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])
 
@@ -207,6 +211,8 @@ function ChapterEditor({
   const menuRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<string>(chapter.body ?? '')
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Latest un-persisted edit, so we can flush it on unmount.
+  const pendingSave = useRef<{ body: string; words: number } | null>(null)
 
   // Close the "more" menu on outside click.
   useEffect(() => {
@@ -247,6 +253,8 @@ function ChapterEditor({
 
   const runAutosave = useCallback(
     async (body: string, words: number) => {
+      // This edit is now being persisted — nothing pending to flush.
+      pendingSave.current = null
       const token = await getToken()
       if (!token) return
       setSaveState('saving')
@@ -269,16 +277,35 @@ function ChapterEditor({
       const words = countWords(text)
       setWordCount(words)
       setSaveState('saving')
+      pendingSave.current = { body: html, words }
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
-      autosaveTimer.current = setTimeout(() => runAutosave(html, words), 3000)
+      autosaveTimer.current = setTimeout(() => {
+        autosaveTimer.current = null
+        runAutosave(html, words)
+      }, 3000)
     },
     [runAutosave],
   )
 
-  // Flush a pending autosave on unmount.
+  // Keep a ref to the latest runAutosave so the unmount cleanup (which runs
+  // once, with empty deps) can flush the newest pending edit.
+  const runAutosaveRef = useRef(runAutosave)
+  useEffect(() => {
+    runAutosaveRef.current = runAutosave
+  }, [runAutosave])
+
+  // Flush a pending autosave on unmount so edits made within the debounce
+  // window aren't silently discarded.
   useEffect(() => {
     return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
+      if (autosaveTimer.current) {
+        clearTimeout(autosaveTimer.current)
+        autosaveTimer.current = null
+      }
+      if (pendingSave.current) {
+        const { body, words } = pendingSave.current
+        runAutosaveRef.current(body, words)
+      }
     }
   }, [])
 
@@ -630,7 +657,9 @@ function RichTextEditor({
       /* harmless */
     }
     if (editorRef.current && editorRef.current.innerHTML.length === 0) {
-      editorRef.current.innerHTML = initialHtml
+      // Sanitize stored markup before inserting it into the DOM (same approach
+      // as the preview and message modal) to avoid stored-XSS.
+      editorRef.current.innerHTML = DOMPurify.sanitize(initialHtml)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

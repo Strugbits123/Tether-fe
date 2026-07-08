@@ -54,7 +54,9 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          // Allow same-origin camera/mic so getUserMedia() works for the
+          // audio/video recorders; still deny cross-origin (and geolocation).
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
           {
             key: 'Content-Security-Policy',
             value: [
