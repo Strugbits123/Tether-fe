@@ -109,7 +109,7 @@ src/
 | `/(dashboard)/photos` | Photos — upload, folders, lightbox, edit, assign |
 | `/(dashboard)/docs` | Documents & files — upload, manage, assign |
 | `/(dashboard)/access` | Recipients and release manager CRUD |
-| `/(dashboard)/unassigned` | Unassigned content — filter by type, bulk assign/delete |
+| `/(dashboard)/unassigned` | Unassigned content — filter by type, bulk assign/delete (the "Memoir" tab filters the `chapter` content type) |
 
 ## API Modules (`src/lib/api`)
 
@@ -176,6 +176,23 @@ Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
 | Text | `WriteMessageStep` (contentEditable rich-text editor) | `ReadOnlyMessage` modal |
 | Audio | `AudioRecorder` (WaveSurfer + MediaRecorder) | `AudioPlayer` (WaveSurfer, custom controls) |
 | Video | `RecordStep` (MediaRecorder) | `VideoPlayer` (Mux, custom controls) |
+
+## Security
+
+- **Content-Security-Policy** (`next.config.ts`) uses explicit allowlists rather
+  than a blanket `https:`. `connect-src` is limited to the API origin, Supabase,
+  PostHog, Sentry, and Mux; `script-src` drops `'unsafe-eval'` in production and
+  keeps it **only in development** (required by React's dev-mode tooling —
+  removing it in dev throws an `eval() is not supported` console error). Also
+  sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a strict
+  `Referrer-Policy`, and a restrictive `Permissions-Policy`. Changes require a
+  dev-server restart (headers are computed at startup).
+- **Route protection** — the `(dashboard)` group is gated by `middleware.ts`
+  using server-validated `supabase.auth.getUser()`.
+- **Auth tokens** — held by the Supabase browser client; the API client
+  (`client.ts`) attaches `Authorization: Bearer <access_token>` per request.
+- **Replay/analytics tooling** is configured to mask all inputs and text so no
+  user content is captured in session recordings.
 
 ## Sprint Progress
 

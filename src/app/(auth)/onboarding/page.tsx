@@ -1,7 +1,7 @@
 "use client"
 
 import posthog from 'posthog-js'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
 import { createClient } from '@/lib/supabase/client'
@@ -113,6 +113,17 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false)
   const [stepLoading, setStepLoading] = useState(false)
 
+  // Analytics: fire onboarding_started once per mount and record a start
+  // timestamp so we can report the total duration when onboarding completes.
+  const startedRef = useRef(false)
+  const startTsRef = useRef<number>(0)
+  useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    startTsRef.current = Date.now()
+    posthog.capture('onboarding_started')
+  }, [])
+
   // Step 1: Purpose
   const [purposes, setPurposes] = useState<string[]>([])
 
@@ -142,7 +153,7 @@ export default function OnboardingPage() {
       try {
         setFetchedRecipients(await getRecipients(token))
       } catch { /* non-blocking — display-only */ }
-      posthog.capture('onboarding_step_completed', { step: 1, stepName: 'purposes' })
+      posthog.capture('onboarding_step_completed', { step_number: 1, step_name: 'purposes' })
       setCurrentStep(2)
     } catch (err) {
       showToast(errorText(err, 'Could not save your selections. Please try again.'), 'error')
@@ -192,7 +203,7 @@ export default function OnboardingPage() {
           setReleaseManagerSaved(true)
         }
       } catch { /* non-blocking — display-only */ }
-      posthog.capture('onboarding_step_completed', { step: 2, stepName: 'add_recipients' })
+      posthog.capture('onboarding_step_completed', { step_number: 2, step_name: 'add_recipients' })
       setCurrentStep(3)
     } catch (err) {
       showToast(errorText(err, 'Could not save your recipients. Please try again.'), 'error')
@@ -225,7 +236,7 @@ export default function OnboardingPage() {
         })
         setReleaseManagerSaved(true)
       }
-      posthog.capture('onboarding_step_completed', { step: 3, stepName: 'add_release_manager' })
+      posthog.capture('onboarding_step_completed', { step_number: 3, step_name: 'add_release_manager' })
       setCurrentStep(4)
     } catch (err) {
       showToast(errorText(err, 'Could not save your Release Manager. Please try again.'), 'error')
@@ -261,7 +272,7 @@ export default function OnboardingPage() {
         setFetchedMessages(msgs)
       }
     } catch { /* non-blocking */ }
-    posthog.capture('onboarding_step_completed', { step: 4, stepName: 'create_message' })
+    posthog.capture('onboarding_step_completed', { step_number: 4, step_name: 'create_message' })
     setCurrentStep(5)
   }
 
@@ -309,7 +320,11 @@ export default function OnboardingPage() {
 
       await api.post('/users/onboarding/complete', {}, token)
 
-      posthog.capture('onboarding_step_completed', { step: 5, stepName: 'add_documents' })
+      posthog.capture('onboarding_step_completed', { step_number: 5, step_name: 'add_documents' })
+      posthog.capture('onboarding_completed', {
+        steps_total: 5,
+        duration_sec: Math.round((Date.now() - startTsRef.current) / 1000),
+      })
       showToast('Welcome to Tether!', 'success')
       router.push('/dashboard?onboarded=true')
     } catch (err: any) {

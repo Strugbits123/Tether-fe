@@ -1,6 +1,5 @@
 "use client";
 
-import posthog from "posthog-js";
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, ShieldCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -162,7 +161,6 @@ export default function AddRecipientsModal({
         relationship: toRecipientRelationship(relationship),
         note: note.trim() || undefined,
       });
-      posthog.capture("recipient_added", { relationship });
       showToast("Recipient added successfully", "success");
       if (isOnboarding) {
         // Keep modal open — let user add more or click Continue.

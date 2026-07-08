@@ -8,8 +8,8 @@ export const GROUP_ASSIGNMENT_MAP: Record<string, Assignment> = {
   'Assign Later': { scope: 'assign_later' },
   'All Recipients': { scope: 'all' },
   'All Family': { scope: 'group', groupValue: 'family' },
-  'All Friends': { scope: 'group', groupValue: 'friend' },
-  'All Others': { scope: 'group', groupValue: 'other' },
+  'All Friends': { scope: 'group', groupValue: 'friends' },
+  'All Others': { scope: 'group', groupValue: 'others' },
   'Release Manager': { scope: 'release_manager' },
 }
 

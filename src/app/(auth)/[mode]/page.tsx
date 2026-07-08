@@ -9,6 +9,7 @@ import { FiArrowLeft, FiLock } from 'react-icons/fi'
 import { HiOutlineSparkles } from 'react-icons/hi'
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
+import { collectSignupAttribution } from '@/lib/attribution'
 
 /* ─── Allowed modes ─── */
 const VALID_MODES = ['signin', 'signup'] as const
@@ -127,6 +128,7 @@ function MainAuthForm({
             password,
             first_name: firstName,
             last_name: lastName,
+            ...collectSignupAttribution(),
           })
         } catch (err) {
           setFormError(

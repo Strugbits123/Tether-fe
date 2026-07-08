@@ -47,7 +47,7 @@ export default function MessagePlayerHeader({
             wordBreak: "break-word",
           }}
         >
-          {recipientName || "All Recipients"}
+          {recipientName || "Your Voice, Preserved"}
           {messageTitle && (
             <span
               style={{

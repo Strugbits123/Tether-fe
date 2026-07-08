@@ -1,9 +1,12 @@
 import { api } from './client';
 import { type Assignment } from './messages';
 
+// Wire values must match the backend's content_assignments.content_type.
+// The memoir feature is stored as `chapter` server-side (see content.service);
+// the UI labels it "Memoir" but the value on the wire is `chapter`.
 export interface UnassignedItem {
   id: string;
-  contentType: 'message' | 'document' | 'photo' | 'memoir';
+  contentType: 'message' | 'document' | 'photo' | 'chapter';
   title: string;
   subType: string | null;
   fileSize: number | null;
@@ -17,7 +20,7 @@ export interface UnassignedResponse {
     message: number;
     document: number;
     photo: number;
-    memoir: number;
+    chapter: number;
   };
 }
 

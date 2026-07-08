@@ -1,6 +1,5 @@
 "use client";
-
-import posthog from "posthog-js";
+import DOMPurify from "dompurify";
 import React, { useEffect, useRef, useState } from "react";
 import {
   AlignCenter,
@@ -107,9 +106,9 @@ const RECIPIENT_GROUP_ROWS = [
 const RECIPIENT_OPTIONS: Record<string, Assignment> = {
   "All recipients": { scope: "all" },
   "All family": { scope: "group", groupValue: "family" },
-  "All friends": { scope: "group", groupValue: "friend" },
+  "All friends": { scope: "group", groupValue: "friends" },
   "Release Manager": { scope: "release_manager" },
-  "All Others": { scope: "group", groupValue: "other" },
+  "All Others": { scope: "group", groupValue: "others" },
   "Assign later": { scope: "assign_later" },
 };
 
@@ -323,7 +322,6 @@ export default function CreateMessageModal({
         notes: data.notes || undefined,
         assignments: buildAssignments(audience, selectedIndividualIds),
       });
-      posthog.capture("message_created", { type: "text" });
       showToast("Message saved", "success");
       onCreated?.();
       handleClose();
@@ -630,7 +628,7 @@ function ReadOnlyMessage({
                     color: "#101828",
                   }}
                   dangerouslySetInnerHTML={{
-                    __html: message.body || "<em>(empty)</em>",
+                    __html: DOMPurify.sanitize(message.body || "<em>(empty)</em>"),
                   }}
                 />
               </div>
@@ -1692,7 +1690,6 @@ function RecordStep({
         });
       }
       setUploadStatus("Ready!");
-      posthog.capture("message_created", { type: kind });
       showToast("Message saved", "success");
       cleanup();
       onDone();
@@ -2709,7 +2706,6 @@ function CreateWizard({
           notes: notes || undefined,
           assignments,
         });
-        posthog.capture("message_created", { type: "write" });
       } else if (type === "video" && videoBlob) {
         setUploadStatus("Uploading…");
         const { uploadUrl } = await createVideoUploadUrl(token, {
@@ -2723,7 +2719,6 @@ function CreateWizard({
           headers: { "Content-Type": "video/webm" },
         });
         if (!res.ok) throw new Error("Upload failed. Please try again.");
-        posthog.capture("message_created", { type: "video" });
       } else if (type === "audio" && audioBlob) {
         setUploadStatus("Uploading…");
         const { messageId, signedUploadUrl } = await createAudioUploadUrl(token, {
@@ -2742,7 +2737,6 @@ function CreateWizard({
           durationSeconds: Math.round(duration),
           fileSizeBytes: audioBlob.size,
         });
-        posthog.capture("message_created", { type: "audio" });
       }
       showToast("Saved successfully", "success");
       onCreated?.();

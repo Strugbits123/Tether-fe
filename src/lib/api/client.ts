@@ -137,6 +137,10 @@ export const api = {
       token,
     }),
 
-  delete: <T>(endpoint: string, token?: string) =>
-    request<T>(endpoint, { method: 'DELETE', token }),
+  delete: <T>(endpoint: string, token?: string, body?: unknown) =>
+    request<T>(endpoint, {
+      method: 'DELETE',
+      token,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    }),
 }

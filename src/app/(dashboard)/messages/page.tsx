@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Eye,
   FileText,
+  MessageSquare,
   Loader2,
   Mic,
   MoreVertical,
@@ -61,8 +62,8 @@ const STATUS_BADGE: Record<
 const ASSIGN_GROUP_MAP: Record<string, Assignment> = {
   "All Recipients": { scope: "all" },
   "All Family": { scope: "group", groupValue: "family" },
-  "All Friends": { scope: "group", groupValue: "friend" },
-  "All Others": { scope: "group", groupValue: "other" },
+  "All Friends": { scope: "group", groupValue: "friends" },
+  "All Others": { scope: "group", groupValue: "others" },
   "Release Manager": { scope: "release_manager" },
 };
 
@@ -85,8 +86,10 @@ function assignmentsToAssignSelection(assignments: MessageAssignment[] = []): {
       case "group":
         // Accept both the current singular values and legacy plural data.
         if (a.group_value === "family") groups.push("All Family");
-        else if (a.group_value === "friend" || a.group_value === "friends") groups.push("All Friends");
-        else if (a.group_value === "other" || a.group_value === "others") groups.push("All Others");
+        else if (a.group_value === "friend" || a.group_value === "friends")
+          groups.push("All Friends");
+        else if (a.group_value === "other" || a.group_value === "others")
+          groups.push("All Others");
         break;
       case "release_manager":
         groups.push("Release Manager");
@@ -424,7 +427,7 @@ export default function MessagesPage() {
           }}
         >
           <Plus className="w-4 h-4" strokeWidth={2.25} />
-          New Messages
+          New Message
         </button>
       </div>
 
@@ -515,7 +518,11 @@ export default function MessagesPage() {
               background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
             }}
           >
-            <FileText className="w-7 h-7" color="#4F39F6" strokeWidth={2} />
+            <MessageSquare
+              className="w-7 h-7"
+              color="#4F39F6"
+              strokeWidth={2}
+            />
           </div>
           <p
             style={{

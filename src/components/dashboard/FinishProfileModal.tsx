@@ -1,6 +1,5 @@
 "use client";
 
-import posthog from "posthog-js";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -314,7 +313,6 @@ export default function FinishProfileModal({
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       });
 
-      posthog.capture("profile_completed");
       showToast("Profile updated!", "success");
       onCompleted?.();
       onClose();

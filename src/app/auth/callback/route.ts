@@ -6,7 +6,11 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type') as 'email' | 'recovery' | 'magiclink' | null
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? origin
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    ?? (process.env.NODE_ENV !== 'production' ? origin : null)
+  if (!siteUrl) {
+    throw new Error('NEXT_PUBLIC_SITE_URL must be set in production')
+  }
 
   const supabase = await createClient()
 
