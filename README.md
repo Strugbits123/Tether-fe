@@ -21,8 +21,7 @@ Next.js frontend for Tether — Digital Legacy Platform
 
 The frontend talks to a NestJS REST API. Every response uses one of two envelopes
 (`{ success, data }` or `{ success: false, statusCode, message }`); `src/lib/api/client.ts`
-is the single place that unwraps them. The route list and response contract live in the
-[API repo README](https://github.com/Strugbits123/Tether-be#api-structure).
+is the single place that unwraps them.
 
 ## Prerequisites
 
