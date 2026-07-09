@@ -204,6 +204,7 @@ function ChapterEditor({
   const [menuOpen, setMenuOpen] = useState(false)
   const [exhibitsOpen, setExhibitsOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const [exhibits, setExhibits] = useState<ChapterExhibit[]>(chapter.exhibits ?? [])
   const assignmentCount = chapter.assignment_count ?? 0
@@ -461,7 +462,7 @@ function ChapterEditor({
                   disabled={deleting}
                   onClick={() => {
                     setMenuOpen(false)
-                    handleDelete()
+                    setConfirmingDelete(true)
                   }}
                   className="w-full flex items-center gap-3 cursor-pointer rounded-md hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
                   style={{
@@ -562,6 +563,160 @@ function ChapterEditor({
           onClose={() => setExhibitsOpen(false)}
         />
       )}
+
+      {/* Delete confirmation */}
+      {confirmingDelete && (
+        <ConfirmDeleteChapterModal
+          title={title}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            // Keep the modal (and its in-flight spinner/disabled buttons)
+            // visible until the delete request settles.
+            await handleDelete()
+            setConfirmingDelete(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ---------------------- Delete confirmation ---------------------- */
+
+function ConfirmDeleteChapterModal({
+  title,
+  onClose,
+  onConfirm,
+}: {
+  title: string
+  onClose: () => void
+  onConfirm: () => void | Promise<void>
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const handleConfirm = async () => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      await onConfirm()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose()
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 400,
+            borderRadius: 10,
+            boxShadow: '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          <div className="flex flex-col gap-5 px-6 py-6">
+            <div className="flex flex-col gap-2">
+              <h2
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: '28px',
+                  letterSpacing: '-0.44px',
+                  color: '#101828',
+                }}
+              >
+                Delete this chapter?
+              </h2>
+              <p
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#717182',
+                }}
+              >
+                {title.trim() ? `“${title.trim()}” ` : 'This chapter '}
+                will be permanently removed. This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={deleting}
+                className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1.25px solid rgba(0,0,0,0.1)',
+                  background: '#FFFFFF',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#0A0A0A',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={deleting}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 35.996,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: '#E7000B',
+                  opacity: deleting ? 0.5 : 1,
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: '20px',
+                  letterSpacing: '-0.15px',
+                  color: '#FFFFFF',
+                }}
+              >
+                {deleting && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

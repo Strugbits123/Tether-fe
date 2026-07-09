@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Bug,
@@ -168,13 +168,131 @@ const CATEGORIES: FaqCategory[] = [
   },
 ];
 
-const FAQS: string[] = [
-  "Does naming an executor in Tether replace having a legal will?",
-  "What happens if my executor can't access their account?",
-  "Can I have more than one executor?",
-  "How long does Tether store my information?",
-  "What if I want to change my executor?",
+interface Faq {
+  question: string;
+  /** Must match one of the CATEGORIES labels (other than "All Questions"). */
+  category: string;
+  answer: string;
+}
+
+const FAQS: Faq[] = [
+  {
+    question: "Does naming an executor in Tether replace having a legal will?",
+    category: "Legal & Compliance",
+    answer:
+      "No. Tether helps you organize and share information, but it doesn't replace a legally executed will. We recommend keeping a formal will alongside your Tether account.",
+  },
+  {
+    question: "What happens if my executor can't access their account?",
+    category: "Release Managers & Recipients",
+    answer:
+      "You can add a backup release manager at any time. If an executor loses access, our support team can help them recover it after identity verification.",
+  },
+  {
+    question: "Can I have more than one executor?",
+    category: "Release Managers & Recipients",
+    answer:
+      "Yes. You can assign multiple release managers and decide whether they act jointly or independently.",
+  },
+  {
+    question: "How long does Tether store my information?",
+    category: "Security & Privacy",
+    answer:
+      "Your information is stored securely for as long as your account is active, and is only released according to the instructions you set.",
+  },
+  {
+    question: "What if I want to change my executor?",
+    category: "Release Managers & Recipients",
+    answer:
+      "You can change your release managers whenever you like from the Access settings — the change takes effect immediately.",
+  },
+  {
+    question: "How do I upload documents to my vault?",
+    category: "Documents & Vault",
+    answer:
+      "Open Docs & Files and click Upload Files. You can drag and drop or browse for files, then assign them to recipients.",
+  },
+  {
+    question: "What file types can I store in the vault?",
+    category: "Documents & Vault",
+    answer:
+      "Most common document, image, audio, and video formats are supported, including PDF, DOCX, JPG, PNG, MP3, and MP4.",
+  },
+  {
+    question: "How do I record a video message?",
+    category: "Messages & Videos",
+    answer:
+      "From Messages, choose Record and allow camera access. You can re-record as many times as you need before saving.",
+  },
+  {
+    question: "Can I schedule when a message is delivered?",
+    category: "Messages & Videos",
+    answer:
+      "Yes. Each message can be released immediately, on a specific date, or as part of your legacy release.",
+  },
+  {
+    question: "How do I reset my password?",
+    category: "Account & Passwords",
+    answer:
+      "Use the “Forgot password” link on the sign-in page. We'll email you a secure link to set a new password.",
+  },
+  {
+    question: "How do I enable two-factor authentication?",
+    category: "Account & Passwords",
+    answer:
+      "Go to Settings → Security and follow the prompts to link an authenticator app for an extra layer of protection.",
+  },
+  {
+    question: "What plans does Tether offer?",
+    category: "Billing & Plans",
+    answer:
+      "Tether offers a free tier plus paid plans with expanded storage and features. You can compare them on the Billing page.",
+  },
+  {
+    question: "How do I update my payment method?",
+    category: "Billing & Plans",
+    answer:
+      "Open Billing & Plans and select Update payment method to add or change your card on file.",
+  },
+  {
+    question: "Can I get a refund if I cancel?",
+    category: "Billing & Plans",
+    answer:
+      "Annual plans are refundable within 30 days of purchase. Contact support and we'll take care of it.",
+  },
+  {
+    question: "How do I manage my notification preferences?",
+    category: "Notifications",
+    answer:
+      "Visit Settings → Notifications to choose which email and in-app alerts you'd like to receive.",
+  },
+  {
+    question: "Will I be notified when a recipient views a message?",
+    category: "Notifications",
+    answer:
+      "Yes, you can opt in to receive a notification whenever a recipient opens a released message.",
+  },
+  {
+    question: "Is my data encrypted?",
+    category: "Security & Privacy",
+    answer:
+      "All data is encrypted in transit and at rest using industry-standard encryption.",
+  },
+  {
+    question: "Who can see my documents before they're released?",
+    category: "Security & Privacy",
+    answer:
+      "Only you. Documents remain private and are shared with recipients strictly according to your release instructions.",
+  },
+  {
+    question: "Is Tether legally recognized in my state?",
+    category: "Legal & Compliance",
+    answer:
+      "Tether is a planning and organization tool. Legal recognition of the underlying documents depends on your local laws, so consult an attorney for specifics.",
+  },
 ];
+
+const FAQ_PAGE_SIZE = 5;
 
 /* ---------------------- Page ---------------------- */
 
@@ -188,11 +306,77 @@ export default function HelpPage() {
     user?.email?.split("@")[0] ||
     "";
   const [activeCategory, setActiveCategory] = useState("All Questions");
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [openFaq, setOpenFaq] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoTutorial | null>(null);
+  const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(FAQ_PAGE_SIZE);
+
+  const faqSectionRef = useRef<HTMLDivElement>(null);
+
+  // FAQ display order. Starts as the authored order (so server/client render
+  // matches), then gets shuffled once on the client so "Load More" surfaces a
+  // fresh mix. (Dummy data for now.)
+  const [faqOrder, setFaqOrder] = useState<Faq[]>(FAQS);
+  useEffect(() => {
+    const shuffled = [...FAQS];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFaqOrder(shuffled);
+  }, []);
 
   const openEmail = () => {
     window.location.href = `mailto:${SUPPORT_EMAIL}`;
+  };
+
+  const orderedFaqs = useMemo(
+    () =>
+      activeCategory === "All Questions"
+        ? faqOrder
+        : faqOrder.filter((f) => f.category === activeCategory),
+    [activeCategory, faqOrder],
+  );
+
+  const visibleFaqs = orderedFaqs.slice(0, visibleCount);
+  const hasMoreFaqs = visibleCount < orderedFaqs.length;
+
+  const selectCategory = (label: string) => {
+    setActiveCategory(label);
+    setVisibleCount(FAQ_PAGE_SIZE);
+    setOpenFaq(null);
+  };
+
+  // Search matches across video titles and FAQ questions.
+  const query = search.trim().toLowerCase();
+  const videoResults = query
+    ? VIDEOS.filter((v) => v.title.toLowerCase().includes(query))
+    : [];
+  const faqResults = query
+    ? FAQS.filter((f) => f.question.toLowerCase().includes(query))
+    : [];
+  const showResults =
+    searchFocused && query.length > 0 && videoResults.length + faqResults.length > 0;
+
+  const goToVideo = (video: VideoTutorial) => {
+    setSelectedVideo(video);
+    setSearch("");
+    setSearchFocused(false);
+  };
+
+  const goToFaq = (faq: Faq) => {
+    setActiveCategory(faq.category);
+    // Reveal every question in the target category so the linked one is shown.
+    setVisibleCount(FAQS.length);
+    setOpenFaq(faq.question);
+    setSearch("");
+    setSearchFocused(false);
+    requestAnimationFrame(() =>
+      faqSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
   };
 
   return (
@@ -242,36 +426,117 @@ export default function HelpPage() {
             </p>
           </div>
 
-          {/* Search input */}
+          {/* Search input + results dropdown */}
           <div
-            className="flex items-center w-full"
-            style={{
-              height: 48,
-              borderRadius: 8,
-              background: "#FFFFFF",
-              padding: "0 16px 0 16px",
-              gap: 12,
-              boxShadow:
-                "0px 10px 15px -3px rgba(0,0,0,0.1), 0px 4px 6px -4px rgba(0,0,0,0.1)",
+            className="relative w-full"
+            // Track focus at the container level so tabbing from the input to a
+            // result (or the clear button) keeps the dropdown open; only close
+            // when focus leaves the whole search area.
+            onFocus={() => setSearchFocused(true)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setSearchFocused(false);
+              }
             }}
           >
-            <Search
-              style={{ width: 20, height: 20, flexShrink: 0 }}
-              color="#99A1AF"
-              strokeWidth={2}
-            />
-            <input
-              type="text"
-              placeholder="Search for help articles, topics, or questions..."
-              className="flex-1 min-w-0 bg-transparent outline-none"
+            <div
+              className="flex items-center w-full"
               style={{
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 400,
-                fontSize: 14,
-                letterSpacing: "-0.15px",
-                color: "#101828",
+                height: 48,
+                borderRadius: showResults ? "8px 8px 0 0" : 8,
+                background: "#FFFFFF",
+                padding: "0 16px 0 16px",
+                gap: 12,
+                boxShadow:
+                  "0px 10px 15px -3px rgba(0,0,0,0.1), 0px 4px 6px -4px rgba(0,0,0,0.1)",
               }}
-            />
+            >
+              <Search
+                style={{ width: 20, height: 20, flexShrink: 0 }}
+                color="#99A1AF"
+                strokeWidth={2}
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search for help articles, topics, or questions..."
+                className="flex-1 min-w-0 bg-transparent outline-none"
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  letterSpacing: "-0.15px",
+                  color: "#101828",
+                }}
+              />
+              {search && (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setSearch("")}
+                  className="flex-shrink-0 cursor-pointer hover:opacity-70"
+                >
+                  <X
+                    style={{ width: 18, height: 18 }}
+                    color="#99A1AF"
+                    strokeWidth={2}
+                  />
+                </button>
+              )}
+            </div>
+
+            {showResults && (
+              <div
+                className="absolute left-0 right-0 z-40 overflow-hidden"
+                style={{
+                  top: 48,
+                  borderRadius: "0 0 8px 8px",
+                  background: "#FFFFFF",
+                  boxShadow:
+                    "0px 10px 15px -3px rgba(0,0,0,0.15), 0px 4px 6px -4px rgba(0,0,0,0.15)",
+                  maxHeight: 360,
+                  overflowY: "auto",
+                }}
+              >
+                {videoResults.length > 0 && (
+                  <SearchGroupLabel>Video tutorials</SearchGroupLabel>
+                )}
+                {videoResults.map((v) => (
+                  <SearchResultRow
+                    key={`v-${v.title}`}
+                    icon={
+                      <Video
+                        style={{ width: 16, height: 16 }}
+                        color="#4F39F6"
+                        strokeWidth={2}
+                      />
+                    }
+                    title={v.title}
+                    meta={v.duration}
+                    onSelect={() => goToVideo(v)}
+                  />
+                ))}
+                {faqResults.length > 0 && (
+                  <SearchGroupLabel>Questions</SearchGroupLabel>
+                )}
+                {faqResults.map((f) => (
+                  <SearchResultRow
+                    key={`f-${f.question}`}
+                    icon={
+                      <HelpCircle
+                        style={{ width: 16, height: 16 }}
+                        color="#007359"
+                        strokeWidth={2}
+                      />
+                    }
+                    title={f.question}
+                    meta={f.category}
+                    onSelect={() => goToFaq(f)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -427,7 +692,11 @@ export default function HelpPage() {
           style={{ gap: 23.98 }}
         >
           {VIDEOS.map((v) => (
-            <VideoCard key={v.title} video={v} />
+            <VideoCard
+              key={v.title}
+              video={v}
+              onOpen={() => setSelectedVideo(v)}
+            />
           ))}
         </div>
       </section>
@@ -457,13 +726,14 @@ export default function HelpPage() {
               key={c.label}
               category={c}
               active={activeCategory === c.label}
-              onClick={() => setActiveCategory(c.label)}
+              onClick={() => selectCategory(c.label)}
             />
           ))}
         </div>
 
         {/* FAQ list */}
         <div
+          ref={faqSectionRef}
           className="flex flex-col"
           style={{
             borderRadius: 14,
@@ -471,37 +741,59 @@ export default function HelpPage() {
             background: "#FFFFFF",
           }}
         >
-          {FAQS.map((q, i) => (
-            <FaqRow
-              key={q}
-              question={q}
-              open={openFaq === i}
-              onToggle={() => setOpenFaq(openFaq === i ? null : i)}
-            />
-          ))}
-          <button
-            type="button"
-            className="flex items-center justify-between cursor-pointer hover:opacity-80"
-            style={{ padding: 16, gap: 16, background: "transparent" }}
-          >
-            <span
+          {visibleFaqs.length === 0 ? (
+            <p
               style={{
+                padding: 24,
+                textAlign: "center",
                 fontFamily: "Inter, sans-serif",
-                fontWeight: 500,
-                fontSize: 16,
-                lineHeight: "24px",
-                letterSpacing: "-0.31px",
-                color: "#4F39F6",
+                fontWeight: 400,
+                fontSize: 14,
+                lineHeight: "20px",
+                color: "#4A5565",
               }}
             >
-              Load More
-            </span>
-            <ChevronDown
-              style={{ width: 20, height: 20, flexShrink: 0 }}
-              color="#4F39F6"
-              strokeWidth={2}
-            />
-          </button>
+              No questions in this category yet.
+            </p>
+          ) : (
+            visibleFaqs.map((faq) => (
+              <FaqRow
+                key={faq.question}
+                question={faq.question}
+                answer={faq.answer}
+                open={openFaq === faq.question}
+                onToggle={() =>
+                  setOpenFaq(openFaq === faq.question ? null : faq.question)
+                }
+              />
+            ))
+          )}
+          {hasMoreFaqs && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((c) => c + FAQ_PAGE_SIZE)}
+              className="flex items-center justify-between cursor-pointer hover:opacity-80"
+              style={{ padding: 16, gap: 16, background: "transparent" }}
+            >
+              <span
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 16,
+                  lineHeight: "24px",
+                  letterSpacing: "-0.31px",
+                  color: "#4F39F6",
+                }}
+              >
+                Load More
+              </span>
+              <ChevronDown
+                style={{ width: 20, height: 20, flexShrink: 0 }}
+                color="#4F39F6"
+                strokeWidth={2}
+              />
+            </button>
+          )}
         </div>
       </section>
 
@@ -620,6 +912,14 @@ export default function HelpPage() {
       {modal === "thanks" && (
         <ThanksModal name={firstName} onClose={() => setModal(null)} />
       )}
+
+      {/* Video lightbox */}
+      {selectedVideo && (
+        <VideoLightbox
+          video={selectedVideo}
+          onClose={() => setSelectedVideo(null)}
+        />
+      )}
     </div>
   );
 }
@@ -676,9 +976,24 @@ function ScheduleDetail({
   );
 }
 
-function VideoCard({ video }: { video: VideoTutorial }) {
+function VideoCard({
+  video,
+  onOpen,
+}: {
+  video: VideoTutorial;
+  onOpen: () => void;
+}) {
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
       className="flex flex-col cursor-pointer hover:shadow-sm transition-shadow overflow-hidden"
       style={{
         borderRadius: 14,
@@ -816,10 +1131,12 @@ function CategoryCard({
 
 function FaqRow({
   question,
+  answer,
   open,
   onToggle,
 }: {
   question: string;
+  answer: string;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -867,10 +1184,211 @@ function FaqRow({
             color: "#4A5565",
           }}
         >
-          Our support team can help you with this. Schedule a call or send us an
-          email and we&apos;ll get back to you.
+          {answer}
         </p>
       )}
+    </div>
+  );
+}
+
+/* ---------------------- Search results ---------------------- */
+
+function SearchGroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        padding: "8px 16px 4px",
+        fontFamily: "Inter, sans-serif",
+        fontWeight: 600,
+        fontSize: 11,
+        lineHeight: "16px",
+        letterSpacing: "0.4px",
+        textTransform: "uppercase",
+        color: "#99A1AF",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SearchResultRow({
+  icon,
+  title,
+  meta,
+  onSelect,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  meta: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center gap-3 text-left cursor-pointer hover:bg-gray-50"
+      style={{ padding: "10px 16px" }}
+    >
+      <span className="flex-shrink-0">{icon}</span>
+      <span className="flex flex-col min-w-0 flex-1">
+        <span
+          className="truncate"
+          style={{
+            fontFamily: "Inter, sans-serif",
+            fontWeight: 500,
+            fontSize: 14,
+            lineHeight: "20px",
+            color: "#101828",
+          }}
+        >
+          {title}
+        </span>
+        <span
+          className="truncate"
+          style={{
+            fontFamily: "Inter, sans-serif",
+            fontWeight: 400,
+            fontSize: 12,
+            lineHeight: "16px",
+            color: "#99A1AF",
+          }}
+        >
+          {meta}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/* ---------------------- Video lightbox ---------------------- */
+
+function VideoLightbox({
+  video,
+  onClose,
+}: {
+  video: VideoTutorial;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // Move focus into the dialog so keyboard/AT users aren't left behind the
+    // overlay.
+    closeRef.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.8)" }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative w-full"
+        style={{ maxWidth: 860 }}
+      >
+        {/* Close */}
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute cursor-pointer hover:opacity-80"
+          style={{ top: -40, right: 0 }}
+        >
+          <X style={{ width: 28, height: 28 }} color="#FFFFFF" strokeWidth={2} />
+        </button>
+
+        {/* Dummy video player */}
+        <div
+          className="relative w-full overflow-hidden"
+          style={{ aspectRatio: "16 / 9", borderRadius: 12, background: "#000000" }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <button
+              type="button"
+              aria-label="Play video"
+              className="flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 9999,
+                background: "rgba(255,255,255,0.9)",
+              }}
+            >
+              <Play
+                style={{ width: 34, height: 34, marginLeft: 4 }}
+                color="#101828"
+                fill="#101828"
+              />
+            </button>
+          </div>
+          <span
+            className="absolute flex items-center justify-center"
+            style={{
+              right: 12,
+              bottom: 12,
+              height: 24,
+              padding: "0 8px",
+              borderRadius: 4,
+              background: "rgba(0,0,0,0.6)",
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 400,
+              fontSize: 12,
+              lineHeight: "16px",
+              color: "#FFFFFF",
+            }}
+          >
+            {video.duration}
+          </span>
+        </div>
+
+        {/* Title + description */}
+        <div className="flex flex-col" style={{ paddingTop: 16, gap: 4 }}>
+          <h3
+            id={titleId}
+            style={{
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 600,
+              fontSize: 20,
+              lineHeight: "28px",
+              letterSpacing: "-0.44px",
+              color: "#FFFFFF",
+            }}
+          >
+            {video.title}
+          </h3>
+          <p
+            style={{
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: "20px",
+              letterSpacing: "-0.15px",
+              color: "rgba(255,255,255,0.7)",
+            }}
+          >
+            {video.desc}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
