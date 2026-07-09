@@ -49,6 +49,7 @@ import {
 } from "@/lib/api/documents";
 import { formatFileSize, buildAssignments } from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { track } from "@/lib/posthog/analytics";
 
 /* ---------------------- Types ---------------------- */
 
@@ -366,6 +367,12 @@ export default function DocsPage() {
     try {
       const data = await getDocumentStats(token);
       setStats(data);
+      // Document vault view. photo_count belongs to the separate Photos feature
+      // (not loaded here), so it's reported as null from this surface.
+      track("vault_viewed", {
+        document_count: data.fileTypes?.total ?? null,
+        photo_count: null,
+      });
     } catch {
       /* non-critical */
     }

@@ -6,6 +6,8 @@ import { ToastProvider } from '@/lib/context/ToastContext'
 import { AuthProvider } from '@/lib/context/AuthContext'
 import PostHogProvider from '@/lib/posthog/PostHogProvider'
 import PostHogPageView from '@/lib/posthog/PostHogPageView'
+import SessionReplayController from '@/lib/posthog/SessionReplayController'
+import LoginEventTracker from '@/lib/posthog/LoginEventTracker'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -36,6 +38,10 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <PostHogPageView />
           </Suspense>
+          <Suspense fallback={null}>
+            <LoginEventTracker />
+          </Suspense>
+          <SessionReplayController />
           <ToastProvider>
             <AuthProvider>
               {children}

@@ -105,6 +105,15 @@ async function uploadOnboardingFiles(token: string, files: File[]): Promise<void
   }
 }
 
+// Step number → tracking-plan step_name.
+const STEP_NAMES: Record<number, string> = {
+  1: 'purposes',
+  2: 'add_recipients',
+  3: 'add_release_manager',
+  4: 'create_message',
+  5: 'add_documents',
+}
+
 export default function OnboardingPage() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -123,6 +132,20 @@ export default function OnboardingPage() {
     startTsRef.current = Date.now()
     posthog.capture('onboarding_started')
   }, [])
+
+  // Per-step analytics: fire onboarding_step_viewed and (re)start the per-step
+  // timer whenever the visible step changes, so each onboarding_step_completed
+  // can report time_spent_seconds for that step.
+  const stepStartRef = useRef<number>(0)
+  useEffect(() => {
+    stepStartRef.current = Date.now()
+    posthog.capture('onboarding_step_viewed', {
+      step_number: currentStep,
+      step_name: STEP_NAMES[currentStep] ?? null,
+    })
+  }, [currentStep])
+  const stepSpentSeconds = () =>
+    Math.round((Date.now() - stepStartRef.current) / 1000)
 
   // Step 1: Purpose
   const [purposes, setPurposes] = useState<string[]>([])
@@ -153,7 +176,7 @@ export default function OnboardingPage() {
       try {
         setFetchedRecipients(await getRecipients(token))
       } catch { /* non-blocking — display-only */ }
-      posthog.capture('onboarding_step_completed', { step_number: 1, step_name: 'purposes' })
+      posthog.capture('onboarding_step_completed', { step_number: 1, step_name: 'purposes', time_spent_seconds: stepSpentSeconds() })
       setCurrentStep(2)
     } catch (err) {
       showToast(errorText(err, 'Could not save your selections. Please try again.'), 'error')
@@ -203,7 +226,7 @@ export default function OnboardingPage() {
           setReleaseManagerSaved(true)
         }
       } catch { /* non-blocking — display-only */ }
-      posthog.capture('onboarding_step_completed', { step_number: 2, step_name: 'add_recipients' })
+      posthog.capture('onboarding_step_completed', { step_number: 2, step_name: 'add_recipients', time_spent_seconds: stepSpentSeconds() })
       setCurrentStep(3)
     } catch (err) {
       showToast(errorText(err, 'Could not save your recipients. Please try again.'), 'error')
@@ -236,7 +259,7 @@ export default function OnboardingPage() {
         })
         setReleaseManagerSaved(true)
       }
-      posthog.capture('onboarding_step_completed', { step_number: 3, step_name: 'add_release_manager' })
+      posthog.capture('onboarding_step_completed', { step_number: 3, step_name: 'add_release_manager', time_spent_seconds: stepSpentSeconds() })
       setCurrentStep(4)
     } catch (err) {
       showToast(errorText(err, 'Could not save your Release Manager. Please try again.'), 'error')
@@ -272,7 +295,7 @@ export default function OnboardingPage() {
         setFetchedMessages(msgs)
       }
     } catch { /* non-blocking */ }
-    posthog.capture('onboarding_step_completed', { step_number: 4, step_name: 'create_message' })
+    posthog.capture('onboarding_step_completed', { step_number: 4, step_name: 'create_message', time_spent_seconds: stepSpentSeconds() })
     setCurrentStep(5)
   }
 
@@ -320,7 +343,7 @@ export default function OnboardingPage() {
 
       await api.post('/users/onboarding/complete', {}, token)
 
-      posthog.capture('onboarding_step_completed', { step_number: 5, step_name: 'add_documents' })
+      posthog.capture('onboarding_step_completed', { step_number: 5, step_name: 'add_documents', time_spent_seconds: stepSpentSeconds() })
       posthog.capture('onboarding_completed', {
         steps_total: 5,
         duration_sec: Math.round((Date.now() - startTsRef.current) / 1000),

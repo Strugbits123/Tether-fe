@@ -1,8 +1,8 @@
 'use client'
 
-import posthog from 'posthog-js'
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
+import { identifyUser, resetIdentity, track } from '@/lib/posthog/analytics'
 import type { UserProfile } from '@/lib/api/users'
 import type { Session, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
@@ -59,6 +59,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.get<UserProfile>('/users/me', token)
       setProfile(data)
+      // Enrich the PostHog person + register user_id/environment super props
+      // once the profile is available.
+      identifyUser(data)
       stopRetry()
     } catch (e) {
       // Only retry transient failures (cold-start 5xx, network drop, rate limit).
@@ -97,14 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.access_token) {
+        // loadProfile() identifies + enriches the PostHog person once /users/me
+        // resolves (see identifyUser), so no minimal identify is needed here.
         loadProfile()
-        if (event === 'SIGNED_IN' && session.user && posthog.__loaded) {
-          posthog.identify(session.user.id, { email: session.user.email })
-        }
       } else {
         stopRetry()
         setProfile(null)
-        if (posthog.__loaded) posthog.reset()
+        resetIdentity()
       }
     })
 
@@ -120,6 +122,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     stopRetry()
+    // Emit the logout event while identity is still attached; reset() clears it
+    // afterwards via the auth-state-change listener.
+    track('user_logged_out')
     // Fire backend logout (invalidates server-side session record) — don't await;
     // browser session cleared below is the authoritative action.
     const { data: { session: current } } = await supabase.auth.getSession()

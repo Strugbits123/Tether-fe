@@ -14,6 +14,15 @@ export async function GET(request: Request) {
 
   const supabase = await createClient()
 
+  // Adds a one-shot `li` (login-intent) param the client reads to fire the
+  // user_logged_in analytics event, since this server route can't use the
+  // browser PostHog SDK. LoginEventTracker strips it after capturing.
+  const dest = (path: string, loginMethod?: string) => {
+    const url = new URL(`${siteUrl}${path}`)
+    if (loginMethod) url.searchParams.set('li', loginMethod)
+    return NextResponse.redirect(url.toString())
+  }
+
   // ── token_hash flow ──
   // Used by: email confirmation, magic link, password reset
   // Does NOT require the original browser session — works from any email client
@@ -28,6 +37,10 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${siteUrl}/update-password`)
     }
 
+    // Only a magic link is a "login"; email-confirmation is tracked separately
+    // (email_verified, server-side).
+    const loginMethod = type === 'magiclink' ? 'magic_link' : undefined
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.redirect(`${siteUrl}/signin`)
 
@@ -38,10 +51,10 @@ export async function GET(request: Request) {
       .single()
 
     if (!profile?.onboarding?.completed_at) {
-      return NextResponse.redirect(`${siteUrl}/onboarding`)
+      return dest('/onboarding', loginMethod)
     }
 
-    return NextResponse.redirect(`${siteUrl}/dashboard`)
+    return dest('/dashboard', loginMethod)
   }
 
   // ── PKCE code flow ──
@@ -67,10 +80,10 @@ export async function GET(request: Request) {
       .single()
 
     if (!profile?.onboarding?.completed_at) {
-      return NextResponse.redirect(`${siteUrl}/onboarding`)
+      return dest('/onboarding', 'oauth')
     }
 
-    return NextResponse.redirect(`${siteUrl}/dashboard`)
+    return dest('/dashboard', 'oauth')
   }
 
   // No code or token_hash

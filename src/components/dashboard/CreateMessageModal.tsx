@@ -39,6 +39,33 @@ import { getRecipients, type Recipient } from "@/lib/api/recipients";
 import AudioRecordingWaveform from "@/components/audio/AudioRecordingWaveform";
 import AudioPlaybackWaveform from "@/components/audio/AudioPlaybackWaveform";
 import AudioRecorder from "@/components/audio/AudioRecorder";
+import { track } from "@/lib/posthog/analytics";
+
+// Best-effort environment descriptors for recording_failed / debugging. Coarse
+// on purpose — no fingerprinting.
+function browserName(): string {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua)) return "edge";
+  if (/OPR\//.test(ua)) return "opera";
+  if (/Chrome\//.test(ua)) return "chrome";
+  if (/Safari\//.test(ua)) return "safari";
+  if (/Firefox\//.test(ua)) return "firefox";
+  return "unknown";
+}
+function deviceType(): string {
+  if (typeof navigator === "undefined") return "unknown";
+  return /Mobi|Android|iPhone|iPad/.test(navigator.userAgent)
+    ? "mobile"
+    : "desktop";
+}
+// recorder source, derived from the route (no prop threaded through the wizard).
+function recorderSource(): string {
+  if (typeof window === "undefined") return "direct";
+  return window.location.pathname.includes("/onboarding")
+    ? "onboarding"
+    : "dashboard";
+}
 
 interface CreateMessageModalProps {
   open: boolean;
@@ -1449,6 +1476,25 @@ function RecordStep({
   // via its onRecordEnd. Video keeps the MediaRecorder path below.
   const [audioRecording, setAudioRecording] = useState(false);
 
+  // Analytics: recorder_opened once on mount; attemptRef counts re-records for
+  // recording_restarted; previewedRef de-dupes recording_previewed per take.
+  const attemptRef = useRef(1);
+  const previewedRef = useRef(false);
+  useEffect(() => {
+    track("recorder_opened", { message_type: kind, source: recorderSource() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (phase === "preview" && !previewedRef.current) {
+      previewedRef.current = true;
+      track("recording_previewed", {
+        duration_seconds: duration || elapsed,
+        message_type: kind,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   const maxSeconds = kind === "video" ? 5 * 60 : 10 * 60;
 
   // Start the camera preview as soon as the video recorder opens — unless we're
@@ -1546,6 +1592,7 @@ function RecordStep({
   };
 
   const startRecording = async () => {
+    track("recording_started", { message_type: kind });
     if (kind === "audio") {
       startAudioRecording();
       return;
@@ -1589,6 +1636,12 @@ function RecordStep({
         });
       }, 1000);
     } catch {
+      track("recording_failed", {
+        error_reason:
+          kind === "video" ? "camera_access_denied" : "mic_access_denied",
+        browser: browserName(),
+        device_type: deviceType(),
+      });
       setError(
         kind === "video"
           ? "Camera access is required to record video. Please allow access in your browser settings."
@@ -1598,6 +1651,12 @@ function RecordStep({
   };
 
   const stopRecording = () => {
+    track("recording_stopped", {
+      message_type: kind,
+      duration_seconds: elapsed,
+    });
+    // A fresh take is being captured — allow recording_previewed to fire again.
+    previewedRef.current = false;
     setDuration(elapsed);
     if (timerRef.current) {
       window.clearInterval(timerRef.current);
@@ -1618,6 +1677,8 @@ function RecordStep({
   };
 
   const reRecord = () => {
+    attemptRef.current += 1;
+    track("recording_restarted", { attempt_number: attemptRef.current });
     setAudioRecording(false);
     blobRef.current = null;
     if (previewUrlRef.current) {
@@ -1694,6 +1755,12 @@ function RecordStep({
       cleanup();
       onDone();
     } catch (e) {
+      const blobSize = blobRef.current?.size ?? 0;
+      track("upload_failed", {
+        file_type: kind === "video" ? "video/webm" : "audio/webm",
+        file_size_kb: Math.round(blobSize / 1024),
+        error_reason: errorMessage(e, "upload_failed"),
+      });
       setError(errorMessage(e, "Upload failed. Please try again."));
       setPhase("preview");
     }
@@ -2742,6 +2809,14 @@ function CreateWizard({
       onCreated?.();
       onClose();
     } catch (e) {
+      if (type === "video" || type === "audio") {
+        const blob = type === "video" ? videoBlob : audioBlob;
+        track("upload_failed", {
+          file_type: type === "video" ? "video/webm" : "audio/webm",
+          file_size_kb: Math.round((blob?.size ?? 0) / 1024),
+          error_reason: errorMessage(e, "upload_failed"),
+        });
+      }
       setError(errorMessage(e, "Could not save. Please try again."));
       setUploadStatus("");
     } finally {
