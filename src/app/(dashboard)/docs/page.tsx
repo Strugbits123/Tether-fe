@@ -49,6 +49,7 @@ import {
 } from "@/lib/api/documents";
 import { formatFileSize, buildAssignments } from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { track } from "@/lib/posthog/analytics";
 
 /* ---------------------- Types ---------------------- */
 
@@ -360,12 +361,25 @@ export default function DocsPage() {
   const [deletingDoc, setDeletingDoc] = useState<ApiDoc | null>(null);
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
 
+  // vault_viewed is a page-view metric, so fire it once per mount — not on the
+  // loadStats() calls triggered by deletes/refreshes.
+  const vaultViewedRef = useRef(false);
+
   const loadStats = async () => {
     const token = await getToken();
     if (!token) return;
     try {
       const data = await getDocumentStats(token);
       setStats(data);
+      if (!vaultViewedRef.current) {
+        vaultViewedRef.current = true;
+        // Document vault view. photo_count belongs to the separate Photos
+        // feature (not loaded here), so it's reported as null from this surface.
+        track("vault_viewed", {
+          document_count: data.fileTypes?.total ?? null,
+          photo_count: null,
+        });
+      }
     } catch {
       /* non-critical */
     }

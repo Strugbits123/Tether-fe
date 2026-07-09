@@ -10,6 +10,7 @@ import { HiOutlineSparkles } from 'react-icons/hi'
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
 import { collectSignupAttribution } from '@/lib/attribution'
+import { track } from '@/lib/posthog/analytics'
 
 /* ─── Allowed modes ─── */
 const VALID_MODES = ['signin', 'signup'] as const
@@ -172,6 +173,7 @@ function MainAuthForm({
           access_token: loginData.access_token,
           refresh_token: loginData.refresh_token,
         })
+        track('user_logged_in', { login_method: 'password' })
         showToast('Welcome back to Tether!', 'success')
         router.push('/dashboard')
       }

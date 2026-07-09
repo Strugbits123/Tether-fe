@@ -4,6 +4,7 @@ import posthog from 'posthog-js';
 import { PostHogProvider as PHProvider } from 'posthog-js/react';
 import { useEffect } from 'react';
 import { captureAttribution } from '@/lib/attribution';
+import { getEnvironment } from '@/lib/posthog/analytics';
 
 export default function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -23,6 +24,11 @@ export default function PostHogProvider({ children }: { children: React.ReactNod
       capture_pageview: false,
       capture_pageleave: true,
       person_profiles: 'identified_only',
+      // Do NOT autostart replay. SessionReplayController starts it only on
+      // allowed routes (onboarding/dashboard) and stops it on sensitive pages
+      // (recorder, vault, memoir editor), so personal content is never
+      // recorded even for a moment on load.
+      disable_session_recording: true,
       session_recording: {
         maskAllInputs: true,
         maskTextSelector: '*',
@@ -32,6 +38,9 @@ export default function PostHogProvider({ children }: { children: React.ReactNod
         ...(process.env.NODE_ENV === 'development' ? ['localhost'] : []),
       ].filter(Boolean),
       loaded: (ph) => {
+        // Registered super properties ride along on every event; user_id is
+        // added on identify (see analytics.identifyUser).
+        ph.register({ environment: getEnvironment() });
         if (process.env.NODE_ENV === 'development') ph.debug();
       },
     });

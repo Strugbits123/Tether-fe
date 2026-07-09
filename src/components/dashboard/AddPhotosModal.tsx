@@ -20,6 +20,7 @@ import {
   requestDocUploadUrls,
   createDocumentsBatch,
 } from "@/lib/api/documents";
+import { track } from "@/lib/posthog/analytics";
 
 interface AddPhotosModalProps {
   open: boolean;
@@ -431,7 +432,14 @@ export default function AddPhotosModal({
             body: file,
             headers: { "Content-Type": file.type },
           });
-          if (!response.ok) throw new Error(`Upload failed for ${file.name}`);
+          if (!response.ok) {
+            track("upload_failed", {
+              file_type: file.type,
+              file_size_kb: Math.round(file.size / 1024),
+              error_reason: `storage_put_${response.status}`,
+            });
+            throw new Error(`Upload failed for ${file.name}`);
+          }
           let dims = { width: 0, height: 0 };
           if (!isDoc) dims = await getImageDimensions(file);
           setProgress((prev) => ({ ...prev, current: prev.current + 1 }));

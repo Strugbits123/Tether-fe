@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/context/AuthContext";
 import { useToast } from "@/lib/context/ToastContext";
 import { ApiError } from "@/lib/api/client";
 import { getScreenshotUploadUrl, submitFeedback } from "@/lib/api/feedback";
+import { track } from "@/lib/posthog/analytics";
 
 const SUPPORT_EMAIL = "Support@jointether.com";
 
@@ -314,6 +315,13 @@ export default function HelpPage() {
   const [visibleCount, setVisibleCount] = useState(FAQ_PAGE_SIZE);
 
   const faqSectionRef = useRef<HTMLDivElement>(null);
+
+  // Fire help_page_viewed once on mount. `section` reflects the active FAQ
+  // category the user lands on.
+  useEffect(() => {
+    track("help_page_viewed", { section: activeCategory });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // FAQ display order. Starts as the authored order (so server/client render
   // matches), then gets shuffled once on the client so "Load More" surfaces a
