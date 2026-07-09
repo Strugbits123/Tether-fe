@@ -1636,9 +1636,10 @@ function RecordStep({
         });
       }, 1000);
     } catch {
+      // Only the video path reaches here (audio returns early above), so this
+      // is always a camera failure.
       track("recording_failed", {
-        error_reason:
-          kind === "video" ? "camera_access_denied" : "mic_access_denied",
+        error_reason: "camera_access_denied",
         browser: browserName(),
         device_type: deviceType(),
       });
@@ -1857,11 +1858,19 @@ function RecordStep({
                   waveColor="rgba(255, 255, 255, 0.6)"
                   progressColor="rgba(255, 255, 255, 1)"
                   onRecordEnd={handleAudioRecordEnd}
-                  onError={() =>
+                  onError={() => {
+                    // Audio never reaches startRecording's try/catch (it returns
+                    // early to the WaveSurfer path), so recording_failed for
+                    // mic errors is emitted here instead.
+                    track("recording_failed", {
+                      error_reason: "mic_access_denied",
+                      browser: browserName(),
+                      device_type: deviceType(),
+                    });
                     setError(
                       "Microphone access is required to record audio. Please allow access in your browser settings.",
-                    )
-                  }
+                    );
+                  }}
                 />
                 <span
                   style={{

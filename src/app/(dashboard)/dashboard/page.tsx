@@ -14,11 +14,17 @@ import { track } from '@/lib/posthog/analytics'
 const LAST_VISIT_KEY = 'tether_last_dashboard_visit'
 function daysSinceLastVisit(): number | null {
   if (typeof window === 'undefined') return null
-  const prev = window.localStorage.getItem(LAST_VISIT_KEY)
-  window.localStorage.setItem(LAST_VISIT_KEY, String(Date.now()))
-  if (!prev) return null
-  const ms = Date.now() - Number(prev)
-  return Number.isNaN(ms) ? null : Math.max(0, Math.floor(ms / 86_400_000))
+  // localStorage can throw (private mode / blocked storage). Never let an
+  // analytics-only computation break the dashboard render.
+  try {
+    const prev = window.localStorage.getItem(LAST_VISIT_KEY)
+    window.localStorage.setItem(LAST_VISIT_KEY, String(Date.now()))
+    if (!prev) return null
+    const ms = Date.now() - Number(prev)
+    return Number.isNaN(ms) ? null : Math.max(0, Math.floor(ms / 86_400_000))
+  } catch {
+    return null
+  }
 }
 
 function DashboardContent() {

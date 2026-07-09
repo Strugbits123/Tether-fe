@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import posthog from 'posthog-js';
 
 // Session replay is opt-IN by route. It runs only on the onboarding flow and
@@ -19,16 +19,35 @@ function isReplayAllowed(pathname: string): boolean {
 
 export default function SessionReplayController() {
   const pathname = usePathname();
+  const [ready, setReady] = useState(() => posthog.__loaded ?? false);
+
+  // posthog.init() finishes asynchronously, so on a direct load of an allowed
+  // route the SDK may not be ready when this first mounts. Poll until it loads
+  // (bounded, so it stops when no key is configured), then let the decision
+  // effect below re-run via the `ready` dependency.
+  useEffect(() => {
+    if (ready) return;
+    let attempts = 0;
+    const id = window.setInterval(() => {
+      if (posthog.__loaded) {
+        setReady(true);
+        window.clearInterval(id);
+      } else if (++attempts >= 25) {
+        window.clearInterval(id); // ~5s cap — likely no PostHog key set
+      }
+    }, 200);
+    return () => window.clearInterval(id);
+  }, [ready]);
 
   useEffect(() => {
-    if (!pathname || !posthog.__loaded) return;
+    if (!pathname || !ready) return;
 
     if (isReplayAllowed(pathname)) {
       posthog.startSessionRecording();
     } else {
       posthog.stopSessionRecording();
     }
-  }, [pathname]);
+  }, [pathname, ready]);
 
   return null;
 }

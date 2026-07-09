@@ -122,18 +122,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     stopRetry()
-    // Emit the logout event while identity is still attached; reset() clears it
-    // afterwards via the auth-state-change listener.
-    track('user_logged_out')
     // Fire backend logout (invalidates server-side session record) — don't await;
     // browser session cleared below is the authoritative action.
     const { data: { session: current } } = await supabase.auth.getSession()
     if (current?.access_token) {
       api.post('/auth/logout', {}, current.access_token).catch(() => null)
     }
-    await supabase.auth.signOut()
-    setProfile(null)
-    router.push('/signin')
+    try {
+      await supabase.auth.signOut()
+      // Record only after sign-out actually succeeded, while identity is still
+      // attached (resetIdentity runs afterwards via the auth-state-change
+      // listener). If sign-out throws we skip the event but still tear down.
+      track('user_logged_out')
+    } catch {
+      // Fall through — clear local UI state regardless so the user isn't stuck.
+    } finally {
+      setProfile(null)
+      router.push('/signin')
+    }
   }
 
   return (
