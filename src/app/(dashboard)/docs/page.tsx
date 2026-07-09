@@ -171,7 +171,6 @@ const CATEGORIES: {
     bg: "#F3E8FF",
     color: "#9810FA",
     apiKey: "other",
-    totalDenom: 5,
     tooltip: {
       description:
         "Important instructions, notes, and personal information that help your family handle your affairs and honor your wishes.",
@@ -668,7 +667,11 @@ export default function DocsPage() {
                     onMouseLeave={() => setOpenTooltip(null)}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Info className="w-4 h-4 cursor-default" color="#99A1AF" strokeWidth={2} />
+                    <Info
+                      className="w-4 h-4 cursor-default"
+                      color="#99A1AF"
+                      strokeWidth={2}
+                    />
                     {isTooltipOpen && (
                       <div
                         className="absolute right-0 top-6 z-50 w-[280px] bg-white rounded-xl p-4 shadow-xl"
@@ -1032,12 +1035,15 @@ function ConfirmDeleteDocModal({
                   color: "#717182",
                 }}
               >
-                &ldquo;{doc.title}&rdquo; will be permanently removed. This cannot
-                be undone.
+                &ldquo;{doc.title}&rdquo; will be permanently removed. This
+                cannot be undone.
               </p>
             </div>
 
-            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+            <div
+              className="flex items-center justify-end"
+              style={{ gap: 11.99 }}
+            >
               <button
                 type="button"
                 onClick={onClose}
