@@ -570,8 +570,10 @@ function ChapterEditor({
           title={title}
           onClose={() => setConfirmingDelete(false)}
           onConfirm={async () => {
-            setConfirmingDelete(false)
+            // Keep the modal (and its in-flight spinner/disabled buttons)
+            // visible until the delete request settles.
             await handleDelete()
+            setConfirmingDelete(false)
           }}
         />
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Bug,
@@ -427,7 +427,18 @@ export default function HelpPage() {
           </div>
 
           {/* Search input + results dropdown */}
-          <div className="relative w-full">
+          <div
+            className="relative w-full"
+            // Track focus at the container level so tabbing from the input to a
+            // result (or the clear button) keeps the dropdown open; only close
+            // when focus leaves the whole search area.
+            onFocus={() => setSearchFocused(true)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setSearchFocused(false);
+              }
+            }}
+          >
             <div
               className="flex items-center w-full"
               style={{
@@ -449,8 +460,6 @@ export default function HelpPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
                 placeholder="Search for help articles, topics, or questions..."
                 className="flex-1 min-w-0 bg-transparent outline-none"
                 style={{
@@ -465,11 +474,7 @@ export default function HelpPage() {
                 <button
                   type="button"
                   aria-label="Clear search"
-                  // onMouseDown so it fires before the input's blur.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setSearch("");
-                  }}
+                  onClick={() => setSearch("")}
                   className="flex-shrink-0 cursor-pointer hover:opacity-70"
                 >
                   <X
@@ -1221,11 +1226,7 @@ function SearchResultRow({
   return (
     <button
       type="button"
-      // onMouseDown fires before the input's blur so the click isn't lost.
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onSelect();
-      }}
+      onClick={onSelect}
       className="flex w-full items-center gap-3 text-left cursor-pointer hover:bg-gray-50"
       style={{ padding: "10px 16px" }}
     >
@@ -1269,6 +1270,9 @@ function VideoLightbox({
   video: VideoTutorial;
   onClose: () => void;
 }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -1276,6 +1280,9 @@ function VideoLightbox({
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Move focus into the dialog so keyboard/AT users aren't left behind the
+    // overlay.
+    closeRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
@@ -1293,11 +1300,13 @@ function VideoLightbox({
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         className="relative w-full"
         style={{ maxWidth: 860 }}
       >
         {/* Close */}
         <button
+          ref={closeRef}
           type="button"
           onClick={onClose}
           aria-label="Close"
@@ -1354,6 +1363,7 @@ function VideoLightbox({
         {/* Title + description */}
         <div className="flex flex-col" style={{ paddingTop: 16, gap: 4 }}>
           <h3
+            id={titleId}
             style={{
               fontFamily: "Inter, sans-serif",
               fontWeight: 600,
