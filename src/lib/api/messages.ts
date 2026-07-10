@@ -15,7 +15,6 @@ export interface Message {
   mux_playback_id?: string
   display_order: number
   created_at: string
-  audioSignedUrl?: string
   assignments?: MessageAssignment[]
 }
 
@@ -49,9 +48,10 @@ export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
         audience.push('All recipients')
         break
       case 'group':
+        // Accept both the current singular values and legacy plural data.
         if (a.group_value === 'family') audience.push('All family')
-        else if (a.group_value === 'friends') audience.push('All friends')
-        else if (a.group_value === 'others') audience.push('All Others')
+        else if (a.group_value === 'friend' || a.group_value === 'friends') audience.push('All friends')
+        else if (a.group_value === 'other' || a.group_value === 'others') audience.push('All Others')
         break
       case 'release_manager':
         audience.push('Release Manager')
@@ -81,7 +81,7 @@ export const createTextMessage = (
   },
 ) => api.post<Message>('/messages', body, token)
 
-// Video — get Mux upload URL
+// Video — get a Mux direct-upload URL (creates the message row).
 export const createVideoUploadUrl = (
   token: string,
   body: {
@@ -96,7 +96,7 @@ export const createVideoUploadUrl = (
     token,
   )
 
-// Audio — get Supabase Storage upload URL
+// Audio — get a Supabase Storage signed upload URL (creates the message row).
 export const createAudioUploadUrl = (
   token: string,
   body: {
@@ -112,14 +112,11 @@ export const createAudioUploadUrl = (
     token,
   )
 
-// Confirm audio upload
+// Finalize an audio upload (sets duration + size, marks ready).
 export const confirmAudioUpload = (
   token: string,
   messageId: string,
-  body: {
-    durationSeconds: number
-    fileSizeBytes: number
-  },
+  body: { durationSeconds: number; fileSizeBytes: number },
 ) => api.post<Message>(`/messages/${messageId}/confirm-upload`, body, token)
 
 // Poll processing status

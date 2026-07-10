@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -19,10 +19,11 @@ import {
   Search,
   Trash2,
   Upload,
+  Users,
   X,
-} from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { useToast } from '@/lib/context/ToastContext'
+} from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/lib/context/ToastContext";
 import {
   createFolder,
   deleteFolder,
@@ -36,211 +37,243 @@ import {
   updatePhoto,
   type Photo,
   type PhotoFolder,
-} from '@/lib/api/photos'
-import { buildAssignments } from '@/lib/utils/assignments'
-import { getRecipients, type Recipient } from '@/lib/api/recipients'
-import AddPhotosModal from '@/components/dashboard/AddPhotosModal'
+} from "@/lib/api/photos";
+import {
+  buildAssignments,
+  assignmentsToSelection,
+} from "@/lib/utils/assignments";
+import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import AddPhotosModal from "@/components/dashboard/AddPhotosModal";
 
 /* ---------------------- Helpers ---------------------- */
 
 async function getToken(): Promise<string | null> {
-  const supabase = createClient()
+  const supabase = createClient();
   const {
     data: { session },
-  } = await supabase.auth.getSession()
-  return session?.access_token ?? null
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function photoDisplayName(photo: Photo): string {
-  return photo.title || photo.storage_path.split('/').pop() || 'Untitled'
+  return photo.title || photo.storage_path.split("/").pop() || "Untitled";
 }
 
 /* ---------------------- Types ---------------------- */
 
 interface FolderItem {
-  id: string
-  name: string
-  isDefault?: boolean
+  id: string;
+  name: string;
+  isDefault?: boolean;
 }
 
 /* ---------------------- Page ---------------------- */
 
 export default function PhotosPage() {
-  const { showToast } = useToast()
+  const { showToast } = useToast();
 
   // Data from API
-  const [folders, setFolders] = useState<PhotoFolder[]>([])
-  const [uncategorizedCount, setUncategorizedCount] = useState(0)
-  const [photos, setPhotos] = useState<Photo[]>([])
-  const [loadingPhotos, setLoadingPhotos] = useState(false)
+  const [folders, setFolders] = useState<PhotoFolder[]>([]);
+  const [uncategorizedCount, setUncategorizedCount] = useState(0);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
 
   // UI state
-  const [activeFolderId, setActiveFolderId] = useState('uncategorized')
-  const [search, setSearch] = useState('')
-  const [layout, setLayout] = useState<'grid' | 'list'>('grid')
+  const [activeFolderId, setActiveFolderId] = useState("uncategorized");
+  const [search, setSearch] = useState("");
+  const [layout, setLayout] = useState<"grid" | "list">("grid");
 
   // Modals
-  const [uploading, setUploading] = useState(false)
-  const [creatingFolder, setCreatingFolder] = useState(false)
-  const [editingFolder, setEditingFolder] = useState<PhotoFolder | null>(null)
-  const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null)
-  const [movingPhoto, setMovingPhoto] = useState<Photo | null>(null)
-  const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null)
+  const [uploading, setUploading] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<PhotoFolder | null>(null);
+  const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
+  const [movingPhoto, setMovingPhoto] = useState<Photo | null>(null);
+  const [deletingPhoto, setDeletingPhoto] = useState<Photo | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null);
 
   const loadFolders = useCallback(async () => {
-    const token = await getToken()
-    if (!token) return
+    const token = await getToken();
+    if (!token) return;
     try {
-      const data = await getFolders(token)
-      setFolders(data.folders)
-      setUncategorizedCount(data.uncategorizedCount)
+      const data = await getFolders(token);
+      setFolders(data.folders);
+      setUncategorizedCount(data.uncategorizedCount);
     } catch {
       /* non-fatal */
     }
-  }, [])
+  }, []);
 
   const loadPhotos = useCallback(
     async (folderId: string) => {
-      const token = await getToken()
-      if (!token) return
-      setLoadingPhotos(true)
+      const token = await getToken();
+      if (!token) return;
+      setLoadingPhotos(true);
       try {
-        const data = await getPhotos(token, folderId === 'uncategorized' ? undefined : folderId)
-        setPhotos(data)
+        const data = await getPhotos(
+          token,
+          folderId === "uncategorized" ? null : folderId,
+        );
+        setPhotos(data);
       } catch {
-        showToast('Failed to load photos', 'error')
+        showToast("Failed to load photos", "error");
       } finally {
-        setLoadingPhotos(false)
+        setLoadingPhotos(false);
       }
     },
     [showToast],
-  )
+  );
 
   // Initial load
   useEffect(() => {
-    loadFolders()
-  }, [loadFolders])
+    loadFolders();
+  }, [loadFolders]);
 
   useEffect(() => {
-    loadPhotos(activeFolderId)
-  }, [activeFolderId, loadPhotos])
+    loadPhotos(activeFolderId);
+  }, [activeFolderId, loadPhotos]);
 
   const handleDeletePhoto = async (photoId: string) => {
-    const token = await getToken()
-    if (!token) return
+    const token = await getToken();
+    if (!token) return;
     try {
-      await deletePhoto(token, photoId)
-      showToast('Photo deleted', 'success')
-      loadPhotos(activeFolderId)
-      loadFolders()
+      await deletePhoto(token, photoId);
+      showToast("Photo deleted", "success");
+      loadPhotos(activeFolderId);
+      loadFolders();
     } catch {
-      showToast('Failed to delete photo', 'error')
+      showToast("Failed to delete photo", "error");
     }
-  }
+  };
 
   const handleDownload = async (photoId: string) => {
-    const token = await getToken()
-    if (!token) return
+    const token = await getToken();
+    if (!token) return;
     try {
-      const { downloadUrl } = await getPhotoDownloadUrl(token, photoId)
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = ''
-      a.target = '_blank'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      const { downloadUrl } = await getPhotoDownloadUrl(token, photoId);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = "";
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch {
-      showToast('Download failed', 'error')
+      showToast("Download failed", "error");
     }
-  }
+  };
 
   const handleOpenLightbox = async (photoId: string) => {
-    const token = await getToken()
-    if (!token) return
+    const token = await getToken();
+    if (!token) return;
     try {
-      const photo = await getPhoto(token, photoId)
-      setLightboxPhoto(photo)
+      const photo = await getPhoto(token, photoId);
+      setLightboxPhoto(photo);
     } catch {
-      showToast('Failed to load photo', 'error')
+      showToast("Failed to load photo", "error");
     }
-  }
+  };
 
   const handleCreateFolder = async (
     name: string,
     groups: string[],
     individualIds: string[],
   ): Promise<void> => {
-    const token = await getToken()
-    if (!token) return
+    const token = await getToken();
+    if (!token) return;
     await createFolder(token, {
       name: name.trim(),
       assignments: buildAssignments(groups, individualIds),
-    })
-    showToast('Folder created', 'success')
-    setCreatingFolder(false)
-    loadFolders()
-  }
+    });
+    showToast("Folder created", "success");
+    setCreatingFolder(false);
+    loadFolders();
+  };
 
-  const handleSaveFolder = async (id: string, name: string): Promise<void> => {
-    const token = await getToken()
-    if (!token) return
-    await renameFolder(token, id, { name: name.trim() })
-    showToast('Folder renamed', 'success')
-    setEditingFolder(null)
-    loadFolders()
-  }
+  const handleSaveFolder = async (
+    id: string,
+    name: string,
+    groups: string[],
+    individualIds: string[],
+  ): Promise<void> => {
+    const token = await getToken();
+    if (!token) return;
+    await renameFolder(token, id, {
+      name: name.trim(),
+      assignments: buildAssignments(groups, individualIds),
+    });
+    showToast("Folder updated", "success");
+    setEditingFolder(null);
+    loadFolders();
+  };
 
   const handleDeleteFolder = async (id: string) => {
-    const token = await getToken()
-    if (!token) return
+    const token = await getToken();
+    if (!token) return;
     try {
-      await deleteFolder(token, id)
-      showToast('Folder deleted. Photos moved to Uncategorized.', 'success')
-      if (activeFolderId === id) setActiveFolderId('uncategorized')
-      loadFolders()
-      loadPhotos('uncategorized')
+      await deleteFolder(token, id);
+      showToast("Folder deleted. Photos moved to Uncategorized.", "success");
+      if (activeFolderId === id) setActiveFolderId("uncategorized");
+      loadFolders();
+      loadPhotos("uncategorized");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to delete folder', 'error')
+      showToast(
+        err instanceof Error ? err.message : "Failed to delete folder",
+        "error",
+      );
     }
-  }
+  };
 
-  const handleSavePhoto = async (photoId: string, title: string, caption: string): Promise<void> => {
-    const token = await getToken()
-    if (!token) return
-    await updatePhoto(token, photoId, { title: title.trim() || undefined, caption: caption.trim() || undefined })
-    showToast('Photo updated', 'success')
-    setEditingPhoto(null)
-    loadPhotos(activeFolderId)
-  }
+  const handleSavePhoto = async (
+    photoId: string,
+    title: string,
+    caption: string,
+    selectedGroups: string[],
+    selectedIndividuals: string[],
+  ): Promise<void> => {
+    const token = await getToken();
+    if (!token) return;
+    const assignments = buildAssignments(selectedGroups, selectedIndividuals);
+    await updatePhoto(token, photoId, {
+      title: title.trim() || undefined,
+      caption: caption.trim() || undefined,
+      assignments,
+    });
+    showToast("Photo updated", "success");
+    setEditingPhoto(null);
+    loadPhotos(activeFolderId);
+  };
 
-  const handleMovePhoto = async (photoId: string, targetFolderId: string | null): Promise<void> => {
-    const token = await getToken()
-    if (!token) return
-    await movePhoto(token, photoId, { folderId: targetFolderId })
-    showToast('Photo moved', 'success')
-    setMovingPhoto(null)
-    loadPhotos(activeFolderId)
-    loadFolders()
-  }
+  const handleMovePhoto = async (
+    photoId: string,
+    targetFolderId: string | null,
+  ): Promise<void> => {
+    const token = await getToken();
+    if (!token) return;
+    await movePhoto(token, photoId, { folderId: targetFolderId });
+    showToast("Photo moved", "success");
+    setMovingPhoto(null);
+    loadPhotos(activeFolderId);
+    loadFolders();
+  };
 
-  const activeFolder = folders.find((f) => f.id === activeFolderId)
+  const activeFolder = folders.find((f) => f.id === activeFolderId);
 
   const filteredPhotos = photos.filter((p) => {
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
-    const title = (p.title || '').toLowerCase()
-    const path = (p.storage_path || '').toLowerCase()
-    return title.includes(q) || path.includes(q)
-  })
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    const title = (p.title || "").toLowerCase();
+    const path = (p.storage_path || "").toLowerCase();
+    return title.includes(q) || path.includes(q);
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -251,23 +284,24 @@ export default function PhotosPage() {
             fontFamily: '"Instrument Serif", serif',
             fontWeight: 400,
             fontSize: 32,
-            lineHeight: '28px',
-            color: '#101828',
+            lineHeight: "28px",
+            color: "#101828",
           }}
         >
           Photos
         </h1>
         <p
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "Inter, sans-serif",
             fontWeight: 400,
             fontSize: 16,
-            lineHeight: '24px',
-            letterSpacing: '-0.31px',
-            color: '#4A5565',
+            lineHeight: "24px",
+            letterSpacing: "-0.31px",
+            color: "#4A5565",
           }}
         >
-          Upload, organize, and share the memories that matter most with your recipients
+          Upload, organize, and share the memories that matter most with your
+          recipients
         </p>
       </div>
 
@@ -281,19 +315,23 @@ export default function PhotosPage() {
             className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90"
             style={{
               height: 35.996,
-              padding: '8px 16px',
+              padding: "8px 16px",
               borderRadius: 8,
-              background: '#4F39F6',
-              fontFamily: 'Inter, sans-serif',
+              background: "#4F39F6",
+              fontFamily: "Inter, sans-serif",
               fontWeight: 500,
               fontSize: 14,
-              lineHeight: '20px',
-              letterSpacing: '-0.15px',
-              color: '#FFFFFF',
+              lineHeight: "20px",
+              letterSpacing: "-0.15px",
+              color: "#FFFFFF",
               flexShrink: 0,
             }}
           >
-            <Upload style={{ width: 16, height: 16, flexShrink: 0 }} color="#FFFFFF" strokeWidth={2} />
+            <Upload
+              style={{ width: 16, height: 16, flexShrink: 0 }}
+              color="#FFFFFF"
+              strokeWidth={2}
+            />
             Upload photos
           </button>
           <button
@@ -302,20 +340,24 @@ export default function PhotosPage() {
             className="flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
             style={{
               height: 35.996,
-              padding: '8px 16px',
+              padding: "8px 16px",
               borderRadius: 8,
-              border: '1.25px solid rgba(0,0,0,0.1)',
-              background: '#FFFFFF',
-              fontFamily: 'Inter, sans-serif',
+              border: "1.25px solid rgba(0,0,0,0.1)",
+              background: "#FFFFFF",
+              fontFamily: "Inter, sans-serif",
               fontWeight: 500,
               fontSize: 14,
-              lineHeight: '20px',
-              letterSpacing: '-0.15px',
-              color: '#0A0A0A',
+              lineHeight: "20px",
+              letterSpacing: "-0.15px",
+              color: "#0A0A0A",
               flexShrink: 0,
             }}
           >
-            <FolderPlus style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+            <FolderPlus
+              style={{ width: 16, height: 16, flexShrink: 0 }}
+              color="#0A0A0A"
+              strokeWidth={2}
+            />
             New folder
           </button>
         </div>
@@ -326,14 +368,18 @@ export default function PhotosPage() {
             className="flex items-center gap-2"
             style={{
               width: 256,
-              maxWidth: '100%',
+              maxWidth: "100%",
               height: 35.996,
               borderRadius: 8,
-              background: '#F3F3F5',
-              padding: '4px 12px',
+              background: "#F3F3F5",
+              padding: "4px 12px",
             }}
           >
-            <Search style={{ width: 16, height: 16, flexShrink: 0 }} color="#717182" strokeWidth={2} />
+            <Search
+              style={{ width: 16, height: 16, flexShrink: 0 }}
+              color="#717182"
+              strokeWidth={2}
+            />
             <input
               type="text"
               value={search}
@@ -341,12 +387,12 @@ export default function PhotosPage() {
               placeholder="Search photos..."
               className="flex-1 bg-transparent outline-none min-w-0"
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 400,
                 fontSize: 14,
-                lineHeight: '14px',
-                letterSpacing: '-0.15px',
-                color: '#0A0A0A',
+                lineHeight: "14px",
+                letterSpacing: "-0.15px",
+                color: "#0A0A0A",
               }}
             />
           </div>
@@ -357,39 +403,47 @@ export default function PhotosPage() {
               width: 78.4,
               height: 42.44,
               borderRadius: 10,
-              border: '1.25px solid #E5E7EB',
-              padding: '4px 3.98px',
+              border: "1.25px solid #E5E7EB",
+              padding: "4px 3.98px",
               gap: 3.98,
               flexShrink: 0,
             }}
           >
             <button
               type="button"
-              onClick={() => setLayout('grid')}
+              onClick={() => setLayout("grid")}
               aria-label="Grid view"
               className="flex items-center justify-center cursor-pointer"
               style={{
                 width: 31.97,
                 height: 31.97,
                 borderRadius: 4,
-                background: layout === 'grid' ? '#F3F4F6' : 'transparent',
+                background: layout === "grid" ? "#F3F4F6" : "transparent",
               }}
             >
-              <Grid3x3 style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+              <Grid3x3
+                style={{ width: 16, height: 16, flexShrink: 0 }}
+                color="#0A0A0A"
+                strokeWidth={2}
+              />
             </button>
             <button
               type="button"
-              onClick={() => setLayout('list')}
+              onClick={() => setLayout("list")}
               aria-label="List view"
               className="flex items-center justify-center cursor-pointer"
               style={{
                 width: 31.97,
                 height: 31.97,
                 borderRadius: 4,
-                background: layout === 'list' ? '#F3F4F6' : 'transparent',
+                background: layout === "list" ? "#F3F4F6" : "transparent",
               }}
             >
-              <List style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+              <List
+                style={{ width: 16, height: 16, flexShrink: 0 }}
+                color="#0A0A0A"
+                strokeWidth={2}
+              />
             </button>
           </div>
         </div>
@@ -401,24 +455,24 @@ export default function PhotosPage() {
         <aside
           className="flex flex-col flex-shrink-0"
           style={{
-            width: '100%',
+            width: "100%",
             maxWidth: 256,
             borderRadius: 14,
-            background: '#FFFFFF',
-            border: '1.25px solid rgba(0,0,0,0.1)',
+            background: "#FFFFFF",
+            border: "1.25px solid rgba(0,0,0,0.1)",
             padding: 16,
             gap: 16,
-            alignSelf: 'flex-start',
+            alignSelf: "flex-start",
           }}
         >
           <h3
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 600,
               fontSize: 18,
-              lineHeight: '27px',
-              letterSpacing: '-0.44px',
-              color: '#101828',
+              lineHeight: "27px",
+              letterSpacing: "-0.44px",
+              color: "#101828",
             }}
           >
             Folders
@@ -427,10 +481,14 @@ export default function PhotosPage() {
           <div className="flex flex-col" style={{ gap: 3.98 }}>
             {/* Uncategorized — always shown */}
             <FolderRow
-              folder={{ id: 'uncategorized', name: 'Uncategorized', isDefault: true }}
+              folder={{
+                id: "uncategorized",
+                name: "Uncategorized",
+                isDefault: true,
+              }}
               count={uncategorizedCount}
-              active={activeFolderId === 'uncategorized'}
-              onSelect={() => setActiveFolderId('uncategorized')}
+              active={activeFolderId === "uncategorized"}
+              onSelect={() => setActiveFolderId("uncategorized")}
               onEdit={() => {}}
               onDuplicate={() => {}}
               onDelete={() => {}}
@@ -456,9 +514,9 @@ export default function PhotosPage() {
           className="flex flex-col flex-1 min-w-0"
           style={{
             borderRadius: 14,
-            background: '#FFFFFF',
-            border: '1.25px solid rgba(0,0,0,0.1)',
-            padding: '23.98px 24px',
+            background: "#FFFFFF",
+            border: "1.25px solid rgba(0,0,0,0.1)",
+            padding: "23.98px 24px",
             gap: 39.98,
           }}
         >
@@ -466,54 +524,90 @@ export default function PhotosPage() {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <h3
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 600,
                 fontSize: 18,
-                lineHeight: '27px',
-                letterSpacing: '-0.44px',
-                color: '#101828',
-                wordBreak: 'break-word',
+                lineHeight: "27px",
+                letterSpacing: "-0.44px",
+                color: "#101828",
+                wordBreak: "break-word",
               }}
             >
-              {activeFolderId === 'uncategorized' ? 'Uncategorized' : (activeFolder?.name ?? 'Photos')} Photos
+              {activeFolderId === "uncategorized"
+                ? "Uncategorized"
+                : (activeFolder?.name ?? "Photos")}{" "}
+              Photos
             </h3>
-            <span
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: '#6A7282',
-              }}
-            >
-              {filteredPhotos.length} photos
-            </span>
+            <div className="flex items-center gap-3">
+              <span
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#6A7282",
+                }}
+              >
+                {filteredPhotos.length} photos
+              </span>
+              {activeFolderId !== "uncategorized" && (() => {
+                const rc = (activeFolder?.assignments ?? []).filter(
+                  (a) => a.assignment_scope !== "assign_later",
+                ).length;
+                return rc > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1"
+                    style={{
+                      fontFamily: "Inter, sans-serif",
+                      fontWeight: 400,
+                      fontSize: 14,
+                      lineHeight: "20px",
+                      letterSpacing: "-0.15px",
+                      color: "#6A7282",
+                    }}
+                  >
+                    <Users
+                      style={{ width: 14, height: 14, flexShrink: 0 }}
+                      color="#6A7282"
+                      strokeWidth={2}
+                    />
+                    {rc} {rc === 1 ? "recipient" : "recipients"}
+                  </span>
+                ) : null;
+              })()}
+            </div>
           </div>
 
           {/* Photo content */}
           {loadingPhotos ? (
-            <div className="flex items-center justify-center" style={{ minHeight: 200 }}>
-              <Loader2 style={{ width: 32, height: 32, color: '#4F39F6' }} className="animate-spin" />
+            <div
+              className="flex items-center justify-center"
+              style={{ minHeight: 200 }}
+            >
+              <Loader2
+                style={{ width: 32, height: 32, color: "#4F39F6" }}
+                className="animate-spin"
+              />
             </div>
           ) : filteredPhotos.length === 0 ? (
             <div
               className="flex items-center justify-center"
               style={{
                 minHeight: 200,
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontSize: 14,
-                color: '#717182',
+                color: "#717182",
               }}
             >
               No photos in this folder yet.
             </div>
-          ) : layout === 'grid' ? (
+          ) : layout === "grid" ? (
             <div
               className="grid"
               style={{
                 gap: 16,
-                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
               }}
             >
               {filteredPhotos.map((p) => (
@@ -521,7 +615,7 @@ export default function PhotosPage() {
                   key={p.id}
                   photo={p}
                   onEdit={() => setEditingPhoto(p)}
-                  onDelete={() => handleDeletePhoto(p.id)}
+                  onDelete={() => setDeletingPhoto(p)}
                   onDownload={() => handleDownload(p.id)}
                   onMove={() => setMovingPhoto(p)}
                   onLightbox={() => handleOpenLightbox(p.id)}
@@ -535,7 +629,7 @@ export default function PhotosPage() {
                   key={p.id}
                   photo={p}
                   onEdit={() => setEditingPhoto(p)}
-                  onDelete={() => handleDeletePhoto(p.id)}
+                  onDelete={() => setDeletingPhoto(p)}
                   onDownload={() => handleDownload(p.id)}
                   onMove={() => setMovingPhoto(p)}
                 />
@@ -550,12 +644,14 @@ export default function PhotosPage() {
         open={uploading}
         onClose={() => setUploading(false)}
         onCreated={() => {
-          loadPhotos(activeFolderId)
-          loadFolders()
+          loadPhotos(activeFolderId);
+          loadFolders();
         }}
         title="Upload Photos"
         subtitle="Add new photos to your secure vault"
-        folderId={activeFolderId === 'uncategorized' ? undefined : activeFolderId}
+        folderId={
+          activeFolderId === "uncategorized" ? undefined : activeFolderId
+        }
       />
 
       {creatingFolder && (
@@ -569,7 +665,9 @@ export default function PhotosPage() {
         <EditFolderModal
           folder={editingFolder}
           onClose={() => setEditingFolder(null)}
-          onSave={(name) => handleSaveFolder(editingFolder.id, name)}
+          onSave={(name, groups, individualIds) =>
+            handleSaveFolder(editingFolder.id, name, groups, individualIds)
+          }
         />
       )}
 
@@ -577,7 +675,15 @@ export default function PhotosPage() {
         <EditPhotoModal
           photo={editingPhoto}
           onClose={() => setEditingPhoto(null)}
-          onSave={(title, caption) => handleSavePhoto(editingPhoto.id, title, caption)}
+          onSave={(title, caption, groups, individuals) =>
+            handleSavePhoto(
+              editingPhoto.id,
+              title,
+              caption,
+              groups,
+              individuals,
+            )
+          }
         />
       )}
 
@@ -586,7 +692,9 @@ export default function PhotosPage() {
           photo={movingPhoto}
           folders={folders}
           onClose={() => setMovingPhoto(null)}
-          onMove={(targetFolderId) => handleMovePhoto(movingPhoto.id, targetFolderId)}
+          onMove={(targetFolderId) =>
+            handleMovePhoto(movingPhoto.id, targetFolderId)
+          }
         />
       )}
 
@@ -596,8 +704,165 @@ export default function PhotosPage() {
           onClose={() => setLightboxPhoto(null)}
         />
       )}
+
+      {deletingPhoto && (
+        <ConfirmDeletePhotoModal
+          onClose={() => setDeletingPhoto(null)}
+          onConfirm={async () => {
+            const id = deletingPhoto.id;
+            setDeletingPhoto(null);
+            await handleDeletePhoto(id);
+          }}
+        />
+      )}
     </div>
-  )
+  );
+}
+
+/* ---------------------- Delete confirmation ---------------------- */
+
+function ConfirmDeletePhotoModal({
+  onClose,
+  onConfirm,
+}: {
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const handleConfirm = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: "rgba(0,0,0,0.4)" }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          className="relative bg-white w-full"
+          style={{
+            maxWidth: 400,
+            borderRadius: 10,
+            boxShadow:
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
+          }}
+        >
+          <div className="flex flex-col gap-5 px-6 py-6">
+            <div className="flex flex-col gap-2">
+              <h2
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 600,
+                  fontSize: 18,
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
+                }}
+              >
+                Delete this photo?
+              </h2>
+              <p
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#717182",
+                }}
+              >
+                This cannot be undone.
+              </p>
+            </div>
+
+            <div
+              className="flex items-center justify-end"
+              style={{ gap: 11.99 }}
+            >
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={deleting}
+                className="cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                style={{
+                  height: 35.996,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={deleting}
+                className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 35.996,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  background: "#E7000B",
+                  opacity: deleting ? 0.5 : 1,
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#FFFFFF",
+                }}
+              >
+                {deleting && (
+                  <Loader2
+                    style={{ width: 14, height: 14 }}
+                    className="animate-spin"
+                  />
+                )}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ---------------------- Folder row ---------------------- */
@@ -605,33 +870,36 @@ export default function PhotosPage() {
 function FolderRow({
   folder,
   count,
+  recipientCount,
   active,
   onSelect,
   onEdit,
   onDuplicate,
   onDelete,
 }: {
-  folder: FolderItem
-  count: number
-  active: boolean
-  onSelect: () => void
-  onEdit: () => void
-  onDuplicate: () => void
-  onDelete: () => void
+  folder: FolderItem;
+  count: number;
+  recipientCount?: number;
+  active: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    if (menuOpen) document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [menuOpen])
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        setMenuOpen(false);
+    };
+    if (menuOpen) document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
 
-  const Icon = folder.isDefault ? ImageIcon : FolderIcon
-  const labelColor = active ? '#432DD7' : '#364153'
+  const Icon = folder.isDefault ? ImageIcon : FolderIcon;
+  const labelColor = active ? "#432DD7" : "#364153";
 
   return (
     <div
@@ -639,18 +907,18 @@ function FolderRow({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onSelect()
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
         }
       }}
       className="w-full flex items-center cursor-pointer transition-colors relative"
       style={{
         height: 35.98,
         borderRadius: 10,
-        padding: '8px 11.99px',
+        padding: "8px 11.99px",
         gap: 11.99,
-        background: active ? '#EEF2FF' : 'transparent',
+        background: active ? "#EEF2FF" : "transparent",
       }}
     >
       <Icon
@@ -661,25 +929,47 @@ function FolderRow({
       <span
         className="flex-1 text-left min-w-0"
         style={{
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: "Inter, sans-serif",
           fontWeight: 500,
           fontSize: 14,
-          lineHeight: '20px',
-          letterSpacing: '-0.15px',
+          lineHeight: "20px",
+          letterSpacing: "-0.15px",
           color: labelColor,
-          wordBreak: 'break-word',
+          wordBreak: "break-word",
         }}
       >
         {folder.name}
       </span>
+      {recipientCount !== undefined && recipientCount > 0 && (
+        <span
+          className="inline-flex items-center"
+          title={`${recipientCount} recipient${recipientCount === 1 ? "" : "s"}`}
+          style={{
+            gap: 3,
+            fontFamily: "Inter, sans-serif",
+            fontWeight: 500,
+            fontSize: 12,
+            lineHeight: "16px",
+            color: "#6A7282",
+            flexShrink: 0,
+          }}
+        >
+          <Users
+            style={{ width: 13, height: 13, flexShrink: 0 }}
+            color="#6A7282"
+            strokeWidth={2}
+          />
+          {recipientCount}
+        </span>
+      )}
       <span
         style={{
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: "Inter, sans-serif",
           fontWeight: 500,
           fontSize: 12,
-          lineHeight: '16px',
-          textAlign: 'center',
-          color: '#6A7282',
+          lineHeight: "16px",
+          textAlign: "center",
+          color: "#6A7282",
           flexShrink: 0,
         }}
       >
@@ -697,8 +987,8 @@ function FolderRow({
             type="button"
             aria-label="Folder actions"
             onClick={(e) => {
-              e.stopPropagation()
-              setMenuOpen((o) => !o)
+              e.stopPropagation();
+              setMenuOpen((o) => !o);
             }}
             className="inline-flex items-center justify-center cursor-pointer hover:bg-gray-100"
             style={{
@@ -719,23 +1009,23 @@ function FolderRow({
           {menuOpen && (
             <FolderActionMenu
               onEdit={() => {
-                setMenuOpen(false)
-                onEdit()
+                setMenuOpen(false);
+                onEdit();
               }}
               onDuplicate={() => {
-                setMenuOpen(false)
-                onDuplicate()
+                setMenuOpen(false);
+                onDuplicate();
               }}
               onDelete={() => {
-                setMenuOpen(false)
-                onDelete()
+                setMenuOpen(false);
+                onDelete();
               }}
             />
           )}
         </span>
       )}
     </div>
-  )
+  );
 }
 
 /* ---------------------- Folder action dropdown ---------------------- */
@@ -745,39 +1035,51 @@ function FolderActionMenu({
   onDuplicate,
   onDelete,
 }: {
-  onEdit: () => void
-  onDuplicate: () => void
-  onDelete: () => void
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div
       className="absolute right-0 mt-1 flex flex-col z-30"
       style={{
-        top: '100%',
+        top: "100%",
         width: 185,
         borderRadius: 10,
-        border: '1px solid #E5E7EB',
-        background: '#FFFFFF',
+        border: "1px solid #E5E7EB",
+        background: "#FFFFFF",
         padding: 8,
         gap: 6,
         boxShadow:
-          '0px 4px 6px 0px rgba(0,0,0,0.05), 0px 10px 15px -3px rgba(0,0,0,0.1)',
+          "0px 4px 6px 0px rgba(0,0,0,0.05), 0px 10px 15px -3px rgba(0,0,0,0.1)",
       }}
     >
       <MenuRow
-        icon={<Pencil style={{ width: 18, height: 18 }} color="#000000" strokeWidth={2} />}
+        icon={
+          <Pencil
+            style={{ width: 18, height: 18 }}
+            color="#000000"
+            strokeWidth={2}
+          />
+        }
         label="Edit"
         color="#101828"
         onClick={onEdit}
       />
       <MenuRow
-        icon={<Trash2 style={{ width: 18, height: 18 }} color="#C70036" strokeWidth={2} />}
+        icon={
+          <Trash2
+            style={{ width: 18, height: 18 }}
+            color="#C70036"
+            strokeWidth={2}
+          />
+        }
         label="Delete"
         color="#C70036"
         onClick={onDelete}
       />
     </div>
-  )
+  );
 }
 
 function MenuRow({
@@ -786,10 +1088,10 @@ function MenuRow({
   color,
   onClick,
 }: {
-  icon: React.ReactNode
-  label: string
-  color: string
-  onClick: () => void
+  icon: React.ReactNode;
+  label: string;
+  color: string;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -797,18 +1099,18 @@ function MenuRow({
       onClick={onClick}
       className="flex items-center gap-3 cursor-pointer rounded-md hover:bg-[#F3F4F6] transition-colors"
       style={{
-        padding: '6px 8px',
-        fontFamily: 'Inter, sans-serif',
+        padding: "6px 8px",
+        fontFamily: "Inter, sans-serif",
         fontWeight: 500,
         fontSize: 14,
-        lineHeight: '14px',
+        lineHeight: "14px",
         color,
       }}
     >
       {icon}
       {label}
     </button>
-  )
+  );
 }
 
 /* ---------------------- Photo action dropdown ---------------------- */
@@ -819,52 +1121,76 @@ function PhotoActionMenu({
   onDelete,
   onMove,
 }: {
-  onEdit: () => void
-  onDownload: () => void
-  onDelete: () => void
-  onMove: () => void
+  onEdit: () => void;
+  onDownload: () => void;
+  onDelete: () => void;
+  onMove: () => void;
 }) {
   return (
     <div
       className="absolute right-0 mt-1 flex flex-col z-30"
       style={{
-        top: '100%',
+        top: "100%",
         width: 185,
         borderRadius: 10,
-        border: '1px solid #E5E7EB',
-        background: '#FFFFFF',
+        border: "1px solid #E5E7EB",
+        background: "#FFFFFF",
         padding: 8,
         gap: 6,
         boxShadow:
-          '0px 4px 6px 0px rgba(0,0,0,0.05), 0px 10px 15px -3px rgba(0,0,0,0.1)',
+          "0px 4px 6px 0px rgba(0,0,0,0.05), 0px 10px 15px -3px rgba(0,0,0,0.1)",
       }}
     >
       <MenuRow
-        icon={<Pencil style={{ width: 18, height: 18 }} color="#000000" strokeWidth={2} />}
+        icon={
+          <Pencil
+            style={{ width: 18, height: 18 }}
+            color="#000000"
+            strokeWidth={2}
+          />
+        }
         label="Edit"
         color="#101828"
         onClick={onEdit}
       />
       <MenuRow
-        icon={<Download style={{ width: 18, height: 18 }} color="#4A5565" strokeWidth={2} />}
+        icon={
+          <Download
+            style={{ width: 18, height: 18 }}
+            color="#4A5565"
+            strokeWidth={2}
+          />
+        }
         label="Download"
         color="#4A5565"
         onClick={onDownload}
       />
       <MenuRow
-        icon={<MoveRight style={{ width: 18, height: 18 }} color="#4A5565" strokeWidth={2} />}
+        icon={
+          <MoveRight
+            style={{ width: 18, height: 18 }}
+            color="#4A5565"
+            strokeWidth={2}
+          />
+        }
         label="Move to Folder"
         color="#4A5565"
         onClick={onMove}
       />
       <MenuRow
-        icon={<Trash2 style={{ width: 18, height: 18 }} color="#C70036" strokeWidth={2} />}
+        icon={
+          <Trash2
+            style={{ width: 18, height: 18 }}
+            color="#C70036"
+            strokeWidth={2}
+          />
+        }
         label="Delete"
         color="#C70036"
         onClick={onDelete}
       />
     </div>
-  )
+  );
 }
 
 /* ---------------------- Photo grid card ---------------------- */
@@ -877,35 +1203,36 @@ function PhotoCard({
   onMove,
   onLightbox,
 }: {
-  photo: Photo
-  onEdit: () => void
-  onDelete: () => void
-  onDownload: () => void
-  onMove: () => void
-  onLightbox: () => void
+  photo: Photo;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDownload: () => void;
+  onMove: () => void;
+  onLightbox: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    if (menuOpen) document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [menuOpen])
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        setMenuOpen(false);
+    };
+    if (menuOpen) document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
 
   return (
     <div className="flex flex-col" style={{ gap: 7.99 }}>
       <div
         className="relative flex items-center justify-center cursor-pointer"
         style={{
-          aspectRatio: '1 / 1',
+          aspectRatio: "1 / 1",
           borderRadius: 10,
-          border: '1.25px solid #E5E7EB',
-          background: 'linear-gradient(135deg, #E0E7FF 0%, #F3E8FF 100%)',
+          border: "1.25px solid #E5E7EB",
+          background: "linear-gradient(135deg, #E0E7FF 0%, #F3E8FF 100%)",
           padding: 1.25,
-          overflow: 'hidden',
+          overflow: "hidden",
         }}
         onClick={onLightbox}
       >
@@ -918,7 +1245,11 @@ function PhotoCard({
             style={{ borderRadius: 9 }}
           />
         ) : (
-          <ImageIcon style={{ width: 48, height: 48, flexShrink: 0 }} color="#A3B3FF" strokeWidth={1.75} />
+          <ImageIcon
+            style={{ width: 48, height: 48, flexShrink: 0 }}
+            color="#A3B3FF"
+            strokeWidth={1.75}
+          />
         )}
 
         {/* 3-dot menu at top-right */}
@@ -936,17 +1267,33 @@ function PhotoCard({
               width: 32,
               height: 32,
               borderRadius: 8,
-              background: 'rgba(255,255,255,0.5)',
+              background: "rgba(255,255,255,0.5)",
             }}
           >
-            <MoreVertical style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+            <MoreVertical
+              style={{ width: 16, height: 16, flexShrink: 0 }}
+              color="#0A0A0A"
+              strokeWidth={2}
+            />
           </button>
           {menuOpen && (
             <PhotoActionMenu
-              onEdit={() => { setMenuOpen(false); onEdit() }}
-              onDownload={() => { setMenuOpen(false); onDownload() }}
-              onMove={() => { setMenuOpen(false); onMove() }}
-              onDelete={() => { setMenuOpen(false); onDelete() }}
+              onEdit={() => {
+                setMenuOpen(false);
+                onEdit();
+              }}
+              onDownload={() => {
+                setMenuOpen(false);
+                onDownload();
+              }}
+              onMove={() => {
+                setMenuOpen(false);
+                onMove();
+              }}
+              onDelete={() => {
+                setMenuOpen(false);
+                onDelete();
+              }}
             />
           )}
         </div>
@@ -956,24 +1303,24 @@ function PhotoCard({
         <div className="flex flex-col min-w-0 flex-1">
           <span
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 500,
               fontSize: 14,
-              lineHeight: '20px',
-              letterSpacing: '-0.15px',
-              color: '#101828',
-              wordBreak: 'break-word',
+              lineHeight: "20px",
+              letterSpacing: "-0.15px",
+              color: "#101828",
+              wordBreak: "break-word",
             }}
           >
             {photoDisplayName(photo)}
           </span>
           <span
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 400,
               fontSize: 12,
-              lineHeight: '16px',
-              color: '#6A7282',
+              lineHeight: "16px",
+              color: "#6A7282",
             }}
           >
             {formatDate(photo.created_at)}
@@ -986,11 +1333,15 @@ function PhotoCard({
           className="flex items-center justify-center cursor-pointer hover:bg-gray-100"
           style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0 }}
         >
-          <Download style={{ width: 16, height: 16, flexShrink: 0 }} color="#4A5565" strokeWidth={2} />
+          <Download
+            style={{ width: 16, height: 16, flexShrink: 0 }}
+            color="#4A5565"
+            strokeWidth={2}
+          />
         </button>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Photo list row ---------------------- */
@@ -1002,22 +1353,23 @@ function PhotoRow({
   onDownload,
   onMove,
 }: {
-  photo: Photo
-  onEdit: () => void
-  onDelete: () => void
-  onDownload: () => void
-  onMove: () => void
+  photo: Photo;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDownload: () => void;
+  onMove: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    if (menuOpen) document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [menuOpen])
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        setMenuOpen(false);
+    };
+    if (menuOpen) document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
 
   return (
     <div
@@ -1025,8 +1377,8 @@ function PhotoRow({
       style={{
         minHeight: 90.47,
         borderRadius: 10,
-        border: '1.25px solid #E5E7EB',
-        padding: '12px 11.99px',
+        border: "1.25px solid #E5E7EB",
+        padding: "12px 11.99px",
         gap: 16,
       }}
     >
@@ -1036,7 +1388,7 @@ function PhotoRow({
           width: 63.98,
           height: 63.98,
           borderRadius: 10,
-          background: 'linear-gradient(135deg, #E0E7FF 0%, #F3E8FF 100%)',
+          background: "linear-gradient(135deg, #E0E7FF 0%, #F3E8FF 100%)",
         }}
       >
         {photo.signedUrl ? (
@@ -1047,31 +1399,35 @@ function PhotoRow({
             className="w-full h-full object-cover"
           />
         ) : (
-          <ImageIcon style={{ width: 24, height: 24, flexShrink: 0 }} color="#A3B3FF" strokeWidth={1.75} />
+          <ImageIcon
+            style={{ width: 24, height: 24, flexShrink: 0 }}
+            color="#A3B3FF"
+            strokeWidth={1.75}
+          />
         )}
       </div>
 
       <div className="flex-1 min-w-0 flex flex-col">
         <span
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "Inter, sans-serif",
             fontWeight: 500,
             fontSize: 14,
-            lineHeight: '20px',
-            letterSpacing: '-0.15px',
-            color: '#101828',
-            wordBreak: 'break-word',
+            lineHeight: "20px",
+            letterSpacing: "-0.15px",
+            color: "#101828",
+            wordBreak: "break-word",
           }}
         >
           {photoDisplayName(photo)}
         </span>
         <span
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "Inter, sans-serif",
             fontWeight: 400,
             fontSize: 12,
-            lineHeight: '16px',
-            color: '#6A7282',
+            lineHeight: "16px",
+            color: "#6A7282",
           }}
         >
           Uploaded {formatDate(photo.created_at)}
@@ -1088,10 +1444,14 @@ function PhotoRow({
             width: 35.996,
             height: 31.99,
             borderRadius: 8,
-            padding: '0 10px',
+            padding: "0 10px",
           }}
         >
-          <Download style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+          <Download
+            style={{ width: 16, height: 16, flexShrink: 0 }}
+            color="#0A0A0A"
+            strokeWidth={2}
+          />
         </button>
         <div ref={menuRef} className="relative">
           <button
@@ -1103,35 +1463,51 @@ function PhotoRow({
               width: 35.996,
               height: 31.99,
               borderRadius: 8,
-              padding: '0 10px',
+              padding: "0 10px",
             }}
           >
-            <MoreHorizontal style={{ width: 16, height: 16, flexShrink: 0 }} color="#0A0A0A" strokeWidth={2} />
+            <MoreHorizontal
+              style={{ width: 16, height: 16, flexShrink: 0 }}
+              color="#0A0A0A"
+              strokeWidth={2}
+            />
           </button>
           {menuOpen && (
             <PhotoActionMenu
-              onEdit={() => { setMenuOpen(false); onEdit() }}
-              onDownload={() => { setMenuOpen(false); onDownload() }}
-              onMove={() => { setMenuOpen(false); onMove() }}
-              onDelete={() => { setMenuOpen(false); onDelete() }}
+              onEdit={() => {
+                setMenuOpen(false);
+                onEdit();
+              }}
+              onDownload={() => {
+                setMenuOpen(false);
+                onDownload();
+              }}
+              onMove={() => {
+                setMenuOpen(false);
+                onMove();
+              }}
+              onDelete={() => {
+                setMenuOpen(false);
+                onDelete();
+              }}
             />
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ====================== MODALS ====================== */
 
 const GROUP_OPTIONS = [
-  'Assign Later',
-  'All Recipients',
-  'All Family',
-  'All Friends',
-  'All Others',
-  'Release Manager',
-]
+  "Assign Later",
+  "All Recipients",
+  "All Family",
+  "All Friends",
+  "All Others",
+  "Release Manager",
+];
 
 /* ---------------------- Create Folder Modal ---------------------- */
 
@@ -1139,83 +1515,93 @@ function CreateFolderModal({
   onClose,
   onCreate,
 }: {
-  onClose: () => void
-  onCreate: (name: string, groups: string[], individualIds: string[]) => Promise<void>
+  onClose: () => void;
+  onCreate: (
+    name: string,
+    groups: string[],
+    individualIds: string[],
+  ) => Promise<void>;
 }) {
-  const [name, setName] = useState('')
-  const [selectedGroups, setSelectedGroups] = useState<string[]>(['Assign Later'])
-  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([])
-  const [showIndividuals, setShowIndividuals] = useState(false)
-  const [search, setSearch] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [recipients, setRecipients] = useState<Recipient[]>([])
+  const [name, setName] = useState("");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([
+    "Assign Later",
+  ]);
+  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([]);
+  const [showIndividuals, setShowIndividuals] = useState(false);
+  const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onClose])
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
 
   // Load real recipients
   useEffect(() => {
-    let active = true
-    ;(async () => {
-      const token = await getToken()
-      if (!token) return
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
       try {
-        const data = await getRecipients(token)
-        if (active) setRecipients(data)
+        const data = await getRecipients(token);
+        if (active) setRecipients(data);
       } catch {
         /* non-fatal */
       }
-    })()
-    return () => { active = false }
-  }, [])
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const toggleGroup = (g: string) =>
-    setSelectedGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
+    setSelectedGroups((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+    );
   const toggleIndividual = (id: string) =>
     setSelectedIndividuals((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
+    );
 
   const filteredIndividuals = recipients.filter((i) =>
     i.name.toLowerCase().includes(search.trim().toLowerCase()),
-  )
+  );
 
-  const canCreate = name.trim().length > 0
+  const canCreate = name.trim().length > 0;
 
   const handleCreate = async () => {
-    if (!canCreate || creating) return
-    setCreating(true)
+    if (!canCreate || creating) return;
+    setCreating(true);
     try {
-      await onCreate(name, selectedGroups, selectedIndividuals)
+      await onCreate(name, selectedGroups, selectedIndividuals);
     } catch {
       /* error already toasted by parent */
     } finally {
-      setCreating(false)
+      setCreating(false);
     }
-  }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: "rgba(0,0,0,0.4)" }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose()
+          if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
@@ -1224,20 +1610,20 @@ function CreateFolderModal({
             maxWidth: 448,
             borderRadius: 10,
             boxShadow:
-              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
-            fontFamily: 'Inter, sans-serif',
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
           }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-2 gap-4">
             <h2
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 600,
                 fontSize: 18,
-                lineHeight: '28px',
-                letterSpacing: '-0.44px',
-                color: '#101828',
+                lineHeight: "28px",
+                letterSpacing: "-0.44px",
+                color: "#101828",
               }}
             >
               Create New Folder
@@ -1249,7 +1635,11 @@ function CreateFolderModal({
               className="cursor-pointer hover:bg-gray-100 rounded-md flex items-center justify-center"
               style={{ width: 24, height: 24 }}
             >
-              <X style={{ width: 20, height: 20 }} color="#0A0A0A" strokeWidth={2} />
+              <X
+                style={{ width: 20, height: 20 }}
+                color="#0A0A0A"
+                strokeWidth={2}
+              />
             </button>
           </div>
 
@@ -1259,15 +1649,15 @@ function CreateFolderModal({
             <div className="flex flex-col" style={{ gap: 10 }}>
               <label
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '14px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "14px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
-                Folder Name <span style={{ color: '#FF0000' }}>*</span>
+                Folder Name <span style={{ color: "#FF0000" }}>*</span>
               </label>
               <input
                 type="text"
@@ -1278,14 +1668,14 @@ function CreateFolderModal({
                 style={{
                   height: 44,
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#F3F3F5',
-                  padding: '4px 12px',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#F3F3F5",
+                  padding: "4px 12px",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 400,
                   fontSize: 14,
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               />
             </div>
@@ -1294,12 +1684,12 @@ function CreateFolderModal({
             <div className="flex flex-col" style={{ gap: 15 }}>
               <label
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 600,
                   fontSize: 16,
-                  lineHeight: '28px',
-                  letterSpacing: '-0.44px',
-                  color: '#101828',
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
                 }}
               >
                 Add Recipients
@@ -1307,17 +1697,17 @@ function CreateFolderModal({
 
               <div className="flex flex-col" style={{ gap: 10 }}>
                 {GROUP_OPTIONS.map((g) => {
-                  const isAssignLater = g === 'Assign Later'
-                  const selected = selectedGroups.includes(g)
+                  const isAssignLater = g === "Assign Later";
+                  const selected = selectedGroups.includes(g);
                   return (
                     <GroupRow
                       key={g}
                       label={g}
                       selected={selected}
-                      variant={isAssignLater ? 'yellow' : 'default'}
+                      variant={isAssignLater ? "yellow" : "default"}
                       onToggle={() => toggleGroup(g)}
                     />
-                  )
+                  );
                 })}
               </div>
 
@@ -1329,19 +1719,27 @@ function CreateFolderModal({
                 style={{
                   height: 36,
                   borderRadius: 8,
-                  border: '1.1px solid #4F46E5',
-                  background: '#EEF2FF',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.1px solid #4F46E5",
+                  background: "#EEF2FF",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  color: '#4F46E5',
+                  lineHeight: "20px",
+                  color: "#4F46E5",
                 }}
               >
                 {showIndividuals ? (
-                  <ChevronUp className="w-4 h-4" color="#4F46E5" strokeWidth={2} />
+                  <ChevronUp
+                    className="w-4 h-4"
+                    color="#4F46E5"
+                    strokeWidth={2}
+                  />
                 ) : (
-                  <ChevronDown className="w-4 h-4" color="#4F46E5" strokeWidth={2} />
+                  <ChevronDown
+                    className="w-4 h-4"
+                    color="#4F46E5"
+                    strokeWidth={2}
+                  />
                 )}
                 Select Individuals
               </button>
@@ -1353,11 +1751,14 @@ function CreateFolderModal({
                     style={{
                       height: 36,
                       borderRadius: 8,
-                      background: '#F3F3F5',
-                      padding: '4px 12px',
+                      background: "#F3F3F5",
+                      padding: "4px 12px",
                     }}
                   >
-                    <Search className="w-4 h-4 text-[#717182] flex-shrink-0" strokeWidth={2} />
+                    <Search
+                      className="w-4 h-4 text-[#717182] flex-shrink-0"
+                      strokeWidth={2}
+                    />
                     <input
                       type="text"
                       value={search}
@@ -1365,11 +1766,11 @@ function CreateFolderModal({
                       placeholder="Search by name..."
                       className="flex-1 bg-transparent outline-none min-w-0"
                       style={{
-                        fontFamily: 'Inter, sans-serif',
+                        fontFamily: "Inter, sans-serif",
                         fontWeight: 400,
                         fontSize: 14,
-                        lineHeight: '20px',
-                        color: '#0A0A0A',
+                        lineHeight: "20px",
+                        color: "#0A0A0A",
                       }}
                     />
                   </div>
@@ -1379,25 +1780,27 @@ function CreateFolderModal({
                     style={{
                       maxHeight: 150,
                       borderRadius: 10,
-                      border: '1.1px solid rgba(0,0,0,0.1)',
-                      background: '#F9FAFB',
-                      padding: '8px',
+                      border: "1.1px solid rgba(0,0,0,0.1)",
+                      background: "#F9FAFB",
+                      padding: "8px",
                     }}
                   >
                     {filteredIndividuals.length === 0 ? (
                       <p
                         className="text-center py-4"
                         style={{
-                          fontFamily: 'Inter, sans-serif',
+                          fontFamily: "Inter, sans-serif",
                           fontSize: 13,
-                          color: '#717182',
+                          color: "#717182",
                         }}
                       >
-                        {recipients.length === 0 ? 'No recipients yet.' : 'No matches.'}
+                        {recipients.length === 0
+                          ? "No recipients yet."
+                          : "No matches."}
                       </p>
                     ) : (
                       filteredIndividuals.map((p) => {
-                        const selected = selectedIndividuals.includes(p.id)
+                        const selected = selectedIndividuals.includes(p.id);
                         return (
                           <button
                             type="button"
@@ -1406,9 +1809,11 @@ function CreateFolderModal({
                             className="w-full flex items-center gap-2 cursor-pointer"
                             style={{
                               borderRadius: 8,
-                              background: selected ? '#E0E7FF' : '#FFFFFF',
-                              border: selected ? '1px solid #4F46E5' : '1px solid transparent',
-                              padding: '8px',
+                              background: selected ? "#E0E7FF" : "#FFFFFF",
+                              border: selected
+                                ? "1px solid #4F46E5"
+                                : "1px solid transparent",
+                              padding: "8px",
                             }}
                           >
                             <CheckBox checked={selected} />
@@ -1416,29 +1821,29 @@ function CreateFolderModal({
                               <span
                                 className="truncate"
                                 style={{
-                                  fontFamily: 'Inter, sans-serif',
+                                  fontFamily: "Inter, sans-serif",
                                   fontWeight: 500,
                                   fontSize: 14,
-                                  lineHeight: '20px',
-                                  color: '#0A0A0A',
+                                  lineHeight: "20px",
+                                  color: "#0A0A0A",
                                 }}
                               >
                                 {p.name}
                               </span>
                               <span
                                 style={{
-                                  fontFamily: 'Inter, sans-serif',
+                                  fontFamily: "Inter, sans-serif",
                                   fontWeight: 400,
                                   fontSize: 12,
-                                  lineHeight: '16px',
-                                  color: '#717182',
+                                  lineHeight: "16px",
+                                  color: "#717182",
                                 }}
                               >
                                 {p.relationship}
                               </span>
                             </div>
                           </button>
-                        )
+                        );
                       })
                     )}
                   </div>
@@ -1455,16 +1860,16 @@ function CreateFolderModal({
               className="cursor-pointer hover:bg-gray-50"
               style={{
                 height: 35.996,
-                padding: '8px 16px',
+                padding: "8px 16px",
                 borderRadius: 8,
-                border: '1.25px solid rgba(0,0,0,0.1)',
-                background: '#FFFFFF',
-                fontFamily: 'Inter, sans-serif',
+                border: "1.25px solid rgba(0,0,0,0.1)",
+                background: "#FFFFFF",
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 500,
                 fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: '#0A0A0A',
+                lineHeight: "20px",
+                letterSpacing: "-0.15px",
+                color: "#0A0A0A",
               }}
             >
               Cancel
@@ -1476,26 +1881,31 @@ function CreateFolderModal({
               className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
               style={{
                 height: 35.996,
-                padding: '8px 16px',
+                padding: "8px 16px",
                 borderRadius: 8,
-                background: '#4F39F6',
+                background: "#4F39F6",
                 opacity: canCreate && !creating ? 1 : 0.5,
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 500,
                 fontSize: 14,
-                lineHeight: '20px',
-                letterSpacing: '-0.15px',
-                color: '#FFFFFF',
+                lineHeight: "20px",
+                letterSpacing: "-0.15px",
+                color: "#FFFFFF",
               }}
             >
-              {creating && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+              {creating && (
+                <Loader2
+                  style={{ width: 14, height: 14 }}
+                  className="animate-spin"
+                />
+              )}
               Create
             </button>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Edit Folder Modal ---------------------- */
@@ -1505,52 +1915,100 @@ function EditFolderModal({
   onClose,
   onSave,
 }: {
-  folder: { id: string; name: string }
-  onClose: () => void
-  onSave: (name: string) => Promise<void>
+  folder: PhotoFolder;
+  onClose: () => void;
+  onSave: (
+    name: string,
+    groups: string[],
+    individualIds: string[],
+  ) => Promise<void>;
 }) {
-  const [name, setName] = useState(folder.name)
-  const [saving, setSaving] = useState(false)
+  const [name, setName] = useState(folder.name);
+  const [saving, setSaving] = useState(false);
+  const initial = assignmentsToSelection(folder.assignments);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    initial.groups,
+  );
+  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>(
+    initial.individuals,
+  );
+  const [showIndividuals, setShowIndividuals] = useState(
+    initial.individuals.length > 0,
+  );
+  const [search, setSearch] = useState("");
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onClose])
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
 
-  const canSave = name.trim().length > 0 && name.trim() !== folder.name
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const data = await getRecipients(token);
+        if (active) setRecipients(data);
+      } catch {
+        /* non-fatal */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleGroup = (g: string) =>
+    setSelectedGroups((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+    );
+  const toggleIndividual = (id: string) => {
+    setSelectedGroups((prev) => prev.filter((x) => x !== "Assign Later"));
+    setSelectedIndividuals((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const filteredIndividuals = recipients.filter((i) =>
+    i.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  const canSave = name.trim().length > 0;
 
   const handleSave = async () => {
-    if (!canSave || saving) return
-    setSaving(true)
+    if (!canSave || saving) return;
+    setSaving(true);
     try {
-      await onSave(name)
+      await onSave(name, selectedGroups, selectedIndividuals);
     } catch {
       /* error already toasted by parent */
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: "rgba(0,0,0,0.4)" }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose()
+          if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
@@ -1559,8 +2017,8 @@ function EditFolderModal({
             maxWidth: 448,
             borderRadius: 10,
             boxShadow:
-              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
-            fontFamily: 'Inter, sans-serif',
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
           }}
         >
           <div className="flex flex-col gap-4 px-6 py-6">
@@ -1568,12 +2026,12 @@ function EditFolderModal({
             <div className="flex items-center justify-between gap-4">
               <h2
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 600,
                   fontSize: 18,
-                  lineHeight: '28px',
-                  letterSpacing: '-0.44px',
-                  color: '#101828',
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
                 }}
               >
                 Edit Folder
@@ -1585,48 +2043,240 @@ function EditFolderModal({
                 className="cursor-pointer hover:bg-gray-100 rounded-md flex items-center justify-center"
                 style={{ width: 24, height: 24 }}
               >
-                <X style={{ width: 20, height: 20 }} color="#0A0A0A" strokeWidth={2} />
+                <X
+                  style={{ width: 20, height: 20 }}
+                  color="#0A0A0A"
+                  strokeWidth={2}
+                />
               </button>
             </div>
 
-            {/* Input */}
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full focus:outline-none"
-              style={{
-                height: 35.996,
-                borderRadius: 8,
-                border: '1.25px solid rgba(0,0,0,0.1)',
-                background: '#F3F3F5',
-                padding: '4px 12px',
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 14,
-                letterSpacing: '-0.15px',
-                color: '#0A0A0A',
-              }}
-            />
+            {/* Folder name */}
+            <div className="flex flex-col" style={{ gap: 10 }}>
+              <label
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "14px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                }}
+              >
+                Folder Name <span style={{ color: "#FF0000" }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full focus:outline-none"
+                style={{
+                  height: 44,
+                  borderRadius: 8,
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#F3F3F5",
+                  padding: "4px 12px",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                }}
+              />
+            </div>
+
+            {/* Add Recipients */}
+            <div className="flex flex-col" style={{ gap: 15 }}>
+              <label
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 600,
+                  fontSize: 16,
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
+                }}
+              >
+                Recipients
+              </label>
+
+              <div className="flex flex-col" style={{ gap: 10 }}>
+                {GROUP_OPTIONS.map((g) => {
+                  const isAssignLater = g === "Assign Later";
+                  const selected = selectedGroups.includes(g);
+                  return (
+                    <GroupRow
+                      key={g}
+                      label={g}
+                      selected={selected}
+                      variant={isAssignLater ? "yellow" : "default"}
+                      onToggle={() => toggleGroup(g)}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Select Individuals toggle */}
+              <button
+                type="button"
+                onClick={() => setShowIndividuals((s) => !s)}
+                className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
+                style={{
+                  height: 36,
+                  borderRadius: 8,
+                  border: "1.1px solid #4F46E5",
+                  background: "#EEF2FF",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  color: "#4F46E5",
+                }}
+              >
+                {showIndividuals ? (
+                  <ChevronUp
+                    className="w-4 h-4"
+                    color="#4F46E5"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <ChevronDown
+                    className="w-4 h-4"
+                    color="#4F46E5"
+                    strokeWidth={2}
+                  />
+                )}
+                Select Individuals
+              </button>
+
+              {showIndividuals && (
+                <div className="flex flex-col gap-2">
+                  <div
+                    className="w-full flex items-center gap-2"
+                    style={{
+                      height: 36,
+                      borderRadius: 8,
+                      background: "#F3F3F5",
+                      padding: "4px 12px",
+                    }}
+                  >
+                    <Search
+                      className="w-4 h-4 text-[#717182] flex-shrink-0"
+                      strokeWidth={2}
+                    />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by name..."
+                      className="flex-1 bg-transparent outline-none min-w-0"
+                      style={{
+                        fontFamily: "Inter, sans-serif",
+                        fontWeight: 400,
+                        fontSize: 14,
+                        lineHeight: "20px",
+                        color: "#0A0A0A",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    className="flex flex-col gap-2 overflow-y-auto"
+                    style={{
+                      maxHeight: 150,
+                      borderRadius: 10,
+                      border: "1.1px solid rgba(0,0,0,0.1)",
+                      background: "#F9FAFB",
+                      padding: "8px",
+                    }}
+                  >
+                    {filteredIndividuals.length === 0 ? (
+                      <p
+                        className="text-center py-4"
+                        style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: 13,
+                          color: "#717182",
+                        }}
+                      >
+                        {recipients.length === 0
+                          ? "No recipients yet."
+                          : "No matches."}
+                      </p>
+                    ) : (
+                      filteredIndividuals.map((p) => {
+                        const selected = selectedIndividuals.includes(p.id);
+                        return (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => toggleIndividual(p.id)}
+                            className="w-full flex items-center gap-2 cursor-pointer"
+                            style={{
+                              borderRadius: 8,
+                              background: selected ? "#E0E7FF" : "#FFFFFF",
+                              border: selected
+                                ? "1px solid #4F46E5"
+                                : "1px solid transparent",
+                              padding: "8px",
+                            }}
+                          >
+                            <CheckBox checked={selected} />
+                            <div className="flex flex-col items-start flex-1 min-w-0">
+                              <span
+                                className="truncate"
+                                style={{
+                                  fontFamily: "Inter, sans-serif",
+                                  fontWeight: 500,
+                                  fontSize: 14,
+                                  lineHeight: "20px",
+                                  color: "#0A0A0A",
+                                }}
+                              >
+                                {p.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: "Inter, sans-serif",
+                                  fontWeight: 400,
+                                  fontSize: 12,
+                                  lineHeight: "16px",
+                                  color: "#717182",
+                                }}
+                              >
+                                {p.relationship}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+            <div
+              className="flex items-center justify-end"
+              style={{ gap: 11.99 }}
+            >
               <button
                 type="button"
                 onClick={onClose}
                 className="cursor-pointer hover:bg-gray-50"
                 style={{
                   height: 35.996,
-                  padding: '8px 16px',
+                  padding: "8px 16px",
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#FFFFFF',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
                 Cancel
@@ -1638,19 +2288,24 @@ function EditFolderModal({
                 className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
                 style={{
                   height: 35.996,
-                  padding: '8px 16px',
+                  padding: "8px 16px",
                   borderRadius: 8,
-                  background: '#4F39F6',
+                  background: "#4F39F6",
                   opacity: canSave && !saving ? 1 : 0.5,
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#FFFFFF',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#FFFFFF",
                 }}
               >
-                {saving && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                {saving && (
+                  <Loader2
+                    style={{ width: 14, height: 14 }}
+                    className="animate-spin"
+                  />
+                )}
                 Save
               </button>
             </div>
@@ -1658,7 +2313,7 @@ function EditFolderModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Edit Photo Modal ---------------------- */
@@ -1668,51 +2323,135 @@ function EditPhotoModal({
   onClose,
   onSave,
 }: {
-  photo: Photo
-  onClose: () => void
-  onSave: (title: string, caption: string) => Promise<void>
+  photo: Photo;
+  onClose: () => void;
+  onSave: (
+    title: string,
+    caption: string,
+    groups: string[],
+    individuals: string[],
+  ) => Promise<void>;
 }) {
-  const [title, setTitle] = useState(photo.title || '')
-  const [caption, setCaption] = useState(photo.caption || '')
-  const [saving, setSaving] = useState(false)
+  const TITLE_MAX = 120;
+  const CAPTION_MAX = 500;
+
+  const [title, setTitle] = useState(photo.title || "");
+  const [caption, setCaption] = useState(photo.caption || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectedIndividuals, setSelectedIndividuals] = useState<string[]>([]);
+  const [showIndividuals, setShowIndividuals] = useState(true);
+  const [search, setSearch] = useState("");
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const data = await getRecipients(token);
+        if (active) setRecipients(data);
+      } catch {
+        /* non-fatal */
+      }
+      // Pre-fill the recipient selection from the photo's existing assignments
+      // so previously-chosen recipients show as selected on edit.
+      try {
+        const detail = await getPhoto(token, photo.id);
+        if (active) {
+          const { groups, individuals } = assignmentsToSelection(
+            detail.assignments,
+          );
+          setSelectedGroups(groups);
+          setSelectedIndividuals(individuals);
+        }
+      } catch {
+        /* non-fatal — selection just starts empty */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [photo.id]);
+
+  const toggleGroup = (g: string) => {
+    if (g === "Assign Later") {
+      setSelectedIndividuals([]);
+      setSelectedGroups((prev) =>
+        prev.includes("Assign Later") ? [] : ["Assign Later"],
+      );
+      return;
     }
-  }, [onClose])
+    setSelectedIndividuals([]);
+    setSelectedGroups((prev) => {
+      const withoutLater = prev.filter((x) => x !== "Assign Later");
+      return withoutLater.includes(g)
+        ? withoutLater.filter((x) => x !== g)
+        : [...withoutLater, g];
+    });
+  };
+
+  const toggleIndividual = (id: string) => {
+    setSelectedGroups([]);
+    setSelectedIndividuals((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const filteredIndividuals = recipients.filter((r) =>
+    r.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
 
   const handleSave = async () => {
-    if (saving) return
-    setSaving(true)
+    if (saving) return;
+    if (!title.trim()) {
+      setError("Title is required.");
+      return;
+    }
+    if (selectedGroups.length === 0 && selectedIndividuals.length === 0) {
+      setError(
+        "Please select at least one recipient (or choose Assign Later).",
+      );
+      return;
+    }
+    setError(null);
+    setSaving(true);
     try {
-      await onSave(title, caption)
+      await onSave(title, caption, selectedGroups, selectedIndividuals);
     } catch {
       /* error already toasted by parent */
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: "rgba(0,0,0,0.4)" }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose()
+          if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
@@ -1721,8 +2460,8 @@ function EditPhotoModal({
             maxWidth: 448,
             borderRadius: 10,
             boxShadow:
-              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
-            fontFamily: 'Inter, sans-serif',
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
           }}
         >
           <div className="flex flex-col gap-4 px-6 py-6">
@@ -1730,12 +2469,12 @@ function EditPhotoModal({
             <div className="flex items-center justify-between gap-4">
               <h2
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 600,
                   fontSize: 18,
-                  lineHeight: '28px',
-                  letterSpacing: '-0.44px',
-                  color: '#101828',
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
                 }}
               >
                 Edit Photo
@@ -1747,7 +2486,11 @@ function EditPhotoModal({
                 className="cursor-pointer hover:bg-gray-100 rounded-md flex items-center justify-center"
                 style={{ width: 24, height: 24 }}
               >
-                <X style={{ width: 20, height: 20 }} color="#0A0A0A" strokeWidth={2} />
+                <X
+                  style={{ width: 20, height: 20 }}
+                  color="#0A0A0A"
+                  strokeWidth={2}
+                />
               </button>
             </div>
 
@@ -1755,33 +2498,37 @@ function EditPhotoModal({
             <div className="flex flex-col" style={{ gap: 8 }}>
               <label
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '14px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "14px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
-                Title
+                Title <span style={{ color: "#FB2C36" }}>*</span>
               </label>
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (error) setError(null);
+                }}
                 placeholder="Photo title..."
+                maxLength={TITLE_MAX}
                 className="w-full focus:outline-none"
                 style={{
                   height: 44,
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#F3F3F5',
-                  padding: '4px 12px',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#F3F3F5",
+                  padding: "4px 12px",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 400,
                   fontSize: 14,
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               />
             </div>
@@ -1790,12 +2537,12 @@ function EditPhotoModal({
             <div className="flex flex-col" style={{ gap: 8 }}>
               <label
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '14px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "14px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
                 Caption
@@ -1805,41 +2552,220 @@ function EditPhotoModal({
                 onChange={(e) => setCaption(e.target.value)}
                 placeholder="Add a caption..."
                 rows={3}
+                maxLength={CAPTION_MAX}
                 className="w-full focus:outline-none resize-none"
                 style={{
                   minHeight: 80,
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#F3F3F5',
-                  padding: '8px 12px',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#F3F3F5",
+                  padding: "8px 12px",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 400,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               />
             </div>
 
+            {/* Recipients */}
+            <div className="flex flex-col gap-2">
+              <label
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "14px",
+                  color: "#0A0A0A",
+                }}
+              >
+                Recipients
+              </label>
+              <div className="flex flex-col gap-2">
+                {GROUP_OPTIONS.map((g) => (
+                  <GroupRow
+                    key={g}
+                    label={g}
+                    selected={selectedGroups.includes(g)}
+                    variant={g === "Assign Later" ? "yellow" : "default"}
+                    onToggle={() => toggleGroup(g)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIndividuals((s) => !s)}
+                className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 mt-1"
+                style={{
+                  height: 36,
+                  borderRadius: 8,
+                  border: "1.1px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  lineHeight: "20px",
+                  color: "#0A0A0A",
+                }}
+              >
+                {showIndividuals ? (
+                  <ChevronUp
+                    className="w-4 h-4 text-[#0A0A0A]"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <ChevronDown
+                    className="w-4 h-4 text-[#0A0A0A]"
+                    strokeWidth={2}
+                  />
+                )}
+                {showIndividuals ? "Hide Individuals" : "Show Individuals"}
+              </button>
+              {showIndividuals && (
+                <div className="flex flex-col gap-2 mt-1">
+                  <div
+                    className="w-full flex items-center gap-2"
+                    style={{
+                      height: 36,
+                      borderRadius: 8,
+                      background: "#F3F3F5",
+                      padding: "4px 12px",
+                    }}
+                  >
+                    <Search
+                      className="w-4 h-4 text-[#717182] flex-shrink-0"
+                      strokeWidth={2}
+                    />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by name..."
+                      className="flex-1 bg-transparent outline-none min-w-0"
+                      style={{
+                        fontFamily: "Inter, sans-serif",
+                        fontWeight: 400,
+                        fontSize: 14,
+                        lineHeight: "20px",
+                        color: "#0A0A0A",
+                      }}
+                    />
+                  </div>
+                  <div
+                    className="flex flex-col gap-2 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D5DC] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent"
+                    style={{
+                      maxHeight: 150,
+                      borderRadius: 10,
+                      border: "1.1px solid rgba(0,0,0,0.1)",
+                      background: "#F9FAFB",
+                      padding: "8px",
+                      scrollbarWidth: "thin",
+                      scrollbarColor: "#D1D5DC transparent",
+                    }}
+                  >
+                    {filteredIndividuals.length === 0 ? (
+                      <p
+                        className="text-center py-4"
+                        style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: 13,
+                          color: "#717182",
+                        }}
+                      >
+                        {recipients.length === 0
+                          ? "No recipients yet."
+                          : "No matches."}
+                      </p>
+                    ) : (
+                      filteredIndividuals.map((r) => {
+                        const selected = selectedIndividuals.includes(r.id);
+                        return (
+                          <button
+                            type="button"
+                            key={r.id}
+                            onClick={() => toggleIndividual(r.id)}
+                            className="w-full flex items-center gap-2 cursor-pointer"
+                            style={{
+                              borderRadius: 8,
+                              background: selected ? "#E0E7FF" : "#FFFFFF",
+                              border: selected
+                                ? "1px solid #4F46E5"
+                                : "1px solid transparent",
+                              padding: "8px",
+                            }}
+                          >
+                            <CheckBox checked={selected} />
+                            <div className="flex flex-col items-start flex-1 min-w-0">
+                              <span
+                                className="truncate"
+                                style={{
+                                  fontFamily: "Inter, sans-serif",
+                                  fontWeight: 500,
+                                  fontSize: 14,
+                                  lineHeight: "20px",
+                                  color: "#0A0A0A",
+                                }}
+                              >
+                                {r.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: "Inter, sans-serif",
+                                  fontWeight: 400,
+                                  fontSize: 12,
+                                  lineHeight: "16px",
+                                  color: "#717182",
+                                }}
+                              >
+                                {r.relationship}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <p
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 400,
+                  fontSize: 13,
+                  lineHeight: "18px",
+                  color: "#FB2C36",
+                }}
+              >
+                {error}
+              </p>
+            )}
+
             {/* Footer */}
-            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+            <div
+              className="flex items-center justify-end"
+              style={{ gap: 11.99 }}
+            >
               <button
                 type="button"
                 onClick={onClose}
                 className="cursor-pointer hover:bg-gray-50"
                 style={{
                   height: 35.996,
-                  padding: '8px 16px',
+                  padding: "8px 16px",
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#FFFFFF',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
                 Cancel
@@ -1851,19 +2777,24 @@ function EditPhotoModal({
                 className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
                 style={{
                   height: 35.996,
-                  padding: '8px 16px',
+                  padding: "8px 16px",
                   borderRadius: 8,
-                  background: '#4F39F6',
+                  background: "#4F39F6",
                   opacity: saving ? 0.5 : 1,
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#FFFFFF',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#FFFFFF",
                 }}
               >
-                {saving && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                {saving && (
+                  <Loader2
+                    style={{ width: 14, height: 14 }}
+                    className="animate-spin"
+                  />
+                )}
                 Save
               </button>
             </div>
@@ -1871,7 +2802,7 @@ function EditPhotoModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Move Photo Modal ---------------------- */
@@ -1882,51 +2813,54 @@ function MovePhotoModal({
   onClose,
   onMove,
 }: {
-  photo: Photo
-  folders: PhotoFolder[]
-  onClose: () => void
-  onMove: (folderId: string | null) => Promise<void>
+  photo: Photo;
+  folders: PhotoFolder[];
+  onClose: () => void;
+  onMove: (folderId: string | null) => Promise<void>;
 }) {
-  const [selectedFolderId, setSelectedFolderId] = useState<string>('uncategorized')
-  const [moving, setMoving] = useState(false)
+  const [selectedFolderId, setSelectedFolderId] =
+    useState<string>("uncategorized");
+  const [moving, setMoving] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onClose])
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
 
   const handleMove = async () => {
-    if (moving) return
-    setMoving(true)
+    if (moving) return;
+    setMoving(true);
     try {
-      await onMove(selectedFolderId === 'uncategorized' ? null : selectedFolderId)
+      await onMove(
+        selectedFolderId === "uncategorized" ? null : selectedFolderId,
+      );
     } catch {
       /* error already toasted by parent */
     } finally {
-      setMoving(false)
+      setMoving(false);
     }
-  }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: "rgba(0,0,0,0.4)" }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose()
+          if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
@@ -1935,8 +2869,8 @@ function MovePhotoModal({
             maxWidth: 448,
             borderRadius: 10,
             boxShadow:
-              '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
-            fontFamily: 'Inter, sans-serif',
+              "0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)",
+            fontFamily: "Inter, sans-serif",
           }}
         >
           <div className="flex flex-col gap-4 px-6 py-6">
@@ -1944,12 +2878,12 @@ function MovePhotoModal({
             <div className="flex items-center justify-between gap-4">
               <h2
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 600,
                   fontSize: 18,
-                  lineHeight: '28px',
-                  letterSpacing: '-0.44px',
-                  color: '#101828',
+                  lineHeight: "28px",
+                  letterSpacing: "-0.44px",
+                  color: "#101828",
                 }}
               >
                 Move Image
@@ -1961,32 +2895,37 @@ function MovePhotoModal({
                 className="cursor-pointer hover:bg-gray-100 rounded-md flex items-center justify-center"
                 style={{ width: 24, height: 24 }}
               >
-                <X style={{ width: 20, height: 20 }} color="#0A0A0A" strokeWidth={2} />
+                <X
+                  style={{ width: 20, height: 20 }}
+                  color="#0A0A0A"
+                  strokeWidth={2}
+                />
               </button>
             </div>
 
             <p
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 400,
                 fontSize: 14,
-                lineHeight: '20px',
-                color: '#6A7282',
+                lineHeight: "20px",
+                color: "#6A7282",
               }}
             >
-              Move &ldquo;{photoDisplayName(photo)}&rdquo; to a different folder.
+              Move &ldquo;{photoDisplayName(photo)}&rdquo; to a different
+              folder.
             </p>
 
             {/* Folder selector */}
             <div className="flex flex-col" style={{ gap: 8 }}>
               <label
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '14px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "14px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
                 Destination Folder
@@ -1998,15 +2937,15 @@ function MovePhotoModal({
                 style={{
                   height: 44,
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#F3F3F5',
-                  padding: '4px 12px',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#F3F3F5",
+                  padding: "4px 12px",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 400,
                   fontSize: 14,
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
-                  appearance: 'auto',
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
+                  appearance: "auto",
                 }}
               >
                 <option value="uncategorized">Uncategorized</option>
@@ -2019,23 +2958,26 @@ function MovePhotoModal({
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end" style={{ gap: 11.99 }}>
+            <div
+              className="flex items-center justify-end"
+              style={{ gap: 11.99 }}
+            >
               <button
                 type="button"
                 onClick={onClose}
                 className="cursor-pointer hover:bg-gray-50"
                 style={{
                   height: 35.996,
-                  padding: '8px 16px',
+                  padding: "8px 16px",
                   borderRadius: 8,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#FFFFFF',
-                  fontFamily: 'Inter, sans-serif',
+                  border: "1.25px solid rgba(0,0,0,0.1)",
+                  background: "#FFFFFF",
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#0A0A0A',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#0A0A0A",
                 }}
               >
                 Cancel
@@ -2047,19 +2989,24 @@ function MovePhotoModal({
                 className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
                 style={{
                   height: 35.996,
-                  padding: '8px 16px',
+                  padding: "8px 16px",
                   borderRadius: 8,
-                  background: '#4F39F6',
+                  background: "#4F39F6",
                   opacity: moving ? 0.5 : 1,
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
                   fontSize: 14,
-                  lineHeight: '20px',
-                  letterSpacing: '-0.15px',
-                  color: '#FFFFFF',
+                  lineHeight: "20px",
+                  letterSpacing: "-0.15px",
+                  color: "#FFFFFF",
                 }}
               >
-                {moving && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
+                {moving && (
+                  <Loader2
+                    style={{ width: 14, height: 14 }}
+                    className="animate-spin"
+                  />
+                )}
                 Save
               </button>
             </div>
@@ -2067,34 +3014,40 @@ function MovePhotoModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Lightbox Modal ---------------------- */
 
-function LightboxModal({ photo, onClose }: { photo: Photo; onClose: () => void }) {
+function LightboxModal({
+  photo,
+  onClose,
+}: {
+  photo: Photo;
+  onClose: () => void;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onClose])
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.85)' }}
+      style={{ background: "rgba(0,0,0,0.85)" }}
       onClick={onClose}
     >
       <div
         className="relative flex flex-col items-center w-full max-w-3xl mx-4"
-        style={{ maxHeight: '90vh' }}
+        style={{ maxHeight: "90vh" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
@@ -2105,7 +3058,11 @@ function LightboxModal({ photo, onClose }: { photo: Photo; onClose: () => void }
           className="absolute -top-10 right-0 flex items-center justify-center cursor-pointer hover:opacity-80"
           style={{ width: 36, height: 36 }}
         >
-          <X style={{ width: 28, height: 28 }} color="#FFFFFF" strokeWidth={2} />
+          <X
+            style={{ width: 28, height: 28 }}
+            color="#FFFFFF"
+            strokeWidth={2}
+          />
         </button>
 
         {/* Image */}
@@ -2113,51 +3070,53 @@ function LightboxModal({ photo, onClose }: { photo: Photo; onClose: () => void }
           className="w-full flex items-center justify-center overflow-hidden"
           style={{
             borderRadius: 12,
-            background: '#1a1a1a',
-            maxHeight: '70vh',
+            // background: "#1a1a1a",
+            maxHeight: "70vh",
           }}
         >
           {photo.signedUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={photo.signedUrl}
-              alt={photo.title || 'Photo'}
+              alt={photo.title || "Photo"}
               className="max-w-full max-h-full object-contain"
-              style={{ maxHeight: '70vh' }}
+              style={{ maxHeight: "70vh" }}
             />
           ) : (
             <div
               className="flex items-center justify-center"
-              style={{ width: '100%', height: 300, background: '#2a2a2a' }}
+              style={{ width: "100%", height: 300, background: "#2a2a2a" }}
             >
-              <ImageIcon style={{ width: 64, height: 64 }} color="#555" strokeWidth={1.5} />
+              <ImageIcon
+                style={{ width: 64, height: 64 }}
+                color="#555"
+                strokeWidth={1.5}
+              />
             </div>
           )}
         </div>
 
         {/* Title + caption */}
-        <div
-          className="w-full flex flex-col gap-1 mt-4 px-2"
-        >
+        <div className="w-full flex flex-col gap-1 mt-4 px-2">
           <span
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "Inter, sans-serif",
               fontWeight: 600,
               fontSize: 16,
-              lineHeight: '24px',
-              color: '#FFFFFF',
+              lineHeight: "24px",
+              color: "#FFFFFF",
             }}
           >
-            {photo.title || 'Untitled'}
+            {photo.title || "Untitled"}
           </span>
           {photo.caption && (
             <span
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 400,
                 fontSize: 14,
-                lineHeight: '20px',
-                color: 'rgba(255,255,255,0.7)',
+                lineHeight: "20px",
+                color: "rgba(255,255,255,0.7)",
               }}
             >
               {photo.caption}
@@ -2166,7 +3125,7 @@ function LightboxModal({ photo, onClose }: { photo: Photo; onClose: () => void }
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------- Shared modal sub-components ---------------------- */
@@ -2179,14 +3138,14 @@ function CheckBox({ checked }: { checked: boolean }) {
         width: 16,
         height: 16,
         borderRadius: 4,
-        background: checked ? '#4F46E5' : '#FFFFFF',
-        border: checked ? '1.1px solid #4F46E5' : '1.1px solid rgba(0,0,0,0.1)',
-        boxShadow: '0px 1px 2px 0px rgba(0,0,0,0.05)',
+        background: checked ? "#4F46E5" : "#FFFFFF",
+        border: checked ? "1.1px solid #4F46E5" : "1.1px solid rgba(0,0,0,0.1)",
+        boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)",
       }}
     >
       {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
     </span>
-  )
+  );
 }
 
 function GroupRow({
@@ -2195,44 +3154,44 @@ function GroupRow({
   variant,
   onToggle,
 }: {
-  label: string
-  selected: boolean
-  variant: 'yellow' | 'default'
-  onToggle: () => void
+  label: string;
+  selected: boolean;
+  variant: "yellow" | "default";
+  onToggle: () => void;
 }) {
-  let bg = '#F9FAFB'
-  let border = '1.1px solid rgba(0,0,0,0.1)'
-  let textColor = '#364153'
+  let bg = "#F9FAFB";
+  let border = "1.1px solid rgba(0,0,0,0.1)";
+  let textColor = "#364153";
 
-  if (variant === 'yellow') {
-    bg = '#FFFBEB'
-    border = '1.1px solid #FDEBA2'
-    textColor = '#364153'
+  if (variant === "yellow") {
+    bg = "#FFFBEB";
+    border = "1.1px solid #FDEBA2";
+    textColor = "#364153";
   }
-  if (selected && variant !== 'yellow') {
-    bg = '#E0E7FF'
-    border = '1.1px solid #4F46E5'
-    textColor = '#4F46E5'
+  if (selected && variant !== "yellow") {
+    bg = "#E0E7FF";
+    border = "1.1px solid #4F46E5";
+    textColor = "#4F46E5";
   }
 
   const checkbox =
-    variant === 'yellow' ? (
+    variant === "yellow" ? (
       <span
         className="flex items-center justify-center flex-shrink-0"
         style={{
           width: 16,
           height: 16,
           borderRadius: 4,
-          background: selected ? '#4F46E5' : '#FFFFFF',
-          border: selected ? '1.1px solid #4F46E5' : '1.1px solid #FDEBA2',
-          boxShadow: '0px 1px 2px 0px rgba(0,0,0,0.05)',
+          background: selected ? "#4F46E5" : "#FFFFFF",
+          border: selected ? "1.1px solid #4F46E5" : "1.1px solid #FDEBA2",
+          boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)",
         }}
       >
         {selected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
       </span>
     ) : (
       <CheckBox checked={selected} />
-    )
+    );
 
   return (
     <button
@@ -2244,7 +3203,7 @@ function GroupRow({
         borderRadius: 10,
         border,
         background: bg,
-        padding: '12px 11.92px 12px 11.8px',
+        padding: "12px 11.92px 12px 11.8px",
         gap: 12.08,
       }}
     >
@@ -2252,17 +3211,17 @@ function GroupRow({
       <span
         className="text-left flex-1 min-w-0"
         style={{
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: "Inter, sans-serif",
           fontWeight: 500,
           fontSize: 14,
-          lineHeight: '20px',
-          letterSpacing: '-0.15px',
+          lineHeight: "20px",
+          letterSpacing: "-0.15px",
           color: textColor,
-          wordBreak: 'break-word',
+          wordBreak: "break-word",
         }}
       >
         {label}
       </span>
     </button>
-  )
+  );
 }

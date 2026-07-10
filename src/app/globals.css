@@ -3,7 +3,7 @@
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-instrument-serif), Georgia, Cambria, serif;
-  
+
   --color-brand: #4f46e5;
   --color-brand-light: #818cf8;
   --color-brand-dark: #3730a3;
@@ -42,7 +42,8 @@
 
 /* Audio waveform pulse — used in the Messages mockup */
 @keyframes waveform {
-  0%, 100% {
+  0%,
+  100% {
     transform: scaleY(0.35);
   }
   50% {
@@ -65,5 +66,24 @@
 
 /* Custom background for the landing page sunset/mountain look */
 .bg-tether-hero {
-  background: linear-gradient(180deg, rgba(238, 242, 255, 0.4) 0%, rgba(245, 243, 255, 0.4) 50%, rgba(254, 243, 199, 0.15) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(238, 242, 255, 0.4) 0%,
+    rgba(245, 243, 255, 0.4) 50%,
+    rgba(254, 243, 199, 0.15) 100%
+  );
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@utility animate-float {
+  animation: float 9s ease-in-out infinite;
 }

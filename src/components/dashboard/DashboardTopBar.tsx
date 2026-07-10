@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { Search, HelpCircle, Bell, Settings, Menu } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { Search, HelpCircle, Bell, Settings, Menu } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface DashboardTopBarProps {
-  onMenuClick: () => void
+  onMenuClick: () => void;
 }
 
 export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
-  const router = useRouter()
+  const router = useRouter();
   return (
     <header
       className="h-16 bg-white flex items-center"
-      style={{ borderBottom: '0.8px solid #E5E7EB' }}
+      style={{ borderBottom: "0.8px solid #E5E7EB" }}
     >
       <div className="w-full max-w-[1280px] mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3 h-[63.2px]">
         {/* Mobile menu button */}
@@ -28,14 +28,17 @@ export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
         <div className="flex-1 min-w-0 max-w-[672px] hidden sm:block">
           <div
             className="w-full h-9 px-3 flex items-center gap-2 rounded-lg"
-            style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}
+            style={{ background: "#F9FAFB", border: "1px solid #E5E7EB" }}
           >
-            <Search className="w-4 h-4 flex-shrink-0 text-[#99A1AF]" strokeWidth={2} />
+            <Search
+              className="w-4 h-4 flex-shrink-0 text-[#99A1AF]"
+              strokeWidth={2}
+            />
             <input
               type="text"
               placeholder="Search files and folders"
               className="flex-1 bg-transparent outline-none text-[12.9px] leading-none text-[#101828] placeholder:text-[#717182] min-w-0"
-              style={{ fontFamily: 'Inter, sans-serif' }}
+              style={{ fontFamily: "Inter, sans-serif" }}
             />
           </div>
         </div>
@@ -52,7 +55,7 @@ export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
           </button>
           <button
             type="button"
-            onClick={() => router.push('/help')}
+            onClick={() => router.push("/help")}
             className="hidden sm:flex w-9 h-9 rounded-lg items-center justify-center hover:bg-gray-100 transition-colors"
             aria-label="Help"
           >
@@ -76,5 +79,5 @@ export default function DashboardTopBar({ onMenuClick }: DashboardTopBarProps) {
         </div>
       </div>
     </header>
-  )
+  );
 }

@@ -6,9 +6,22 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type') as 'email' | 'recovery' | 'magiclink' | null
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? origin
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    ?? (process.env.NODE_ENV !== 'production' ? origin : null)
+  if (!siteUrl) {
+    throw new Error('NEXT_PUBLIC_SITE_URL must be set in production')
+  }
 
   const supabase = await createClient()
+
+  // Adds a one-shot `li` (login-intent) param the client reads to fire the
+  // user_logged_in analytics event, since this server route can't use the
+  // browser PostHog SDK. LoginEventTracker strips it after capturing.
+  const dest = (path: string, loginMethod?: string) => {
+    const url = new URL(`${siteUrl}${path}`)
+    if (loginMethod) url.searchParams.set('li', loginMethod)
+    return NextResponse.redirect(url.toString())
+  }
 
   // ── token_hash flow ──
   // Used by: email confirmation, magic link, password reset
@@ -17,13 +30,16 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type })
 
     if (error) {
-      console.error('OTP verification error:', error.message)
       return NextResponse.redirect(`${siteUrl}/signin?error=verification_failed`)
     }
 
     if (type === 'recovery') {
       return NextResponse.redirect(`${siteUrl}/update-password`)
     }
+
+    // Only a magic link is a "login"; email-confirmation is tracked separately
+    // (email_verified, server-side).
+    const loginMethod = type === 'magiclink' ? 'magic_link' : undefined
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.redirect(`${siteUrl}/signin`)
@@ -35,10 +51,10 @@ export async function GET(request: Request) {
       .single()
 
     if (!profile?.onboarding?.completed_at) {
-      return NextResponse.redirect(`${siteUrl}/onboarding`)
+      return dest('/onboarding', loginMethod)
     }
 
-    return NextResponse.redirect(`${siteUrl}/dashboard`)
+    return dest('/dashboard', loginMethod)
   }
 
   // ── PKCE code flow ──
@@ -47,7 +63,6 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (error) {
-      console.error('Code exchange error:', error.message)
       return NextResponse.redirect(`${siteUrl}/signin?error=verification_failed`)
     }
 
@@ -65,10 +80,10 @@ export async function GET(request: Request) {
       .single()
 
     if (!profile?.onboarding?.completed_at) {
-      return NextResponse.redirect(`${siteUrl}/onboarding`)
+      return dest('/onboarding', 'oauth')
     }
 
-    return NextResponse.redirect(`${siteUrl}/dashboard`)
+    return dest('/dashboard', 'oauth')
   }
 
   // No code or token_hash

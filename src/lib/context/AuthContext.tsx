@@ -2,10 +2,11 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
+import { identifyUser, resetIdentity, track } from '@/lib/posthog/analytics'
 import type { UserProfile } from '@/lib/api/users'
 import type { Session, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 export type { UserProfile }
 
@@ -28,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // Retry state for the profile fetch — the backend may be cold-starting or the
   // user may not be provisioned yet on first load.
@@ -58,6 +59,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.get<UserProfile>('/users/me', token)
       setProfile(data)
+      // Enrich the PostHog person + register user_id/environment super props
+      // once the profile is available.
+      identifyUser(data)
       stopRetry()
     } catch (e) {
       // Only retry transient failures (cold-start 5xx, network drop, rate limit).
@@ -91,15 +95,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.access_token) {
+        // loadProfile() identifies + enriches the PostHog person once /users/me
+        // resolves (see identifyUser), so no minimal identify is needed here.
         loadProfile()
       } else {
         stopRetry()
         setProfile(null)
+        resetIdentity()
       }
     })
 
@@ -115,9 +122,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     stopRetry()
-    await supabase.auth.signOut()
-    setProfile(null)
-    router.push('/signin')
+    // Fire backend logout (invalidates server-side session record) — don't await;
+    // browser session cleared below is the authoritative action.
+    const { data: { session: current } } = await supabase.auth.getSession()
+    if (current?.access_token) {
+      api.post('/auth/logout', {}, current.access_token).catch(() => null)
+    }
+    try {
+      await supabase.auth.signOut()
+      // Record only after sign-out actually succeeded, while identity is still
+      // attached (resetIdentity runs afterwards via the auth-state-change
+      // listener). If sign-out throws we skip the event but still tear down.
+      track('user_logged_out')
+    } catch {
+      // Fall through — clear local UI state regardless so the user isn't stuck.
+    } finally {
+      setProfile(null)
+      router.push('/signin')
+    }
   }
 
   return (

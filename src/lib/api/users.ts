@@ -49,6 +49,7 @@ export const updateProfile = (
   body: {
     first_name?: string
     last_name?: string
+    date_of_birth?: string
     zip_code?: string
     state?: string
     age_group?: string
