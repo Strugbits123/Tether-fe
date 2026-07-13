@@ -45,12 +45,12 @@ export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
   for (const a of assignments) {
     switch (a.assignment_scope) {
       case 'all':
-        audience.push('All recipients')
+        audience.push('All Recipients')
         break
       case 'group':
         // Accept both the current singular values and legacy plural data.
-        if (a.group_value === 'family') audience.push('All family')
-        else if (a.group_value === 'friend' || a.group_value === 'friends') audience.push('All friends')
+        if (a.group_value === 'family') audience.push('All Family')
+        else if (a.group_value === 'friend' || a.group_value === 'friends') audience.push('All Friends')
         else if (a.group_value === 'other' || a.group_value === 'others') audience.push('All Others')
         break
       case 'release_manager':

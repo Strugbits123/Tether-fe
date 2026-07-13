@@ -364,11 +364,15 @@ export default function MessagesPage() {
       return;
     }
     const assignments: Assignment[] = [];
-    for (const g of groups) {
-      if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
-    }
-    for (const id of individualIds) {
-      assignments.push({ scope: "individual", recipientId: id });
+    if (groups.includes("All Recipients")) {
+      assignments.push(ASSIGN_GROUP_MAP["All Recipients"]);
+    } else {
+      for (const g of groups) {
+        if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
+      }
+      for (const id of individualIds) {
+        assignments.push({ scope: "individual", recipientId: id });
+      }
     }
     if (assignments.length === 0) assignments.push({ scope: "assign_later" });
     try {
@@ -740,6 +744,8 @@ function MessageCard({
           }}
         >
           <span>{typeLabel(item.type)}</span>
+          <span aria-hidden>•</span>
+          <span>{recipientLabel(item)}</span>
           {duration && (
             <>
               <span aria-hidden>•</span>

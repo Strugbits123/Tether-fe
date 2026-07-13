@@ -84,12 +84,27 @@ export default function AssignRecipientsModal({
 
   if (!open) return null
 
-  const toggleGroup = (g: string) =>
+  const allRecipientsActive = groups.includes('All Recipients')
+
+  useEffect(() => {
+    if (allRecipientsActive) setShowIndividuals(true)
+  }, [allRecipientsActive])
+
+  const toggleGroup = (g: string) => {
+    if (g === 'All Recipients') {
+      setGroups(allRecipientsActive ? [] : GROUPS)
+      if (!allRecipientsActive) setIndividualIds([])
+      return
+    }
+    if (allRecipientsActive) return
     setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
-  const toggleIndividual = (id: string) =>
+  }
+  const toggleIndividual = (id: string) => {
+    if (allRecipientsActive) return
     setIndividualIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
+  }
 
   const filtered = recipients.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -162,13 +177,15 @@ export default function AssignRecipientsModal({
           {/* Group rows */}
           <div className="flex flex-col gap-2 px-5 sm:px-6">
             {GROUPS.map((g) => {
-              const selected = groups.includes(g)
+              const selected = groups.includes(g) || allRecipientsActive
+              const locked = allRecipientsActive && g !== 'All Recipients'
               return (
                 <button
                   key={g}
                   type="button"
                   onClick={() => toggleGroup(g)}
-                  className="w-full flex items-center cursor-pointer"
+                  disabled={locked}
+                  className={`w-full flex items-center ${locked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   style={{
                     minHeight: 42,
                     borderRadius: 10,
@@ -176,6 +193,7 @@ export default function AssignRecipientsModal({
                     background: selected ? '#E0E7FF' : '#F4F4F4',
                     padding: '12px',
                     gap: 12,
+                    opacity: locked ? 0.7 : 1,
                   }}
                 >
                   <CheckBox checked={selected} />
@@ -272,18 +290,22 @@ export default function AssignRecipientsModal({
                     </p>
                   ) : (
                     filtered.map((p) => {
-                      const selected = individualIds.includes(p.id)
+                      const selected = allRecipientsActive || individualIds.includes(p.id)
                       return (
                         <button
                           type="button"
                           key={p.id}
                           onClick={() => toggleIndividual(p.id)}
-                          className="w-full flex items-center gap-2 cursor-pointer"
+                          disabled={allRecipientsActive}
+                          className={`w-full flex items-center gap-2 ${
+                            allRecipientsActive ? 'cursor-not-allowed' : 'cursor-pointer'
+                          }`}
                           style={{
                             borderRadius: 8,
                             background: selected ? '#E0E7FF' : '#FFFFFF',
                             border: selected ? '1px solid #4F46E5' : '1px solid transparent',
                             padding: 8,
+                            opacity: allRecipientsActive ? 0.7 : 1,
                           }}
                         >
                           <CheckBox checked={selected} />
