@@ -521,6 +521,8 @@ function ReadOnlyMessage({
   const [recipientCount, setRecipientCount] = useState<number | undefined>(
     undefined,
   );
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [showAllIndividuals, setShowAllIndividuals] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -542,13 +544,14 @@ function ReadOnlyMessage({
       const token = await getToken();
       if (!token) return;
       try {
-        const recipients = await getRecipients(token);
+        const data = await getRecipients(token);
         if (active) {
+          setRecipients(data);
           setRecipientCount(
             countFromSelection(
               message.audience,
               message.selectedIndividualIds ?? [],
-              recipients,
+              data,
             ),
           );
         }
@@ -570,6 +573,29 @@ function ReadOnlyMessage({
 
   const audience =
     message.audience.length > 0 ? message.audience : ["Assign later"];
+
+  // Group/scope chips render as-is; individual selections render as recipient
+  // name chips (first 3, then a "+N more" toggle) instead of "Choose individuals".
+  const groupChips = audience.filter((a) => a !== "Choose individuals");
+  const individualNames = (message.selectedIndividualIds ?? []).map(
+    (id) => recipients.find((r) => r.id === id)?.name ?? "Recipient",
+  );
+  const MAX_VISIBLE_INDIVIDUALS = 3;
+  const visibleNames = showAllIndividuals
+    ? individualNames
+    : individualNames.slice(0, MAX_VISIBLE_INDIVIDUALS);
+  const hiddenCount = individualNames.length - visibleNames.length;
+
+  const chipStyle: React.CSSProperties = {
+    height: 30,
+    borderRadius: 9999,
+    padding: "4px 14px",
+    background: "#EEF2FF",
+    color: "#4F46E5",
+    fontWeight: 500,
+    fontSize: 13,
+    lineHeight: "22px",
+  };
 
   return (
     <div
@@ -667,23 +693,40 @@ function ReadOnlyMessage({
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {audience.map((a) => (
-                  <span
-                    key={a}
-                    style={{
-                      height: 30,
-                      borderRadius: 9999,
-                      padding: "4px 14px",
-                      background: "#EEF2FF",
-                      color: "#4F46E5",
-                      fontWeight: 500,
-                      fontSize: 13,
-                      lineHeight: "22px",
-                    }}
-                  >
+                {groupChips.map((a) => (
+                  <span key={a} style={chipStyle}>
                     {a}
                   </span>
                 ))}
+                {visibleNames.map((name, i) => (
+                  <span key={`ind-${i}`} style={chipStyle}>
+                    {name}
+                  </span>
+                ))}
+                {hiddenCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllIndividuals(true)}
+                    style={{ ...chipStyle, cursor: "pointer" }}
+                  >
+                    +{hiddenCount} more
+                  </button>
+                )}
+                {showAllIndividuals &&
+                  individualNames.length > MAX_VISIBLE_INDIVIDUALS && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllIndividuals(false)}
+                      style={{
+                        ...chipStyle,
+                        background: "#F3F3F5",
+                        color: "#4A5565",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Show less
+                    </button>
+                  )}
               </div>
             </div>
 
