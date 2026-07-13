@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
     // injected script could exfiltrate tokens to.
     const connectSrc = [
       "'self'",
+      // WaveSurfer fetch()es recorded-clip blob: URLs to decode the playback
+      // waveform; fetch is governed by connect-src, so blob: must be allowed.
+      'blob:',
       apiOrigin,
       'https://*.supabase.co',
       'wss://*.supabase.co',
