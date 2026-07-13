@@ -8,7 +8,6 @@ import MessagePlayerHeader from "@/components/messages/MessagePlayerHeader";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 
 interface AudioRecorderProps {
-  recipientName?: string;
   messageTitle?: string;
   /** Max recording length in seconds. Default 10 minutes. */
   maxSeconds?: number;
@@ -36,7 +35,6 @@ function formatTime(sec: number): string {
 }
 
 export default function AudioRecorder({
-  recipientName,
   messageTitle,
   maxSeconds = 10 * 60,
   onComplete,
@@ -189,7 +187,6 @@ export default function AudioRecorder({
         <>
           <MessagePlayerHeader
             type="audio"
-            recipientName={recipientName}
             messageTitle={messageTitle}
             onClose={onClose}
           />

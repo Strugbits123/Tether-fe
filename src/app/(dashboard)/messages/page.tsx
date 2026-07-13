@@ -23,6 +23,8 @@ import AssignRecipientsModal from "@/components/dashboard/AssignRecipientsModal"
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/context/ToastContext";
 import { withRetry } from "@/lib/utils/retry";
+import { getRecipients } from "@/lib/api/recipients";
+import { countRecipients } from "@/lib/utils/assignments";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 import VideoPlayer from "@/components/video/VideoPlayer";
 import MessagePlayerHeader from "@/components/messages/MessagePlayerHeader";
@@ -364,11 +366,15 @@ export default function MessagesPage() {
       return;
     }
     const assignments: Assignment[] = [];
-    for (const g of groups) {
-      if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
-    }
-    for (const id of individualIds) {
-      assignments.push({ scope: "individual", recipientId: id });
+    if (groups.includes("All Recipients")) {
+      assignments.push(ASSIGN_GROUP_MAP["All Recipients"]);
+    } else {
+      for (const g of groups) {
+        if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
+      }
+      for (const id of individualIds) {
+        assignments.push({ scope: "individual", recipientId: id });
+      }
     }
     if (assignments.length === 0) assignments.push({ scope: "assign_later" });
     try {
@@ -740,6 +746,8 @@ function MessageCard({
           }}
         >
           <span>{typeLabel(item.type)}</span>
+          <span aria-hidden>•</span>
+          <span>{recipientLabel(item)}</span>
           {duration && (
             <>
               <span aria-hidden>•</span>
@@ -914,6 +922,35 @@ function PlaybackModal({
     token: string;
   } | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [recipientCount, setRecipientCount] = useState<number | undefined>(
+    undefined,
+  );
+
+  // Resolve the distinct people this message reaches (+RM). The list row has no
+  // assignments, so fetch the full message + recipients and compute it.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const [full, recipients] = await Promise.all([
+          getMessage(token, message.id),
+          getRecipients(token),
+        ]);
+        if (active) {
+          setRecipientCount(
+            countRecipients(full.assignments ?? [], recipients),
+          );
+        }
+      } catch {
+        /* count is non-critical — leave it hidden */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [message.id]);
 
   useEffect(() => {
     let active = true;
@@ -990,8 +1027,8 @@ function PlaybackModal({
           >
             <MessagePlayerHeader
               type={message.type === "video" ? "video" : "audio"}
-              recipientName={recipientLabel(message)}
               messageTitle={message.title}
+              recipientCount={recipientCount}
               onClose={onClose}
             />
 

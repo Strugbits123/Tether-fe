@@ -13,7 +13,12 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/context/ToastContext";
-import { buildAssignments, formatFileSize } from "@/lib/utils/assignments";
+import {
+  buildAssignments,
+  formatFileSize,
+  selectGroup,
+  toggleIndividual as toggleIndividualSelection,
+} from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
 import { requestPhotoUploadUrls, createPhotosBatch } from "@/lib/api/photos";
 import {
@@ -227,32 +232,33 @@ export default function AddPhotosModal({
 
   if (!open) return null;
 
-  // Assign Later, groups, and individuals are mutually exclusive modes.
+  // Shared selection behavior (see lib/utils/assignments). Assign Later is a
+  // standalone mode handled here; the rest delegates to selectGroup so groups
+  // populate their individuals and editing individuals drops the group chip.
   const toggleGroup = (g: string) => {
     if (g === "Assign Later") {
-      // Assign Later stands alone — selecting it clears everything else.
+      const active = selectedGroups.includes("Assign Later");
+      setSelectedGroups(active ? [] : ["Assign Later"]);
       setSelectedIndividuals([]);
-      setSelectedGroups((prev) =>
-        prev.includes("Assign Later") ? [] : ["Assign Later"],
-      );
       return;
     }
-    // Selecting a real group clears individuals and Assign Later.
-    setSelectedIndividuals([]);
-    setSelectedGroups((prev) => {
-      const withoutLater = prev.filter((x) => x !== "Assign Later");
-      return withoutLater.includes(g)
-        ? withoutLater.filter((x) => x !== g)
-        : [...withoutLater, g];
-    });
+    const base = selectedGroups.filter((x) => x !== "Assign Later");
+    const next = selectGroup(
+      g,
+      { groups: base, individuals: selectedIndividuals },
+      recipients,
+    );
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const toggleIndividual = (id: string) => {
-    // Selecting an individual clears all groups (including Assign Later).
-    setSelectedGroups([]);
-    setSelectedIndividuals((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    const next = toggleIndividualSelection(id, {
+      groups: selectedGroups.filter((x) => x !== "Assign Later"),
+      individuals: selectedIndividuals,
+    });
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const mergeFiles = (incoming: File[]) => {

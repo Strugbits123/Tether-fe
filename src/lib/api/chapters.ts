@@ -273,28 +273,33 @@ export function buildChapterAssignments(
     return [{ assignment_scope: 'assign_later' }]
   }
 
-  const out: ChapterAssignmentInput[] = []
-  for (const group of checkedGroups) {
-    switch (group) {
-      case 'All Recipients':
-        out.push({ assignment_scope: 'all' })
-        break
-      case 'All Family':
-        out.push({ assignment_scope: 'group', group_value: 'family' })
-        break
-      case 'All Friends':
-        out.push({ assignment_scope: 'group', group_value: 'friends' })
-        break
-      case 'All Others':
-        out.push({ assignment_scope: 'group', group_value: 'others' })
-        break
-      case 'Release Manager':
-        out.push({ assignment_scope: 'release_manager' })
-        break
-    }
+  const hasRM = checkedGroups.includes('Release Manager')
+
+  // "All Recipients" already covers everyone — send just that (+RM).
+  if (checkedGroups.includes('All Recipients')) {
+    const out: ChapterAssignmentInput[] = [{ assignment_scope: 'all' }]
+    if (hasRM) out.push({ assignment_scope: 'release_manager' })
+    return out
   }
-  for (const id of checkedIndividualIds) {
-    out.push({ assignment_scope: 'individual', recipient_id: id })
+
+  const out: ChapterAssignmentInput[] = []
+  // A relationship group is the source of truth for its members: send the group
+  // scope and skip the mirrored individuals to avoid duplicate rows. Individuals
+  // are only sent for a custom selection (no relationship group active).
+  const GROUP_VALUE: Record<string, 'family' | 'friends' | 'others'> = {
+    'All Family': 'family',
+    'All Friends': 'friends',
+    'All Others': 'others',
+  }
+  const relationshipGroups = checkedGroups.filter((g) => g in GROUP_VALUE)
+  for (const g of relationshipGroups) {
+    out.push({ assignment_scope: 'group', group_value: GROUP_VALUE[g] })
+  }
+  if (hasRM) out.push({ assignment_scope: 'release_manager' })
+  if (relationshipGroups.length === 0) {
+    for (const id of checkedIndividualIds) {
+      out.push({ assignment_scope: 'individual', recipient_id: id })
+    }
   }
 
   if (out.length === 0) return [{ assignment_scope: 'assign_later' }]

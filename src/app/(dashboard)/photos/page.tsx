@@ -41,6 +41,8 @@ import {
 import {
   buildAssignments,
   assignmentsToSelection,
+  selectGroup,
+  toggleIndividual as toggleIndividualSelection,
 } from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
 import AddPhotosModal from "@/components/dashboard/AddPhotosModal";
@@ -1563,14 +1565,30 @@ function CreateFolderModal({
     };
   }, []);
 
-  const toggleGroup = (g: string) =>
-    setSelectedGroups((prev) =>
-      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+  const toggleGroup = (g: string) => {
+    if (g === "Assign Later") {
+      const active = selectedGroups.includes("Assign Later");
+      setSelectedGroups(active ? [] : ["Assign Later"]);
+      setSelectedIndividuals([]);
+      return;
+    }
+    const base = selectedGroups.filter((x) => x !== "Assign Later");
+    const next = selectGroup(
+      g,
+      { groups: base, individuals: selectedIndividuals },
+      recipients,
     );
-  const toggleIndividual = (id: string) =>
-    setSelectedIndividuals((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
+  };
+  const toggleIndividual = (id: string) => {
+    const next = toggleIndividualSelection(id, {
+      groups: selectedGroups.filter((x) => x !== "Assign Later"),
+      individuals: selectedIndividuals,
+    });
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
+  };
 
   const filteredIndividuals = recipients.filter((i) =>
     i.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -1968,15 +1986,29 @@ function EditFolderModal({
     };
   }, []);
 
-  const toggleGroup = (g: string) =>
-    setSelectedGroups((prev) =>
-      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+  const toggleGroup = (g: string) => {
+    if (g === "Assign Later") {
+      const active = selectedGroups.includes("Assign Later");
+      setSelectedGroups(active ? [] : ["Assign Later"]);
+      setSelectedIndividuals([]);
+      return;
+    }
+    const base = selectedGroups.filter((x) => x !== "Assign Later");
+    const next = selectGroup(
+      g,
+      { groups: base, individuals: selectedIndividuals },
+      recipients,
     );
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
+  };
   const toggleIndividual = (id: string) => {
-    setSelectedGroups((prev) => prev.filter((x) => x !== "Assign Later"));
-    setSelectedIndividuals((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    const next = toggleIndividualSelection(id, {
+      groups: selectedGroups.filter((x) => x !== "Assign Later"),
+      individuals: selectedIndividuals,
+    });
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const filteredIndividuals = recipients.filter((i) =>
@@ -2391,26 +2423,28 @@ function EditPhotoModal({
 
   const toggleGroup = (g: string) => {
     if (g === "Assign Later") {
+      const active = selectedGroups.includes("Assign Later");
+      setSelectedGroups(active ? [] : ["Assign Later"]);
       setSelectedIndividuals([]);
-      setSelectedGroups((prev) =>
-        prev.includes("Assign Later") ? [] : ["Assign Later"],
-      );
       return;
     }
-    setSelectedIndividuals([]);
-    setSelectedGroups((prev) => {
-      const withoutLater = prev.filter((x) => x !== "Assign Later");
-      return withoutLater.includes(g)
-        ? withoutLater.filter((x) => x !== g)
-        : [...withoutLater, g];
-    });
+    const base = selectedGroups.filter((x) => x !== "Assign Later");
+    const next = selectGroup(
+      g,
+      { groups: base, individuals: selectedIndividuals },
+      recipients,
+    );
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const toggleIndividual = (id: string) => {
-    setSelectedGroups([]);
-    setSelectedIndividuals((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    const next = toggleIndividualSelection(id, {
+      groups: selectedGroups.filter((x) => x !== "Assign Later"),
+      individuals: selectedIndividuals,
+    });
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const filteredIndividuals = recipients.filter((r) =>

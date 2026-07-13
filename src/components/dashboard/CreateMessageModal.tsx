@@ -24,6 +24,7 @@ import {
   Search,
   Strikethrough,
   Underline,
+  Users,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +37,7 @@ import {
   confirmAudioUpload,
 } from "@/lib/api/messages";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { countFromSelection } from "@/lib/utils/assignments";
 import AudioRecordingWaveform from "@/components/audio/AudioRecordingWaveform";
 import AudioPlaybackWaveform from "@/components/audio/AudioPlaybackWaveform";
 import AudioRecorder from "@/components/audio/AudioRecorder";
@@ -103,9 +105,9 @@ type MessageType = "write" | "video" | "audio";
 type Step = "setup" | "record" | "write";
 
 const AUDIENCE_CHIPS = [
-  "All recipients",
-  "All family",
-  "All friends",
+  "All Recipients",
+  "All Family",
+  "All Friends",
   "Release Manager",
   "All Others",
   "Choose individuals",
@@ -122,18 +124,18 @@ const EXCLUSIVE_CHIPS = ["Choose individuals", "Assign later"];
  */
 const RECIPIENT_GROUP_ROWS = [
   "Assign later",
-  "All recipients",
-  "All family",
-  "All friends",
+  "All Recipients",
+  "All Family",
+  "All Friends",
   "All Others",
   "Release Manager",
 ];
 
 /** Maps an audience chip label to its backend Assignment shape. */
 const RECIPIENT_OPTIONS: Record<string, Assignment> = {
-  "All recipients": { scope: "all" },
-  "All family": { scope: "group", groupValue: "family" },
-  "All friends": { scope: "group", groupValue: "friends" },
+  "All Recipients": { scope: "all" },
+  "All Family": { scope: "group", groupValue: "family" },
+  "All Friends": { scope: "group", groupValue: "friends" },
   "Release Manager": { scope: "release_manager" },
   "All Others": { scope: "group", groupValue: "others" },
   "Assign later": { scope: "assign_later" },
@@ -145,6 +147,15 @@ export function buildAssignments(
 ): Assignment[] {
   // "Assign later" stands alone — send only that.
   if (audience.includes("Assign later")) return [{ scope: "assign_later" }];
+  // "All Recipients" already covers every group and individual — send only that,
+  // but keep the Release Manager (a separate delivery target) if selected.
+  if (audience.includes("All Recipients")) {
+    const out: Assignment[] = [{ scope: "all" }];
+    if (audience.includes("Release Manager")) {
+      out.push({ scope: "release_manager" });
+    }
+    return out;
+  }
 
   const result: Assignment[] = [];
   for (const chip of audience) {
@@ -178,7 +189,23 @@ function errorMessage(e: unknown, fallback: string): string {
   return toSentenceCase(e instanceof Error ? e.message : fallback);
 }
 
-export default function CreateMessageModal({
+/**
+ * Thin wrapper: renders nothing while closed, and keys the stateful inner modal
+ * by the message id / step so opening (or switching to) a different message
+ * remounts it — state is initialized from props on mount instead of being reset
+ * inside an effect.
+ */
+export default function CreateMessageModal(props: CreateMessageModalProps) {
+  if (!props.open) return null;
+  return (
+    <MessageModalInner
+      key={`${props.initialMessage?.id ?? "new"}:${props.initialStep ?? "setup"}`}
+      {...props}
+    />
+  );
+}
+
+function MessageModalInner({
   open,
   onClose,
   headerTitle = "Create Your First Message",
@@ -199,7 +226,7 @@ export default function CreateMessageModal({
 
   // setup state — multi-select audience
   const [audience, setAudience] = useState<string[]>(
-    initialMessage?.audience ?? ["All recipients"],
+    initialMessage?.audience ?? ["All Recipients"],
   );
   const [selectedIndividualIds, setSelectedIndividualIds] = useState<string[]>(
     initialMessage?.selectedIndividualIds ?? [],
@@ -219,20 +246,9 @@ export default function CreateMessageModal({
   // submit state for the text flow
   const [submitting, setSubmitting] = useState(false);
 
-  // Resync if a different message is opened for editing
-  useEffect(() => {
-    if (!open) return;
-    setAudience(initialMessage?.audience ?? ["All recipients"]);
-    setSelectedIndividualIds(initialMessage?.selectedIndividualIds ?? []);
-    setMessageType(
-      initialMessageType ?? initialMessage?.messageType ?? "video",
-    );
-    setTitle(initialTitle ?? initialMessage?.title ?? "");
-    setNotes(initialMessage?.notes ?? "");
-    setBody(initialMessage?.body ?? "");
-    setStep(initialStep ?? "setup");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialMessage?.id]);
+  // State above is initialized from props on mount. The exported wrapper keys
+  // this inner component by message/open, so a different message (or reopening)
+  // remounts and re-initializes — no resync effect needed.
 
   // Load real recipients when the modal opens.
   useEffect(() => {
@@ -254,6 +270,7 @@ export default function CreateMessageModal({
   }, [open]);
 
   const recipientLabel = (() => {
+    if (audience.includes("All Recipients")) return "All Recipients";
     if (audience.includes("Choose individuals")) {
       if (selectedIndividualIds.length === 1) {
         return (
@@ -501,6 +518,10 @@ function ReadOnlyMessage({
   headerTitle: string;
   onClose: () => void;
 }) {
+  const [recipientCount, setRecipientCount] = useState<number | undefined>(
+    undefined,
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -513,6 +534,32 @@ function ReadOnlyMessage({
       document.body.style.overflow = prev;
     };
   }, [onClose]);
+
+  // Resolve the distinct recipient count (+RM) from the message's audience.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const recipients = await getRecipients(token);
+        if (active) {
+          setRecipientCount(
+            countFromSelection(
+              message.audience,
+              message.selectedIndividualIds ?? [],
+              recipients,
+            ),
+          );
+        }
+      } catch {
+        /* non-critical */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [message.audience, message.selectedIndividualIds]);
 
   const typeLabel =
     message.messageType === "write"
@@ -587,12 +634,27 @@ function ReadOnlyMessage({
             >
               {headerTitle}
             </h2>
+            {recipientCount !== undefined && (
+              <div
+                className="mt-1.5 flex items-center gap-1.5"
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#6B7280",
+                }}
+              >
+                <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+                <span>
+                  {recipientCount}{" "}
+                  {recipientCount === 1 ? "recipient" : "recipients"}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Body */}
           <div className="px-6 pt-6 flex flex-col gap-5">
-            <Detail label="Title">{message.title || "—"}</Detail>
-
             <div className="flex flex-col gap-2">
               <span
                 style={{
@@ -773,6 +835,16 @@ function SetupStep({
 
   const toggleAudience = (chip: string) =>
     setAudience((prev) => {
+      const allActive = prev.includes("All Recipients");
+      // "All Recipients" covers every recipient — selecting it auto-selects (and
+      // locks) every other chip, including "Choose individuals" so its picker
+      // shows everyone as selected too.
+      if (chip === "All Recipients") {
+        return allActive
+          ? []
+          : AUDIENCE_CHIPS.filter((c) => c !== "Assign later");
+      }
+      if (allActive) return prev;
       // "Choose individuals" and "Assign later" are exclusive — picking one clears
       // every other chip, and picking any group clears them.
       if (EXCLUSIVE_CHIPS.includes(chip)) {
@@ -852,12 +924,19 @@ function SetupStep({
           <div className="flex flex-wrap gap-3">
             {AUDIENCE_CHIPS.map((chip) => {
               const selected = audience.includes(chip);
+              const locked =
+                audience.includes("All Recipients") && chip !== "All Recipients";
               return (
                 <button
                   key={chip}
                   type="button"
                   onClick={() => toggleAudience(chip)}
-                  className="cursor-pointer transition-colors"
+                  disabled={locked}
+                  className={
+                    locked
+                      ? "cursor-not-allowed transition-colors"
+                      : "cursor-pointer transition-colors"
+                  }
                   style={{
                     height: 36,
                     borderRadius: 9999,
@@ -868,6 +947,7 @@ function SetupStep({
                     fontWeight: 500,
                     fontSize: 13.6,
                     lineHeight: "20px",
+                    opacity: locked ? 0.7 : 1,
                   }}
                 >
                   {chip}
@@ -880,6 +960,7 @@ function SetupStep({
             <IndividualPicker
               recipients={recipients}
               selectedIds={selectedIndividualIds}
+              lockedAll={audience.includes("All Recipients")}
               onToggle={(id) =>
                 setSelectedIndividualIds((prev) =>
                   prev.includes(id)
@@ -1177,10 +1258,14 @@ function IndividualPicker({
   recipients,
   selectedIds,
   onToggle,
+  lockedAll,
 }: {
   recipients: Recipient[];
   selectedIds: string[];
   onToggle: (id: string) => void;
+  /** When true (audience includes "All Recipients"), every recipient shows as
+   * selected and can't be toggled off individually. */
+  lockedAll?: boolean;
 }) {
   const [search, setSearch] = useState("");
 
@@ -1244,13 +1329,16 @@ function IndividualPicker({
           </p>
         ) : (
           filtered.map((p) => {
-            const selected = selectedIds.includes(p.id);
+            const selected = lockedAll || selectedIds.includes(p.id);
             return (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => onToggle(p.id)}
-                className="w-full flex items-center gap-2 cursor-pointer"
+                onClick={() => !lockedAll && onToggle(p.id)}
+                disabled={lockedAll}
+                className={`w-full flex items-center gap-2 ${
+                  lockedAll ? "cursor-not-allowed" : "cursor-pointer"
+                }`}
                 style={{
                   borderRadius: 8,
                   background: selected ? "#E0E7FF" : "#FFFFFF",
@@ -1258,6 +1346,7 @@ function IndividualPicker({
                     ? "1px solid #4F46E5"
                     : "1px solid transparent",
                   padding: 8,
+                  opacity: lockedAll ? 0.7 : 1,
                 }}
               >
                 <span
@@ -1343,11 +1432,13 @@ function GroupRow({
   label,
   selected,
   variant,
+  disabled,
   onToggle,
 }: {
   label: string;
   selected: boolean;
   variant: "yellow" | "default";
+  disabled?: boolean;
   onToggle: () => void;
 }) {
   let bg = "#F9FAFB";
@@ -1368,7 +1459,10 @@ function GroupRow({
     <button
       type="button"
       onClick={onToggle}
-      className="w-full flex items-center cursor-pointer"
+      disabled={disabled}
+      className={`w-full flex items-center ${
+        disabled ? "cursor-not-allowed" : "cursor-pointer"
+      }`}
       style={{
         minHeight: 42,
         borderRadius: 10,
@@ -1376,6 +1470,7 @@ function GroupRow({
         background: bg,
         padding: "12px",
         gap: 12,
+        opacity: disabled ? 0.7 : 1,
       }}
     >
       <GroupCheckBox checked={selected} variant={variant} />
@@ -2277,7 +2372,7 @@ function WriteMessageStep({
             marginBottom: 4,
           }}
         >
-          Written message for
+          Written message
         </p>
         <h2
           style={{
@@ -2288,19 +2383,7 @@ function WriteMessageStep({
             color: "#101828",
           }}
         >
-          {recipient}
-          {messageTitle.trim() && (
-            <span
-              style={{
-                fontWeight: 400,
-                fontStyle: "italic",
-                color: "#6B7280",
-                marginLeft: 8,
-              }}
-            >
-              · {messageTitle}
-            </span>
-          )}
+          {messageTitle.trim() || "Untitled message"}
         </h2>
       </div>
 
@@ -2726,7 +2809,7 @@ function CreateWizard({
   // Step 3 fields.
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [audience, setAudience] = useState<string[]>(["All recipients"]);
+  const [audience, setAudience] = useState<string[]>(["All Recipients"]);
   const [individuals, setIndividuals] = useState<string[]>([]);
 
   const [recipients, setRecipients] = useState<Recipient[]>([]);
@@ -3286,7 +3369,22 @@ function DetailsStep({
   // Selecting a group clears any chosen individuals (and vice-versa) — groups and
   // individuals are mutually exclusive, matching the document modal. The existing
   // chip exclusivity ('Assign later') is preserved via the chip helper.
+  const allRecipientsActive = audience.includes("All Recipients");
+  // Individuals panel is force-open while "All Recipients" is active (every
+  // individual is implicitly selected) — derived, not stored in state.
+  const individualsOpen = allRecipientsActive || showIndividuals;
+
   const toggleGroup = (chip: string) => {
+    if (chip === "All Recipients") {
+      if (allRecipientsActive) {
+        setAudience([]);
+      } else {
+        setSelectedIndividualIds([]);
+        setAudience(RECIPIENT_GROUP_ROWS.filter((c) => c !== "Assign later"));
+      }
+      return;
+    }
+    if (allRecipientsActive) return; // locked while "All Recipients" is selected
     setSelectedIndividualIds([]);
     setAudience((prev) => {
       if (EXCLUSIVE_CHIPS.includes(chip)) {
@@ -3300,6 +3398,7 @@ function DetailsStep({
   };
 
   const toggleIndividual = (id: string) => {
+    if (allRecipientsActive) return; // locked while "All Recipients" is selected
     const next = selectedIndividualIds.includes(id)
       ? selectedIndividualIds.filter((x) => x !== id)
       : [...selectedIndividualIds, id];
@@ -3451,8 +3550,12 @@ function DetailsStep({
               <GroupRow
                 key={g}
                 label={g}
-                selected={audience.includes(g)}
+                selected={
+                  audience.includes(g) ||
+                  (allRecipientsActive && g !== "Assign later")
+                }
                 variant={g === "Assign later" ? "yellow" : "default"}
+                disabled={allRecipientsActive && g !== "All Recipients"}
                 onToggle={() => toggleGroup(g)}
               />
             ))}
@@ -3461,7 +3564,8 @@ function DetailsStep({
           <button
             type="button"
             onClick={() => setShowIndividuals((s) => !s)}
-            className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
+            disabled={allRecipientsActive}
+            className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               height: 36,
               borderRadius: 8,
@@ -3474,15 +3578,15 @@ function DetailsStep({
               color: "#0A0A0A",
             }}
           >
-            {showIndividuals ? (
+            {individualsOpen ? (
               <ChevronUp className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
             ) : (
               <ChevronDown className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
             )}
-            {showIndividuals ? "Hide Individuals" : "Show Individuals"}
+            {individualsOpen ? "Hide Individuals" : "Show Individuals"}
           </button>
 
-          {showIndividuals && (
+          {individualsOpen && (
             <div className="flex flex-col gap-2">
               <div
                 className="w-full flex items-center gap-2"
@@ -3540,13 +3644,20 @@ function DetailsStep({
                   </p>
                 ) : (
                   filteredIndividuals.map((p) => {
-                    const selected = selectedIndividualIds.includes(p.id);
+                    const selected =
+                      allRecipientsActive ||
+                      selectedIndividualIds.includes(p.id);
                     return (
                       <button
                         type="button"
                         key={p.id}
                         onClick={() => toggleIndividual(p.id)}
-                        className="w-full flex items-center gap-2 cursor-pointer"
+                        disabled={allRecipientsActive}
+                        className={`w-full flex items-center gap-2 ${
+                          allRecipientsActive
+                            ? "cursor-not-allowed"
+                            : "cursor-pointer"
+                        }`}
                         style={{
                           borderRadius: 8,
                           background: selected ? "#E0E7FF" : "#FFFFFF",
@@ -3554,6 +3665,7 @@ function DetailsStep({
                             ? "1px solid #4F46E5"
                             : "1px solid transparent",
                           padding: "8px",
+                          opacity: allRecipientsActive ? 0.7 : 1,
                         }}
                       >
                         <GroupCheckBox checked={selected} variant="default" />
