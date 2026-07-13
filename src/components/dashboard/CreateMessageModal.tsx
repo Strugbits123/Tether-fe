@@ -634,38 +634,38 @@ function ReadOnlyMessage({
             >
               {headerTitle}
             </h2>
-            {recipientCount !== undefined && (
-              <div
-                className="mt-1.5 flex items-center gap-1.5"
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "#6B7280",
-                }}
-              >
-                <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
-                <span>
-                  {recipientCount}{" "}
-                  {recipientCount === 1 ? "recipient" : "recipients"}
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Body */}
           <div className="px-6 pt-6 flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <span
-                style={{
-                  fontWeight: 500,
-                  fontSize: 14,
-                  lineHeight: "20px",
-                  color: "#0A0A0A",
-                }}
-              >
-                Recipients
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  style={{
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: "20px",
+                    color: "#0A0A0A",
+                  }}
+                >
+                  Recipients
+                </span>
+                {recipientCount !== undefined && (
+                  <span
+                    className="flex items-center gap-1"
+                    style={{
+                      fontFamily: "Inter, sans-serif",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#6B7280",
+                    }}
+                  >
+                    <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+                    {recipientCount}{" "}
+                    {recipientCount === 1 ? "recipient" : "recipients"}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {audience.map((a) => (
                   <span
