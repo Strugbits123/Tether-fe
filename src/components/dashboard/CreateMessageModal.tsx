@@ -147,8 +147,15 @@ export function buildAssignments(
 ): Assignment[] {
   // "Assign later" stands alone — send only that.
   if (audience.includes("Assign later")) return [{ scope: "assign_later" }];
-  // "All Recipients" already covers every group and individual — send only that.
-  if (audience.includes("All Recipients")) return [{ scope: "all" }];
+  // "All Recipients" already covers every group and individual — send only that,
+  // but keep the Release Manager (a separate delivery target) if selected.
+  if (audience.includes("All Recipients")) {
+    const out: Assignment[] = [{ scope: "all" }];
+    if (audience.includes("Release Manager")) {
+      out.push({ scope: "release_manager" });
+    }
+    return out;
+  }
 
   const result: Assignment[] = [];
   for (const chip of audience) {
@@ -182,7 +189,23 @@ function errorMessage(e: unknown, fallback: string): string {
   return toSentenceCase(e instanceof Error ? e.message : fallback);
 }
 
-export default function CreateMessageModal({
+/**
+ * Thin wrapper: renders nothing while closed, and keys the stateful inner modal
+ * by the message id / step so opening (or switching to) a different message
+ * remounts it — state is initialized from props on mount instead of being reset
+ * inside an effect.
+ */
+export default function CreateMessageModal(props: CreateMessageModalProps) {
+  if (!props.open) return null;
+  return (
+    <MessageModalInner
+      key={`${props.initialMessage?.id ?? "new"}:${props.initialStep ?? "setup"}`}
+      {...props}
+    />
+  );
+}
+
+function MessageModalInner({
   open,
   onClose,
   headerTitle = "Create Your First Message",
@@ -223,20 +246,9 @@ export default function CreateMessageModal({
   // submit state for the text flow
   const [submitting, setSubmitting] = useState(false);
 
-  // Resync if a different message is opened for editing
-  useEffect(() => {
-    if (!open) return;
-    setAudience(initialMessage?.audience ?? ["All Recipients"]);
-    setSelectedIndividualIds(initialMessage?.selectedIndividualIds ?? []);
-    setMessageType(
-      initialMessageType ?? initialMessage?.messageType ?? "video",
-    );
-    setTitle(initialTitle ?? initialMessage?.title ?? "");
-    setNotes(initialMessage?.notes ?? "");
-    setBody(initialMessage?.body ?? "");
-    setStep(initialStep ?? "setup");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialMessage?.id]);
+  // State above is initialized from props on mount. The exported wrapper keys
+  // this inner component by message/open, so a different message (or reopening)
+  // remounts and re-initializes — no resync effect needed.
 
   // Load real recipients when the modal opens.
   useEffect(() => {
@@ -3358,11 +3370,9 @@ function DetailsStep({
   // individuals are mutually exclusive, matching the document modal. The existing
   // chip exclusivity ('Assign later') is preserved via the chip helper.
   const allRecipientsActive = audience.includes("All Recipients");
-
-  useEffect(() => {
-    if (allRecipientsActive) setShowIndividuals(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allRecipientsActive]);
+  // Individuals panel is force-open while "All Recipients" is active (every
+  // individual is implicitly selected) — derived, not stored in state.
+  const individualsOpen = allRecipientsActive || showIndividuals;
 
   const toggleGroup = (chip: string) => {
     if (chip === "All Recipients") {
@@ -3554,7 +3564,8 @@ function DetailsStep({
           <button
             type="button"
             onClick={() => setShowIndividuals((s) => !s)}
-            className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50"
+            disabled={allRecipientsActive}
+            className="w-full flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               height: 36,
               borderRadius: 8,
@@ -3567,15 +3578,15 @@ function DetailsStep({
               color: "#0A0A0A",
             }}
           >
-            {showIndividuals ? (
+            {individualsOpen ? (
               <ChevronUp className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
             ) : (
               <ChevronDown className="w-4 h-4 text-[#0A0A0A]" strokeWidth={2} />
             )}
-            {showIndividuals ? "Hide Individuals" : "Show Individuals"}
+            {individualsOpen ? "Hide Individuals" : "Show Individuals"}
           </button>
 
-          {showIndividuals && (
+          {individualsOpen && (
             <div className="flex flex-col gap-2">
               <div
                 className="w-full flex items-center gap-2"

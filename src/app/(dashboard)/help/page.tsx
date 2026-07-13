@@ -1589,12 +1589,15 @@ function ModalHeader({ title, subtitle }: { title: string; subtitle: string }) {
 function FieldLabel({
   children,
   required,
+  htmlFor,
 }: {
   children: React.ReactNode;
   required?: boolean;
+  htmlFor?: string;
 }) {
   return (
     <label
+      htmlFor={htmlFor}
       style={{
         fontFamily: "Inter, sans-serif",
         fontWeight: 500,
@@ -1606,12 +1609,41 @@ function FieldLabel({
     >
       {children}
       {required && (
-        <span style={{ color: "#E7000B" }} aria-hidden="true">
-          {" "}
-          *
-        </span>
+        <>
+          <span style={{ color: "#E7000B" }} aria-hidden="true">
+            {" "}
+            *
+          </span>
+          {/* Announced to screen readers since the visual asterisk is hidden. */}
+          <span className="sr-only"> (required)</span>
+        </>
       )}
     </label>
+  );
+}
+
+/**
+ * Labeled form field: generates a stable id, associates the label to the
+ * control, and hands `id`/`required` to the control via render prop so both the
+ * association and the required state reach assistive tech.
+ */
+function Field({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: (props: { id: string; required: boolean }) => React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col" style={{ gap: 8 }}>
+      <FieldLabel htmlFor={id} required={required}>
+        {label}
+      </FieldLabel>
+      {children({ id, required })}
+    </div>
   );
 }
 
@@ -1633,13 +1665,20 @@ function TextArea({
   placeholder,
   value,
   onChange,
+  id,
+  required,
 }: {
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
+  id?: string;
+  required?: boolean;
 }) {
   return (
     <textarea
+      id={id}
+      required={required}
+      aria-required={required}
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
@@ -1649,81 +1688,61 @@ function TextArea({
   );
 }
 
+// Native <select> for full keyboard + screen-reader support (label
+// association, required semantics) rather than a custom button/list combobox.
 function Dropdown({
   placeholder,
   options,
   value,
   onChange,
+  id,
+  required,
 }: {
   placeholder: string;
   options: string[];
   value: string;
   onChange: (v: string) => void;
+  id?: string;
+  required?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center justify-between cursor-pointer"
-        style={{ ...FIELD_STYLE, height: 36, padding: "8px 12px" }}
+      <select
+        id={id}
+        required={required}
+        aria-required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full cursor-pointer appearance-none"
+        style={{
+          ...FIELD_STYLE,
+          height: 36,
+          padding: "8px 32px 8px 12px",
+          fontWeight: 500,
+          color: value ? "#0A0A0A" : "#717182",
+        }}
       >
-        <span
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 500,
-            fontSize: 14,
-            lineHeight: "20px",
-            letterSpacing: "-0.15px",
-            color: value ? "#0A0A0A" : "#717182",
-          }}
-        >
-          {value || placeholder}
-        </span>
-        <ChevronDown
-          style={{ width: 16, height: 16, flexShrink: 0 }}
-          color="#717182"
-          strokeWidth={2}
-        />
-      </button>
-      {open && (
-        <div
-          className="absolute left-0 right-0 z-10 overflow-hidden"
-          style={{
-            marginTop: 4,
-            borderRadius: 8,
-            border: "1px solid rgba(0,0,0,0.1)",
-            background: "#FFFFFF",
-            boxShadow:
-              "0px 10px 15px -3px rgba(0,0,0,0.1), 0px 4px 6px -4px rgba(0,0,0,0.1)",
-          }}
-        >
-          {options.map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => {
-                onChange(o);
-                setOpen(false);
-              }}
-              className="flex w-full text-left cursor-pointer hover:bg-gray-50"
-              style={{
-                padding: "8px 12px",
-                background: value === o ? "#F3F3F5" : "transparent",
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: "20px",
-                letterSpacing: "-0.15px",
-                color: "#0A0A0A",
-              }}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-      )}
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((o) => (
+          <option key={o} value={o} style={{ color: "#0A0A0A" }}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute"
+        style={{
+          width: 16,
+          height: 16,
+          right: 12,
+          top: "50%",
+          transform: "translateY(-50%)",
+        }}
+        color="#717182"
+        strokeWidth={2}
+      />
     </div>
   );
 }
@@ -1931,23 +1950,29 @@ function FeedbackModal({
         subtitle="We'd love to hear your thoughts about Tether"
       />
       <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel required>Feedback type</FieldLabel>
-          <Dropdown
-            placeholder="Select a type..."
-            options={["Positive Feedback", "Suggestion", "Concern", "Question"]}
-            value={type}
-            onChange={setType}
-          />
-        </div>
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel required>Your feedback</FieldLabel>
-          <TextArea
-            placeholder="Share your thoughts with us..."
-            value={feedback}
-            onChange={setFeedback}
-          />
-        </div>
+        <Field label="Feedback type" required>
+          {({ id, required }) => (
+            <Dropdown
+              id={id}
+              required={required}
+              placeholder="Select a type..."
+              options={["Positive Feedback", "Suggestion", "Concern", "Question"]}
+              value={type}
+              onChange={setType}
+            />
+          )}
+        </Field>
+        <Field label="Your feedback" required>
+          {({ id, required }) => (
+            <TextArea
+              id={id}
+              required={required}
+              placeholder="Share your thoughts with us..."
+              value={feedback}
+              onChange={setFeedback}
+            />
+          )}
+        </Field>
         <div className="flex flex-col" style={{ gap: 8 }}>
           <FieldLabel>Screenshot (optional)</FieldLabel>
           <UploadButton file={screenshot} onFile={setScreenshot} />
@@ -2010,22 +2035,28 @@ function FeatureModal({
         subtitle="Help us improve Tether by sharing your ideas"
       />
       <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel required>Tell us about the feature you want</FieldLabel>
-          <TextArea
-            placeholder="Describe the feature you'd like to see..."
-            value={feature}
-            onChange={setFeature}
-          />
-        </div>
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel required>How would this feature help you?</FieldLabel>
-          <TextArea
-            placeholder="Explain how this would improve your experience..."
-            value={benefit}
-            onChange={setBenefit}
-          />
-        </div>
+        <Field label="Tell us about the feature you want" required>
+          {({ id, required }) => (
+            <TextArea
+              id={id}
+              required={required}
+              placeholder="Describe the feature you'd like to see..."
+              value={feature}
+              onChange={setFeature}
+            />
+          )}
+        </Field>
+        <Field label="How would this feature help you?" required>
+          {({ id, required }) => (
+            <TextArea
+              id={id}
+              required={required}
+              placeholder="Explain how this would improve your experience..."
+              value={benefit}
+              onChange={setBenefit}
+            />
+          )}
+        </Field>
         <ModalFooter
           onCancel={onClose}
           onSubmit={handleSubmit}
@@ -2089,30 +2120,36 @@ function BugModal({
         subtitle="Help us fix issues by reporting what's not working"
       />
       <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel required>Where did you encounter this bug?</FieldLabel>
-          <Dropdown
-            placeholder="Select a location..."
-            options={[
-              "Dashboard/Portal",
-              "Billing",
-              "Messages",
-              "Photos",
-              "Memoir",
-              "Other",
-            ]}
-            value={location}
-            onChange={setLocation}
-          />
-        </div>
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel required>Describe the bug</FieldLabel>
-          <TextArea
-            placeholder="What happened? What did you expect to happen?"
-            value={description}
-            onChange={setDescription}
-          />
-        </div>
+        <Field label="Where did you encounter this bug?" required>
+          {({ id, required }) => (
+            <Dropdown
+              id={id}
+              required={required}
+              placeholder="Select a location..."
+              options={[
+                "Dashboard/Portal",
+                "Billing",
+                "Messages",
+                "Photos",
+                "Memoir",
+                "Other",
+              ]}
+              value={location}
+              onChange={setLocation}
+            />
+          )}
+        </Field>
+        <Field label="Describe the bug" required>
+          {({ id, required }) => (
+            <TextArea
+              id={id}
+              required={required}
+              placeholder="What happened? What did you expect to happen?"
+              value={description}
+              onChange={setDescription}
+            />
+          )}
+        </Field>
         <div className="flex flex-col" style={{ gap: 8 }}>
           <FieldLabel>Screenshot (optional)</FieldLabel>
           <UploadButton file={screenshot} onFile={setScreenshot} />
