@@ -35,17 +35,8 @@ interface AddRecipientsModalProps {
   } | null;
 }
 
-const RELATIONSHIP_OPTIONS = [
-  "Family",
-  "Spouse",
-  "Child",
-  "Parent",
-  "Sibling",
-  "Friend",
-  "Colleague",
-  "Lawyer",
-  "Other",
-];
+// Standardized recipient relationships (map 1:1 to the assignment groups).
+const RELATIONSHIP_OPTIONS = ["Family", "Friend", "Other"];
 
 export default function AddRecipientsModal({
   open,

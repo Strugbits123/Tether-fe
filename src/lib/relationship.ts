@@ -15,16 +15,19 @@ const RELEASE_MANAGER_VALUES: Record<string, string> = {
   Other: 'other',
 }
 
-// Recipient enum: family | friend | partner | colleague | other (no attorney)
+// Recipient enum is standardized to family | friend | other. The dropdown now
+// only offers those three, but legacy/other labels are still mapped defensively
+// so no caller can submit an out-of-enum value.
 const RECIPIENT_VALUES: Record<string, string> = {
   Family: 'family',
-  Spouse: 'partner',
+  Spouse: 'family',
   Child: 'family',
   Parent: 'family',
   Sibling: 'family',
   Friend: 'friend',
-  Colleague: 'colleague',
+  Colleague: 'other',
   Lawyer: 'other',
+  Partner: 'other',
   Other: 'other',
 }
 

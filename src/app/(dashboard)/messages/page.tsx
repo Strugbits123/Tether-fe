@@ -23,6 +23,8 @@ import AssignRecipientsModal from "@/components/dashboard/AssignRecipientsModal"
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/context/ToastContext";
 import { withRetry } from "@/lib/utils/retry";
+import { getRecipients } from "@/lib/api/recipients";
+import { countRecipients } from "@/lib/utils/assignments";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 import VideoPlayer from "@/components/video/VideoPlayer";
 import MessagePlayerHeader from "@/components/messages/MessagePlayerHeader";
@@ -920,6 +922,35 @@ function PlaybackModal({
     token: string;
   } | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [recipientCount, setRecipientCount] = useState<number | undefined>(
+    undefined,
+  );
+
+  // Resolve the distinct people this message reaches (+RM). The list row has no
+  // assignments, so fetch the full message + recipients and compute it.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const [full, recipients] = await Promise.all([
+          getMessage(token, message.id),
+          getRecipients(token),
+        ]);
+        if (active) {
+          setRecipientCount(
+            countRecipients(full.assignments ?? [], recipients),
+          );
+        }
+      } catch {
+        /* count is non-critical — leave it hidden */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [message.id]);
 
   useEffect(() => {
     let active = true;
@@ -996,8 +1027,8 @@ function PlaybackModal({
           >
             <MessagePlayerHeader
               type={message.type === "video" ? "video" : "audio"}
-              recipientName={recipientLabel(message)}
               messageTitle={message.title}
+              recipientCount={recipientCount}
               onClose={onClose}
             />
 

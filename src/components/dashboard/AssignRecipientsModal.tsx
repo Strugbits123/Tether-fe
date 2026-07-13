@@ -1,9 +1,14 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Search, Users, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
+import {
+  countFromSelection,
+  selectGroup,
+  toggleIndividual as toggleIndividualSelection,
+} from '@/lib/utils/assignments'
 
 interface AssignRecipientsModalProps {
   open: boolean
@@ -84,26 +89,23 @@ export default function AssignRecipientsModal({
 
   if (!open) return null
 
-  const allRecipientsActive = groups.includes('All Recipients')
+  const recipientCount = countFromSelection(groups, individualIds, recipients)
 
-  useEffect(() => {
-    if (allRecipientsActive) setShowIndividuals(true)
-  }, [allRecipientsActive])
-
+  // All selection behavior comes from the shared helpers so it matches every
+  // other picker: a group populates its individuals, editing individuals drops
+  // the group chip (keeping picks), Release Manager toggles independently.
   const toggleGroup = (g: string) => {
-    if (g === 'All Recipients') {
-      setGroups(allRecipientsActive ? [] : GROUPS)
-      if (!allRecipientsActive) setIndividualIds([])
-      return
-    }
-    if (allRecipientsActive) return
-    setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
+    const next = selectGroup(g, { groups, individuals: individualIds }, recipients)
+    setGroups(next.groups)
+    setIndividualIds(next.individuals)
   }
   const toggleIndividual = (id: string) => {
-    if (allRecipientsActive) return
-    setIndividualIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
+    const next = toggleIndividualSelection(id, {
+      groups,
+      individuals: individualIds,
+    })
+    setGroups(next.groups)
+    setIndividualIds(next.individuals)
   }
 
   const filtered = recipients.filter((p) =>
@@ -172,20 +174,32 @@ export default function AssignRecipientsModal({
             >
               {messageTitle}
             </p>
+            <div
+              className="mt-2 flex items-center gap-1.5"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontSize: 13,
+                fontWeight: 500,
+                color: '#6B7280',
+              }}
+            >
+              <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+              <span>
+                {recipientCount} {recipientCount === 1 ? 'recipient' : 'recipients'}
+              </span>
+            </div>
           </div>
 
           {/* Group rows */}
           <div className="flex flex-col gap-2 px-5 sm:px-6">
             {GROUPS.map((g) => {
-              const selected = groups.includes(g) || allRecipientsActive
-              const locked = allRecipientsActive && g !== 'All Recipients'
+              const selected = groups.includes(g)
               return (
                 <button
                   key={g}
                   type="button"
                   onClick={() => toggleGroup(g)}
-                  disabled={locked}
-                  className={`w-full flex items-center ${locked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                  className="w-full flex items-center cursor-pointer"
                   style={{
                     minHeight: 42,
                     borderRadius: 10,
@@ -193,7 +207,6 @@ export default function AssignRecipientsModal({
                     background: selected ? '#E0E7FF' : '#F4F4F4',
                     padding: '12px',
                     gap: 12,
-                    opacity: locked ? 0.7 : 1,
                   }}
                 >
                   <CheckBox checked={selected} />
@@ -290,22 +303,18 @@ export default function AssignRecipientsModal({
                     </p>
                   ) : (
                     filtered.map((p) => {
-                      const selected = allRecipientsActive || individualIds.includes(p.id)
+                      const selected = individualIds.includes(p.id)
                       return (
                         <button
                           type="button"
                           key={p.id}
                           onClick={() => toggleIndividual(p.id)}
-                          disabled={allRecipientsActive}
-                          className={`w-full flex items-center gap-2 ${
-                            allRecipientsActive ? 'cursor-not-allowed' : 'cursor-pointer'
-                          }`}
+                          className="w-full flex items-center gap-2 cursor-pointer"
                           style={{
                             borderRadius: 8,
                             background: selected ? '#E0E7FF' : '#FFFFFF',
                             border: selected ? '1px solid #4F46E5' : '1px solid transparent',
                             padding: 8,
-                            opacity: allRecipientsActive ? 0.7 : 1,
                           }}
                         >
                           <CheckBox checked={selected} />

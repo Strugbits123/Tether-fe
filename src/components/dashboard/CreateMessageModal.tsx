@@ -24,6 +24,7 @@ import {
   Search,
   Strikethrough,
   Underline,
+  Users,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +37,7 @@ import {
   confirmAudioUpload,
 } from "@/lib/api/messages";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { countFromSelection } from "@/lib/utils/assignments";
 import AudioRecordingWaveform from "@/components/audio/AudioRecordingWaveform";
 import AudioPlaybackWaveform from "@/components/audio/AudioPlaybackWaveform";
 import AudioRecorder from "@/components/audio/AudioRecorder";
@@ -504,6 +506,10 @@ function ReadOnlyMessage({
   headerTitle: string;
   onClose: () => void;
 }) {
+  const [recipientCount, setRecipientCount] = useState<number | undefined>(
+    undefined,
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -516,6 +522,32 @@ function ReadOnlyMessage({
       document.body.style.overflow = prev;
     };
   }, [onClose]);
+
+  // Resolve the distinct recipient count (+RM) from the message's audience.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const recipients = await getRecipients(token);
+        if (active) {
+          setRecipientCount(
+            countFromSelection(
+              message.audience,
+              message.selectedIndividualIds ?? [],
+              recipients,
+            ),
+          );
+        }
+      } catch {
+        /* non-critical */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [message.audience, message.selectedIndividualIds]);
 
   const typeLabel =
     message.messageType === "write"
@@ -590,6 +622,23 @@ function ReadOnlyMessage({
             >
               {headerTitle}
             </h2>
+            {recipientCount !== undefined && (
+              <div
+                className="mt-1.5 flex items-center gap-1.5"
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#6B7280",
+                }}
+              >
+                <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+                <span>
+                  {recipientCount}{" "}
+                  {recipientCount === 1 ? "recipient" : "recipients"}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Body */}

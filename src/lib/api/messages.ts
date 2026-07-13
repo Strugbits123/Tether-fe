@@ -67,6 +67,22 @@ export function assignmentsToAudience(assignments: MessageAssignment[] = []): {
         break
     }
   }
+  // A covering group (all/family/friends/others) owns its members, so drop any
+  // mirrored individual rows stored alongside it — otherwise both the group and
+  // "Choose individuals" would show selected on first load in edit mode.
+  const hasCoveringGroup = audience.some(
+    (a) =>
+      a === 'All Recipients' ||
+      a === 'All Family' ||
+      a === 'All Friends' ||
+      a === 'All Others',
+  )
+  if (hasCoveringGroup) {
+    return {
+      audience: audience.filter((a) => a !== 'Choose individuals'),
+      selectedIndividualIds: [],
+    }
+  }
   return { audience, selectedIndividualIds }
 }
 
