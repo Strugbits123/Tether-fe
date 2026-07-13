@@ -125,7 +125,7 @@ const CATEGORIES: FaqCategory[] = [
     lightBg: "#F0FDFA",
   },
   {
-    label: "Documents & Vault",
+    label: "Docs & Files",
     Icon: FileText,
     color: "#155DFC",
     lightBg: "#EFF6FF",
@@ -154,7 +154,12 @@ const CATEGORIES: FaqCategory[] = [
     color: "#4F39F6",
     lightBg: "#EEF2FF",
   },
-  { label: "Notifications", Icon: Bell, color: "#D08700", lightBg: "#FEFCE8" },
+  {
+    label: "Notifications & Memoir (My Story)",
+    Icon: Bell,
+    color: "#D08700",
+    lightBg: "#FEFCE8",
+  },
   {
     label: "Legal & Compliance",
     Icon: Globe,
@@ -209,13 +214,13 @@ const FAQS: Faq[] = [
   },
   {
     question: "How do I upload documents to my vault?",
-    category: "Documents & Vault",
+    category: "Docs & Files",
     answer:
       "Open Docs & Files and click Upload Files. You can drag and drop or browse for files, then assign them to recipients.",
   },
   {
     question: "What file types can I store in the vault?",
-    category: "Documents & Vault",
+    category: "Docs & Files",
     answer:
       "Most common document, image, audio, and video formats are supported, including PDF, DOCX, JPG, PNG, MP3, and MP4.",
   },
@@ -263,13 +268,13 @@ const FAQS: Faq[] = [
   },
   {
     question: "How do I manage my notification preferences?",
-    category: "Notifications",
+    category: "Notifications & Memoir (My Story)",
     answer:
       "Visit Settings → Notifications to choose which email and in-app alerts you'd like to receive.",
   },
   {
     question: "Will I be notified when a recipient views a message?",
-    category: "Notifications",
+    category: "Notifications & Memoir (My Story)",
     answer:
       "Yes, you can opt in to receive a notification whenever a recipient opens a released message.",
   },
@@ -1581,7 +1586,13 @@ function ModalHeader({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({
+  children,
+  required,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) {
   return (
     <label
       style={{
@@ -1594,6 +1605,12 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      {required && (
+        <span style={{ color: "#E7000B" }} aria-hidden="true">
+          {" "}
+          *
+        </span>
+      )}
     </label>
   );
 }
@@ -1915,7 +1932,7 @@ function FeedbackModal({
       />
       <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
         <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel>Feedback type</FieldLabel>
+          <FieldLabel required>Feedback type</FieldLabel>
           <Dropdown
             placeholder="Select a type..."
             options={["Positive Feedback", "Suggestion", "Concern", "Question"]}
@@ -1924,7 +1941,7 @@ function FeedbackModal({
           />
         </div>
         <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel>Your feedback</FieldLabel>
+          <FieldLabel required>Your feedback</FieldLabel>
           <TextArea
             placeholder="Share your thoughts with us..."
             value={feedback}
@@ -1994,7 +2011,7 @@ function FeatureModal({
       />
       <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
         <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel>Tell us about the feature you want</FieldLabel>
+          <FieldLabel required>Tell us about the feature you want</FieldLabel>
           <TextArea
             placeholder="Describe the feature you'd like to see..."
             value={feature}
@@ -2002,7 +2019,7 @@ function FeatureModal({
           />
         </div>
         <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel>How would this feature help you?</FieldLabel>
+          <FieldLabel required>How would this feature help you?</FieldLabel>
           <TextArea
             placeholder="Explain how this would improve your experience..."
             value={benefit}
@@ -2073,7 +2090,7 @@ function BugModal({
       />
       <div className="flex flex-col" style={{ paddingTop: 16, gap: 16 }}>
         <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel>Where did you encounter this bug?</FieldLabel>
+          <FieldLabel required>Where did you encounter this bug?</FieldLabel>
           <Dropdown
             placeholder="Select a location..."
             options={[
@@ -2089,7 +2106,7 @@ function BugModal({
           />
         </div>
         <div className="flex flex-col" style={{ gap: 8 }}>
-          <FieldLabel>Describe the bug</FieldLabel>
+          <FieldLabel required>Describe the bug</FieldLabel>
           <TextArea
             placeholder="What happened? What did you expect to happen?"
             value={description}
