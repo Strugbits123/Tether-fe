@@ -1,9 +1,14 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Search, Users, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
+import {
+  countFromSelection,
+  selectGroup,
+  toggleIndividual as toggleIndividualSelection,
+} from '@/lib/utils/assignments'
 
 interface AssignRecipientsModalProps {
   open: boolean
@@ -84,12 +89,24 @@ export default function AssignRecipientsModal({
 
   if (!open) return null
 
-  const toggleGroup = (g: string) =>
-    setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
-  const toggleIndividual = (id: string) =>
-    setIndividualIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
+  const recipientCount = countFromSelection(groups, individualIds, recipients)
+
+  // All selection behavior comes from the shared helpers so it matches every
+  // other picker: a group populates its individuals, editing individuals drops
+  // the group chip (keeping picks), Release Manager toggles independently.
+  const toggleGroup = (g: string) => {
+    const next = selectGroup(g, { groups, individuals: individualIds }, recipients)
+    setGroups(next.groups)
+    setIndividualIds(next.individuals)
+  }
+  const toggleIndividual = (id: string) => {
+    const next = toggleIndividualSelection(id, {
+      groups,
+      individuals: individualIds,
+    })
+    setGroups(next.groups)
+    setIndividualIds(next.individuals)
+  }
 
   const filtered = recipients.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -157,6 +174,20 @@ export default function AssignRecipientsModal({
             >
               {messageTitle}
             </p>
+            <div
+              className="mt-2 flex items-center gap-1.5"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontSize: 13,
+                fontWeight: 500,
+                color: '#6B7280',
+              }}
+            >
+              <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+              <span>
+                {recipientCount} {recipientCount === 1 ? 'recipient' : 'recipients'}
+              </span>
+            </div>
           </div>
 
           {/* Group rows */}
