@@ -122,7 +122,7 @@ export default function AudioPlayer({
       <div className="flex items-center" style={{ gap: 20 }}>
         {/* Vinyl record */}
         <div
-          className={`flex-shrink-0 vinyl-disc ${isPlaying ? "vinyl-spin" : ""}`}
+          className={`flex-shrink-0 vinyl-disc vinyl-spin ${isPlaying ? "vinyl-playing" : "vinyl-paused"}`}
           style={{
             position: "relative",
             width: 88,
@@ -341,6 +341,10 @@ export default function AudioPlayer({
         }
         .vinyl-spin {
           animation: vinyl-rotate 3s linear infinite;
+          animation-play-state: paused;
+        }
+        .vinyl-spin.vinyl-playing {
+          animation-play-state: running;
         }
         .seek-range {
           -webkit-appearance: none;

@@ -682,6 +682,9 @@ function MessageCard({
   const isPlayable =
     (item.type === "video" || item.type === "audio") &&
     item.processing_status === "ready";
+  const isReadable =
+    item.type === "text" && item.processing_status === "ready";
+  const isInteractive = isPlayable || isReadable;
 
   return (
     <div
@@ -696,10 +699,14 @@ function MessageCard({
       {/* Icon tile */}
       <button
         type="button"
-        onClick={isPlayable ? onPlay : undefined}
-        aria-label={isPlayable ? "Play message" : undefined}
+        onClick={
+          isPlayable ? onPlay : isReadable ? onRead : undefined
+        }
+        aria-label={
+          isPlayable ? "Play message" : isReadable ? "Read message" : undefined
+        }
         className={`flex items-center justify-center flex-shrink-0 relative ${
-          isPlayable ? "cursor-pointer group" : "cursor-default"
+          isInteractive ? "cursor-pointer group" : "cursor-default"
         }`}
         style={{
           width: 80,
@@ -708,13 +715,29 @@ function MessageCard({
           background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
         }}
       >
-        <Icon className="w-8 h-8" color="#4F39F6" strokeWidth={2} />
+        <Icon
+          className={`w-8 h-8 ${
+            isReadable
+              ? "transition-transform duration-200 group-hover:opacity-0 group-hover:scale-90"
+              : ""
+          }`}
+          color="#4F39F6"
+          strokeWidth={2}
+        />
         {isPlayable && (
           <span
             className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             style={{ borderRadius: 10, background: "rgba(79,57,246,0.85)" }}
           >
             <Play className="w-7 h-7 text-white fill-white" strokeWidth={2} />
+          </span>
+        )}
+        {isReadable && (
+          <span
+            className="absolute inset-0 flex items-center justify-center opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200"
+            style={{ borderRadius: 10, background: "rgba(79,57,246,0.85)" }}
+          >
+            <Eye className="w-7 h-7 text-white" strokeWidth={2} />
           </span>
         )}
       </button>
