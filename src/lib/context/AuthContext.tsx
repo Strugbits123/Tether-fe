@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
 import { getActiveContext, getMemberships, switchContext } from '@/lib/api/memberships'
+import { acceptInvitation } from '@/lib/api/invitations'
 import { identifyUser, resetIdentity, track } from '@/lib/posthog/analytics'
 import type { UserProfile } from '@/lib/api/users'
 import type { Session, User } from '@supabase/supabase-js'
@@ -12,6 +13,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 export type { UserProfile }
 
 const ACTIVE_MEMBERSHIP_KEY = 'active_membership'
+const PENDING_INVITE_KEY = 'pending_invite_token'
 
 interface AuthContextValue {
   user: User | null
@@ -99,6 +101,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [supabase, stopRetry])
 
+  // Finalizes a pending invitation acceptance once a session exists. The
+  // invite-accept page stores the token here (instead of relying on it
+  // surviving through query params) because password/magic-link/OAuth signup
+  // all redirect through different paths — localStorage is the one thing
+  // that's guaranteed to still be there once we land back with a session.
+  // Best-effort: any failure just clears the token so we don't retry forever.
+  const finalizePendingInvite = useCallback(async (token: string) => {
+    const inviteToken = window.localStorage.getItem(PENDING_INVITE_KEY)
+    if (!inviteToken) return
+    window.localStorage.removeItem(PENDING_INVITE_KEY)
+    try {
+      await acceptInvitation(inviteToken, token)
+    } catch {
+      // Nothing more we can do client-side — the user can re-open the
+      // original invitation email link if this genuinely failed.
+    }
+  }, [])
+
   // Resolves which membership is active for this session, best-effort: any
   // failure (endpoint not deployed yet, network hiccup) is swallowed so it can
   // never block sign-in. Runs once per session — guarded by resolvedRef.
@@ -143,17 +163,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.access_token) {
         loadProfile()
+        await finalizePendingInvite(session.access_token)
         resolveMembership(session.access_token)
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
@@ -161,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // loadProfile() identifies + enriches the PostHog person once /users/me
         // resolves (see identifyUser), so no minimal identify is needed here.
         loadProfile()
+        await finalizePendingInvite(session.access_token)
         resolveMembership(session.access_token)
       } else {
         stopRetry()

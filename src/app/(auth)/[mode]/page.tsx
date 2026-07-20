@@ -88,6 +88,25 @@ function MainAuthForm({
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // Invitation acceptance: /invitations/accept/:token redirects here with
+  // these params when the invitee isn't signed up yet. Persist the token so
+  // it survives the whole flow (password, magic link, or OAuth), and prefill
+  // the name it already collected so the invitee doesn't retype it.
+  const inviteToken = searchParams.get('invite_token')
+  useEffect(() => {
+    if (!inviteToken) return
+    window.localStorage.setItem('pending_invite_token', inviteToken)
+  }, [inviteToken])
+
+  useEffect(() => {
+    const name = searchParams.get('name')
+    if (!name || !isSignUp) return
+    const [first, ...rest] = name.trim().split(/\s+/)
+    setFirstName((prev) => prev || first || '')
+    setLastName((prev) => prev || rest.join(' '))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const DUPLICATE_EMAIL_MESSAGE =
     'An account with this email already exists. Please sign in or reset your password.'
 
@@ -129,6 +148,7 @@ function MainAuthForm({
             password,
             first_name: firstName,
             last_name: lastName,
+            ...(inviteToken ? { invite_token: inviteToken } : {}),
             ...collectSignupAttribution(),
           })
         } catch (err) {
