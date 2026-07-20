@@ -1,12 +1,16 @@
 'use client'
 
-import { FIRST_NAME } from './constants'
-
 /** Step 0 — the "Ready to begin?" landing before a release is initiated. */
 export default function IntroView({
+  firstName,
+  canInitiate,
+  hasGuardians,
   onStart,
   onRequestGuardian,
 }: {
+  firstName: string
+  canInitiate: boolean
+  hasGuardians: boolean
   onStart: () => void
   onRequestGuardian: () => void
 }) {
@@ -31,7 +35,7 @@ export default function IntroView({
             color: '#3730A3',
           }}
         >
-          {FIRST_NAME} trusted you with this. When you are ready, start the
+          {firstName} trusted you with this. When you are ready, start the
           release below.
         </p>
       </div>
@@ -70,14 +74,15 @@ export default function IntroView({
           }}
         >
           Content will be delivered in 5 days after initiation. All parties will
-          be notified immediately. {FIRST_NAME}, if able, can cancel at any time
+          be notified immediately. {firstName}, if able, can cancel at any time
           during the waiting period if the release was initiated in error.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
           <button
             type="button"
             onClick={onStart}
-            className="flex items-center justify-center cursor-pointer hover:opacity-90 whitespace-nowrap"
+            disabled={!canInitiate}
+            className="flex items-center justify-center cursor-pointer hover:opacity-90 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               height: 46,
               padding: '0 24px',
@@ -93,25 +98,27 @@ export default function IntroView({
           >
             Start Release Plan
           </button>
-          <button
-            type="button"
-            onClick={onRequestGuardian}
-            className="flex items-center justify-center cursor-pointer hover:opacity-90 whitespace-nowrap"
-            style={{
-              height: 46,
-              padding: '0 24px',
-              borderRadius: 10,
-              background: '#4F46E5',
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 600,
-              fontSize: 15,
-              lineHeight: '22.5px',
-              letterSpacing: '-0.23px',
-              color: '#FFFFFF',
-            }}
-          >
-            Request Guardian to Start Release
-          </button>
+          {hasGuardians && (
+            <button
+              type="button"
+              onClick={onRequestGuardian}
+              className="flex items-center justify-center cursor-pointer hover:opacity-90 whitespace-nowrap"
+              style={{
+                height: 46,
+                padding: '0 24px',
+                borderRadius: 10,
+                background: '#4F46E5',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 15,
+                lineHeight: '22.5px',
+                letterSpacing: '-0.23px',
+                color: '#FFFFFF',
+              }}
+            >
+              Request Guardian to Start Release
+            </button>
+          )}
         </div>
       </div>
     </>

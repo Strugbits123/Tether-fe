@@ -1,20 +1,57 @@
 'use client'
 
-import { useEffect } from 'react'
-import { Check } from 'lucide-react'
-import {
-  COMPLETE_DURATION_MS,
-  DELIVERED_AT,
-  RECIPIENT_ACCESS,
-} from './constants'
+import { useState } from 'react'
+import { Check, Loader2 } from 'lucide-react'
+import type { DeliveryStatusRecipient, ReleasePlanActivityEvent } from '@/lib/api/rm'
+
+const AVATAR_PALETTE: { bg: string; color: string }[] = [
+  { bg: '#DBEAFE', color: '#1E40AF' },
+  { bg: '#D1FAE5', color: '#065F46' },
+  { bg: '#FEF3C7', color: '#92400E' },
+  { bg: '#F3E8FF', color: '#6B21A8' },
+]
+
+function avatarStyle(id: string): { bg: string; color: string } {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length]
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
+}
 
 /** Step 5 — Delivered. Content delivered automatically; tracks recipient
- * portal access. Shows briefly, then advances to the final completion screen. */
-export default function Step5View({ onComplete }: { onComplete: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onComplete, COMPLETE_DURATION_MS)
-    return () => clearTimeout(t)
-  }, [onComplete])
+ * portal access via polling in the parent page. */
+export default function Step5View({
+  deliveredAt,
+  recipients,
+  fetchActivityLog,
+}: {
+  deliveredAt: string
+  recipients: DeliveryStatusRecipient[]
+  fetchActivityLog: () => Promise<ReleasePlanActivityEvent[]>
+}) {
+  const awaitingCount = recipients.filter((r) => r.portal_status !== 'accessed').length
+  const [logOpen, setLogOpen] = useState(false)
+  const [logLoading, setLogLoading] = useState(false)
+  const [log, setLog] = useState<ReleasePlanActivityEvent[] | null>(null)
+
+  const handleToggleLog = async () => {
+    if (logOpen) {
+      setLogOpen(false)
+      return
+    }
+    setLogOpen(true)
+    if (log) return
+    setLogLoading(true)
+    try {
+      setLog(await fetchActivityLog())
+    } finally {
+      setLogLoading(false)
+    }
+  }
 
   return (
     <>
@@ -51,7 +88,7 @@ export default function Step5View({ onComplete }: { onComplete: () => void }) {
               color: '#065F46',
             }}
           >
-            Content delivered at {DELIVERED_AT}
+            Content delivered at {deliveredAt}
           </span>
           <span
             style={{
@@ -109,63 +146,71 @@ export default function Step5View({ onComplete }: { onComplete: () => void }) {
 
         {/* Recipient rows */}
         <div className="flex flex-col gap-3">
-          {RECIPIENT_ACCESS.map(({ party, status }) => (
-            <div
-              key={party.name}
-              className="flex items-center gap-3"
-              style={{
-                borderRadius: 10,
-                border: '1.25px solid #E5E7EB',
-                padding: '12px',
-              }}
-            >
-              <span
-                className="flex items-center justify-center flex-shrink-0"
+          {recipients.map((r) => {
+            const avatar = avatarStyle(r.id)
+            const bounced = r.email_status === 'bounced' || r.portal_status === 'bounced'
+            return (
+              <div
+                key={r.id}
+                className="flex items-center gap-3"
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 9999,
-                  background: party.bg,
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  lineHeight: '19.5px',
-                  letterSpacing: '-0.08px',
-                  color: party.color,
+                  borderRadius: 10,
+                  border: '1.25px solid #E5E7EB',
+                  padding: '12px',
                 }}
               >
-                {party.initials}
-              </span>
-              <div className="flex-1 min-w-0 flex flex-col">
                 <span
-                  className="truncate"
+                  className="flex items-center justify-center flex-shrink-0"
                   style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 9999,
+                    background: avatar.bg,
                     fontFamily: 'Inter, sans-serif',
-                    fontWeight: 500,
-                    fontSize: 14,
-                    lineHeight: '21px',
-                    letterSpacing: '-0.15px',
-                    color: '#111827',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    lineHeight: '19.5px',
+                    letterSpacing: '-0.08px',
+                    color: avatar.color,
                   }}
                 >
-                  {party.name}
+                  {initialsOf(r.name)}
                 </span>
-                <span
-                  className="truncate"
-                  style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 400,
-                    fontSize: 12,
-                    lineHeight: '18px',
-                    color: '#6B7280',
-                  }}
-                >
-                  Waiting for portal access...
-                </span>
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span
+                    className="truncate"
+                    style={{
+                      fontFamily: 'Inter, sans-serif',
+                      fontWeight: 500,
+                      fontSize: 14,
+                      lineHeight: '21px',
+                      letterSpacing: '-0.15px',
+                      color: '#111827',
+                    }}
+                  >
+                    {r.name}
+                  </span>
+                  <span
+                    className="truncate"
+                    style={{
+                      fontFamily: 'Inter, sans-serif',
+                      fontWeight: 400,
+                      fontSize: 12,
+                      lineHeight: '18px',
+                      color: '#6B7280',
+                    }}
+                  >
+                    {r.portal_status === 'accessed'
+                      ? `Accessed ${r.portal_first_accessed_at ? new Date(r.portal_first_accessed_at).toLocaleDateString() : ''}`
+                      : bounced
+                        ? 'Delivery email bounced'
+                        : 'Waiting for portal access...'}
+                  </span>
+                </div>
+                <AccessBadge status={r.portal_status} bounced={bounced} />
               </div>
-              <AccessBadge status={status} />
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <p
@@ -182,10 +227,48 @@ export default function Step5View({ onComplete }: { onComplete: () => void }) {
         </p>
       </div>
 
+      {/* Activity log (fetched on demand) */}
+      {logOpen && (
+        <div
+          className="flex flex-col gap-3"
+          style={{ borderRadius: 14, border: '1.25px solid #E5E7EB', background: '#FFFFFF', padding: '24px' }}
+        >
+          {logLoading ? (
+            <span className="flex items-center gap-2" style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#6B7280' }}>
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading activity…
+            </span>
+          ) : !log || log.length === 0 ? (
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9CA3AF' }}>
+              No activity recorded yet.
+            </span>
+          ) : (
+            log.map((event, i) => (
+              <div key={`${event.event_type}-${i}`} className="flex items-start justify-between gap-3">
+                <div className="flex flex-col">
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: 14, color: '#111827' }}>
+                    {event.event_label}
+                  </span>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#6B7280' }}>
+                    {event.actor_name}
+                  </span>
+                </div>
+                <span
+                  className="flex-shrink-0 whitespace-nowrap"
+                  style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#9CA3AF' }}
+                >
+                  {new Date(event.created_at).toLocaleString()}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* Footer actions */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button
           type="button"
+          onClick={handleToggleLog}
           className="cursor-pointer hover:opacity-80 whitespace-nowrap"
           style={{
             fontFamily: 'Inter, sans-serif',
@@ -196,7 +279,7 @@ export default function Step5View({ onComplete }: { onComplete: () => void }) {
             color: '#4F46E5',
           }}
         >
-          View activity log
+          {logOpen ? 'Hide activity log' : 'View activity log'}
         </button>
         <span
           style={{
@@ -208,14 +291,14 @@ export default function Step5View({ onComplete }: { onComplete: () => void }) {
             color: '#6B7280',
           }}
         >
-          Awaiting recipient portal access
+          {awaitingCount > 0 ? 'Awaiting recipient portal access' : 'All recipients have accessed their portal'}
         </span>
       </div>
     </>
   )
 }
 
-function AccessBadge({ status }: { status: 'accessed' | 'delivered' }) {
+function AccessBadge({ status, bounced }: { status: string; bounced: boolean }) {
   const accessed = status === 'accessed'
   return (
     <span
@@ -224,15 +307,15 @@ function AccessBadge({ status }: { status: 'accessed' | 'delivered' }) {
         height: 26,
         padding: '0 12px',
         borderRadius: 9999,
-        background: accessed ? '#D1FAE5' : '#EEF2FF',
+        background: bounced ? '#FFE2E3' : accessed ? '#D1FAE5' : '#EEF2FF',
         fontFamily: 'Inter, sans-serif',
         fontWeight: 500,
         fontSize: 12,
         lineHeight: '18px',
-        color: accessed ? '#065F46' : '#4F46E5',
+        color: bounced ? '#FF0000' : accessed ? '#065F46' : '#4F46E5',
       }}
     >
-      {accessed ? 'Portal Accessed' : 'Delivered'}
+      {bounced ? 'Bounced' : accessed ? 'Portal Accessed' : 'Delivered'}
     </span>
   )
 }

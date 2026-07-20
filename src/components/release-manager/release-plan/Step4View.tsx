@@ -2,15 +2,21 @@
 
 import { useEffect } from 'react'
 import { Check } from 'lucide-react'
-import {
-  DELIVER_DURATION_MS,
-  WAIT_DELIVERY_SCHEDULED,
-  WAIT_WINDOW_OPENED,
-} from './constants'
+import { DELIVER_DURATION_MS } from './constants'
 
 /** Step 4 — Deliver. Waiting period elapsed with no cancellation; delivery
- * triggered. Shows briefly, then auto-advances to Step 5 (delivered). */
-export default function Step4View({ onComplete }: { onComplete: () => void }) {
+ * triggered. Shows briefly, then advances to the recipient-tracking view.
+ * Pure UI pacing — the actual delivery already happened server-side via
+ * continueDelivery(). */
+export default function Step4View({
+  windowOpened,
+  deliveryScheduled,
+  onComplete,
+}: {
+  windowOpened: string
+  deliveryScheduled: string
+  onComplete: () => void
+}) {
   useEffect(() => {
     const t = setTimeout(onComplete, DELIVER_DURATION_MS)
     return () => clearTimeout(t)
@@ -51,7 +57,7 @@ export default function Step4View({ onComplete }: { onComplete: () => void }) {
               color: '#065F46',
             }}
           >
-            5-day waiting period complete — no cancellation received
+            Waiting period complete — no cancellation received
           </span>
           <span
             style={{
@@ -63,7 +69,7 @@ export default function Step4View({ onComplete }: { onComplete: () => void }) {
               color: '#065F46',
             }}
           >
-            5 days elapsed
+            Delivery is now in progress
           </span>
         </div>
       </div>
@@ -94,8 +100,8 @@ export default function Step4View({ onComplete }: { onComplete: () => void }) {
 
         {/* Stat columns */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatColumn label="Opened" value={WAIT_WINDOW_OPENED} />
-          <StatColumn label="Closed" value={WAIT_DELIVERY_SCHEDULED} />
+          <StatColumn label="Opened" value={windowOpened} />
+          <StatColumn label="Closed" value={deliveryScheduled} />
           <StatColumn
             label="Cancellations"
             value="None received"

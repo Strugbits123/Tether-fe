@@ -4,6 +4,8 @@ import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
+import { createClient } from '@/lib/supabase/client'
+import { getRmOverview, getUnreadCount } from '@/lib/api/rm'
 import FinishProfileModal from '@/components/dashboard/FinishProfileModal'
 import {
   Bell,
@@ -16,6 +18,14 @@ import {
   User,
   Users,
 } from 'lucide-react'
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
 interface ReleaseManagerSidebarProps {
   mobileOpen: boolean
@@ -41,10 +51,62 @@ export default function ReleaseManagerSidebar({
 }: ReleaseManagerSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { signOut } = useAuth()
+  const { profile, signOut, switchAccount } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [ownerName, setOwnerName] = useState<string | null>(null)
+  const [recipientCount, setRecipientCount] = useState<number | null>(null)
+  const [unreadCount, setUnreadCount] = useState<number | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const token = await getToken()
+      if (!token || cancelled) return
+      try {
+        const overview = await getRmOverview(token)
+        if (!cancelled) {
+          setOwnerName(overview.account_owner.name)
+          setRecipientCount(overview.content_stats.recipients)
+        }
+      } catch {
+        // Sidebar chrome degrades gracefully without these — pages that need
+        // the data will surface their own error state.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      const token = await getToken()
+      if (!token || cancelled) return
+      try {
+        const { unread_count } = await getUnreadCount(token)
+        if (!cancelled) setUnreadCount(unread_count)
+      } catch {
+        // Badge just stays hidden if this fails.
+      }
+    }
+    poll()
+    const interval = setInterval(poll, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
+
+  const firstName = profile?.first_name?.trim() || ''
+  const lastName = profile?.last_name?.trim() || ''
+  const displayName =
+    firstName && lastName ? `${firstName} ${lastName}` : firstName || profile?.email?.split('@')[0] || 'Release Manager'
+  const initials = firstName && lastName
+    ? `${firstName[0]}${lastName[0]}`.toUpperCase()
+    : displayName.charAt(0).toUpperCase()
 
   // My Profile opens the shared profile modal; Overview and Release Plan are
   // live pages. The rest are static for now.
@@ -52,8 +114,18 @@ export default function ReleaseManagerSidebar({
     { label: 'My Profile', icon: User, onClick: () => setProfileOpen(true) },
     { label: 'Overview', icon: Home, href: '/rm' },
     { label: 'Release Plan', icon: FileCheck, href: '/rm/release-plan' },
-    { label: 'Recipients', icon: Users, href: '/rm/recipients', count: 3 },
-    { label: 'Notifications', icon: Bell, href: '/rm/notifications' },
+    {
+      label: 'Recipients',
+      icon: Users,
+      href: '/rm/recipients',
+      count: recipientCount ?? undefined,
+    },
+    {
+      label: 'Notifications',
+      icon: Bell,
+      href: '/rm/notifications',
+      count: unreadCount ? unreadCount : undefined,
+    },
   ]
 
   useEffect(() => {
@@ -280,6 +352,10 @@ export default function ReleaseManagerSidebar({
               </button>
               <button
                 type="button"
+                onClick={() => {
+                  setMenuOpen(false)
+                  switchAccount()
+                }}
                 className="w-full flex items-center gap-3 px-4 py-[10px] hover:bg-gray-50 transition-colors cursor-pointer"
                 style={{ borderBottom: '1.25px solid #E5E7EB' }}
               >
@@ -331,7 +407,7 @@ export default function ReleaseManagerSidebar({
                 color: '#92400E',
               }}
             >
-              MW
+              {initials}
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p
@@ -345,7 +421,7 @@ export default function ReleaseManagerSidebar({
                   color: '#FFFFFF',
                 }}
               >
-                Marcus Webb
+                {displayName}
               </p>
               <p
                 className="truncate"
@@ -357,7 +433,7 @@ export default function ReleaseManagerSidebar({
                   color: 'rgba(255,255,255,0.5)',
                 }}
               >
-                Executor for Sarah Holder
+                {ownerName ? `Executor for ${ownerName}` : 'Release Manager'}
               </p>
             </div>
             <ChevronDown

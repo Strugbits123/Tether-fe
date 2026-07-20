@@ -1,23 +1,33 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Info } from 'lucide-react'
-import { FIRST_NAME, MIN_DESCRIPTION, REASONS } from './constants'
+import { ChevronDown, ChevronUp, Info, Loader2 } from 'lucide-react'
+import { MIN_DESCRIPTION, REASONS, type ReasonOption } from './constants'
 
 /** Step 1 — Initiate Release Plan form. */
 export default function Step1View({
+  firstName,
+  submitting,
   onCancel,
   onSubmit,
 }: {
+  firstName: string
+  submitting: boolean
   onCancel: () => void
-  onSubmit: () => void
+  onSubmit: (data: { reason: ReasonOption['value']; description: string }) => void
 }) {
-  const [reason, setReason] = useState('')
+  const [reasonLabel, setReasonLabel] = useState('')
   const [description, setDescription] = useState('')
   const [confirmed, setConfirmed] = useState(false)
 
   const canSubmit =
-    reason !== '' && description.trim().length >= MIN_DESCRIPTION && confirmed
+    reasonLabel !== '' && description.trim().length >= MIN_DESCRIPTION && confirmed && !submitting
+
+  const handleSubmit = () => {
+    const reason = REASONS.find((r) => r.label === reasonLabel)
+    if (!reason) return
+    onSubmit({ reason: reason.value, description: description.trim() })
+  }
 
   return (
     <>
@@ -40,7 +50,7 @@ export default function Step1View({
             color: '#4F46E5',
           }}
         >
-          {FIRST_NAME} trusted you with this role. When you are ready to release
+          {firstName} trusted you with this role. When you are ready to release
           her content to her designated recipients, complete the form below. All
           parties will be notified after you submit and start the release.
         </p>
@@ -72,7 +82,7 @@ export default function Step1View({
         {/* Reason for release */}
         <div className="flex flex-col gap-2">
           <Label text="Reason for release" requiredText="required" />
-          <ReasonDropdown value={reason} onChange={setReason} />
+          <ReasonDropdown value={reasonLabel} onChange={setReasonLabel} />
         </div>
 
         {/* Describe the circumstances */}
@@ -187,7 +197,8 @@ export default function Step1View({
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer hover:opacity-80"
+            disabled={submitting}
+            className="cursor-pointer hover:opacity-80 disabled:opacity-50"
             style={{
               fontFamily: 'Inter, sans-serif',
               fontWeight: 500,
@@ -203,8 +214,8 @@ export default function Step1View({
           <button
             type="button"
             disabled={!canSubmit}
-            onClick={onSubmit}
-            className="flex items-center justify-center whitespace-nowrap disabled:cursor-not-allowed"
+            onClick={handleSubmit}
+            className="flex items-center justify-center gap-2 whitespace-nowrap disabled:cursor-not-allowed"
             style={{
               height: 46,
               padding: '0 24px',
@@ -219,7 +230,8 @@ export default function Step1View({
               color: canSubmit ? '#FFFFFF' : '#9CA3AF',
             }}
           >
-            Submit and start release
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {submitting ? 'Submitting…' : 'Submit and start release'}
           </button>
         </div>
       </div>
@@ -278,7 +290,7 @@ function ReasonDropdown({
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  const options = ['', ...REASONS]
+  const options = ['', ...REASONS.map((r) => r.label)]
 
   return (
     <div ref={ref} className="relative">

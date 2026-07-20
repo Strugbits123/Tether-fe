@@ -58,6 +58,16 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
+  // Identifies which membership (owner vs. guardian/recipient portal) the
+  // request acts as. Absent entirely when there's no active membership —
+  // the backend then auto-resolves the caller's own owner account.
+  if (typeof window !== 'undefined') {
+    const membershipId = window.localStorage.getItem('active_membership')
+    if (membershipId) {
+      headers['X-Account-Context'] = membershipId
+    }
+  }
+
   // (4) Network / DNS / CORS / abort — fetch itself rejects before any response.
   let response: Response
   try {

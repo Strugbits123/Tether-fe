@@ -1,19 +1,32 @@
 'use client'
 
 import { Clock } from 'lucide-react'
-import {
-  DELIVERY_AT,
-  DELIVERY_DISPLAY,
-  FIRST_NAME,
-  WAIT_DELIVERY_SCHEDULED,
-  WAIT_WINDOW_OPENED,
-} from './constants'
 
-/** Step 3 — 5-day waiting period before automatic delivery. */
+/** Step 3 — waiting period before automatic delivery. */
 export default function Step3View({
+  firstName,
+  deliveryDisplay,
+  windowOpened,
+  deliveryScheduled,
+  daysElapsed,
+  daysTotal,
+  cancellationsReceived,
+  canContinue,
+  cancelling,
+  continuing,
   onCancel,
   onContinue,
 }: {
+  firstName: string
+  deliveryDisplay: string
+  windowOpened: string
+  deliveryScheduled: string
+  daysElapsed: number
+  daysTotal: number
+  cancellationsReceived: number
+  canContinue: boolean
+  cancelling: boolean
+  continuing: boolean
   onCancel: () => void
   onContinue: () => void
 }) {
@@ -56,7 +69,7 @@ export default function Step3View({
               color: '#92400E',
             }}
           >
-            {DELIVERY_DISPLAY}
+            {deliveryDisplay}
           </span>
           <span
             style={{
@@ -68,7 +81,7 @@ export default function Step3View({
               color: '#92400E',
             }}
           >
-            5 days from initiation
+            {daysElapsed} of {daysTotal} days elapsed
           </span>
         </div>
       </div>
@@ -94,17 +107,17 @@ export default function Step3View({
             color: '#6B7280',
           }}
         >
-          Step 3 — 5-Day Waiting Period
+          Step 3 — {daysTotal}-Day Waiting Period
         </h2>
 
         {/* Stat columns */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatColumn label="Window opened" value={WAIT_WINDOW_OPENED} />
-          <StatColumn label="Delivery scheduled" value={WAIT_DELIVERY_SCHEDULED} />
+          <StatColumn label="Window opened" value={windowOpened} />
+          <StatColumn label="Delivery scheduled" value={deliveryScheduled} />
           <StatColumn
             label="Cancellations received"
-            value="None so far"
-            valueColor="#10B981"
+            value={cancellationsReceived > 0 ? String(cancellationsReceived) : 'None so far'}
+            valueColor={cancellationsReceived > 0 ? '#DC2626' : '#10B981'}
           />
         </div>
 
@@ -135,10 +148,10 @@ export default function Step3View({
               color: '#6B7280',
             }}
           >
-            If sent in error, {FIRST_NAME} can cancel the release at any time by
+            If sent in error, {firstName} can cancel the release at any time by
             clicking the link in her notification email. You can also cancel
-            below. If no cancellation is received by {DELIVERY_AT}, content will
-            be delivered automatically — no action is needed from you.
+            below. If no cancellation is received by {deliveryScheduled}, content
+            will be delivered automatically — no action is needed from you.
           </p>
         </div>
       </div>
@@ -148,7 +161,8 @@ export default function Step3View({
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center justify-center cursor-pointer hover:bg-red-50 whitespace-nowrap"
+          disabled={cancelling}
+          className="flex items-center justify-center cursor-pointer hover:bg-red-50 whitespace-nowrap disabled:opacity-50"
           style={{
             height: 39.5,
             padding: '0 16px',
@@ -163,12 +177,13 @@ export default function Step3View({
             color: '#EF4444',
           }}
         >
-          Cancel release
+          {cancelling ? 'Cancelling…' : 'Cancel release'}
         </button>
         <button
           type="button"
           onClick={onContinue}
-          className="flex items-center justify-center cursor-pointer hover:opacity-90 whitespace-nowrap"
+          disabled={!canContinue || continuing}
+          className="flex items-center justify-center cursor-pointer hover:opacity-90 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             height: 37,
             padding: '0 16px',
@@ -182,7 +197,7 @@ export default function Step3View({
             color: '#FFFFFF',
           }}
         >
-          Continue to delivery →
+          {continuing ? 'Continuing…' : 'Continue to delivery →'}
         </button>
       </div>
     </>

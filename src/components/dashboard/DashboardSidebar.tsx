@@ -36,7 +36,7 @@ const navItems: { label: string; icon: typeof Home; href?: string }[] = [
 export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, switchAccount, membershipCount } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -177,19 +177,22 @@ export default function DashboardSidebar({ mobileOpen, onClose }: DashboardSideb
                 </span>
               </button>
 
-              <button
-                type="button"
-                className="w-full flex items-center gap-3 px-4 py-[10px] hover:bg-gray-50 transition-colors cursor-pointer"
-                style={{ borderBottom: '1.25px solid #E5E7EB' }}
-              >
-                <Users className="w-[18px] h-[18px] text-[#364153]" strokeWidth={1.75} />
-                <span
-                  className="text-[14px] font-medium text-[#364153] leading-5"
-                  style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.15px' }}
+              {membershipCount !== null && membershipCount > 1 && (
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); switchAccount() }}
+                  className="w-full flex items-center gap-3 px-4 py-[10px] hover:bg-gray-50 transition-colors cursor-pointer"
+                  style={{ borderBottom: '1.25px solid #E5E7EB' }}
                 >
-                  Switch Account
-                </span>
-              </button>
+                  <Users className="w-[18px] h-[18px] text-[#364153]" strokeWidth={1.75} />
+                  <span
+                    className="text-[14px] font-medium text-[#364153] leading-5"
+                    style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.15px' }}
+                  >
+                    Switch Account
+                  </span>
+                </button>
+              )}
 
               <button
                 type="button"

@@ -2,7 +2,19 @@
 
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import { Bell, Info, Mail, MessageSquare, Send, X } from 'lucide-react'
+import { Bell, Info, Loader2, Mail, MessageSquare, Send, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/lib/context/ToastContext'
+import { ApiError } from '@/lib/api/client'
+import { requestGuardian } from '@/lib/api/rm'
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
 interface RequestGuardianModalProps {
   open: boolean
@@ -18,14 +30,20 @@ export default function RequestGuardianModal({
   open,
   onClose,
 }: RequestGuardianModalProps) {
+  const { showToast } = useToast()
   const [step, setStep] = useState<'form' | 'sent'>('form')
   const [explanation, setExplanation] = useState('')
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState<{ guardianName: string; guardianOrder: number } | null>(
+    null,
+  )
 
   // Reset to the form whenever the modal (re)opens.
   useEffect(() => {
     if (open) {
       setStep('form')
       setExplanation('')
+      setResult(null)
     }
   }, [open])
 
@@ -46,7 +64,22 @@ export default function RequestGuardianModal({
 
   if (!open) return null
 
-  const canSend = explanation.trim().length > 0
+  const canSend = explanation.trim().length > 0 && explanation.trim().length <= 300
+
+  const handleSend = async () => {
+    const token = await getToken()
+    if (!token) return
+    setSending(true)
+    try {
+      const res = await requestGuardian(token, { explanation: explanation.trim() })
+      setResult({ guardianName: res.guardian_notified, guardianOrder: res.guardian_order })
+      setStep('sent')
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to send guardian request.', 'error')
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div
@@ -67,11 +100,17 @@ export default function RequestGuardianModal({
             explanation={explanation}
             onChange={setExplanation}
             canSend={canSend}
+            sending={sending}
             onClose={onClose}
-            onSend={() => setStep('sent')}
+            onSend={handleSend}
           />
         ) : (
-          <SentStep explanation={explanation.trim()} onClose={onClose} />
+          <SentStep
+            explanation={explanation.trim()}
+            guardianName={result?.guardianName ?? 'Your Guardian'}
+            guardianOrder={result?.guardianOrder ?? 1}
+            onClose={onClose}
+          />
         )}
       </div>
     </div>
@@ -84,12 +123,14 @@ function FormStep({
   explanation,
   onChange,
   canSend,
+  sending,
   onClose,
   onSend,
 }: {
   explanation: string
   onChange: (v: string) => void
   canSend: boolean
+  sending: boolean
   onClose: () => void
   onSend: () => void
 }) {
@@ -232,7 +273,7 @@ function FormStep({
               color: '#6A7282',
             }}
           >
-            {explanation.length} characters
+            {explanation.length} / 300 characters
           </span>
         </div>
 
@@ -241,7 +282,8 @@ function FormStep({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 flex items-center justify-center cursor-pointer hover:bg-gray-50"
+            disabled={sending}
+            className="flex-1 flex items-center justify-center cursor-pointer hover:bg-gray-50 disabled:opacity-60"
             style={{
               height: 42,
               borderRadius: 10,
@@ -259,7 +301,7 @@ function FormStep({
           <button
             type="button"
             onClick={onSend}
-            disabled={!canSend}
+            disabled={!canSend || sending}
             className="flex-1 flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
             style={{
               height: 42,
@@ -273,8 +315,12 @@ function FormStep({
               color: '#FFFFFF',
             }}
           >
-            <Send className="w-4 h-4" strokeWidth={2} />
-            Send Request
+            {sending ? (
+              <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+            ) : (
+              <Send className="w-4 h-4" strokeWidth={2} />
+            )}
+            {sending ? 'Sending…' : 'Send Request'}
           </button>
         </div>
       </div>
@@ -292,9 +338,13 @@ const NOTIFICATIONS: { icon: typeof Mail; label: string }[] = [
 
 function SentStep({
   explanation,
+  guardianName,
+  guardianOrder,
   onClose,
 }: {
   explanation: string
+  guardianName: string
+  guardianOrder: number
   onClose: () => void
 }) {
   return (
@@ -339,7 +389,7 @@ function SentStep({
           color: '#4A5565',
         }}
       >
-        Guardian 1 has been notified via email and text message. You&apos;ll
+        {guardianName} has been notified via email and text message. You&apos;ll
         receive an update once they respond.
       </p>
 
@@ -424,8 +474,8 @@ function SentStep({
             color: '#973C00',
           }}
         >
-          If Guardian 1 doesn&apos;t accept within 3 days, Guardian 2 will be
-          automatically notified.
+          If Guardian {guardianOrder} doesn&apos;t accept within 3 days, the next
+          Guardian will be automatically notified.
         </p>
       </div>
 

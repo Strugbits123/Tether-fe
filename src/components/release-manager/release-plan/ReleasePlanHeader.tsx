@@ -1,11 +1,5 @@
 import Stepper from './Stepper'
-import {
-  DELIVERED_AT,
-  DELIVERY_AT,
-  INITIATED_AT,
-  OWNER_NAME,
-  RELEASE_ID,
-} from './constants'
+import { formatDateTime } from './constants'
 
 export type ReleasePlanView =
   | 'intro'
@@ -16,8 +10,24 @@ export type ReleasePlanView =
   | 'step5'
   | 'complete'
 
+interface ReleasePlanHeaderProps {
+  view: ReleasePlanView
+  ownerName: string
+  planId?: string | null
+  initiatedAt?: string | null
+  deliveryScheduledAt?: string | null
+  deliveredAt?: string | null
+}
+
 /** Title, status chip, subtitle and stepper — adapts to the current view. */
-export default function ReleasePlanHeader({ view }: { view: ReleasePlanView }) {
+export default function ReleasePlanHeader({
+  view,
+  ownerName,
+  planId,
+  initiatedAt,
+  deliveryScheduledAt,
+  deliveredAt,
+}: ReleasePlanHeaderProps) {
   const isActive =
     view === 'step2' || view === 'step3' || view === 'step4' || view === 'step5'
   const isDelivering = view === 'step4'
@@ -35,14 +45,14 @@ export default function ReleasePlanHeader({ view }: { view: ReleasePlanView }) {
             : 1
   const subtitle =
     view === 'step5'
-      ? `Delivered ${DELIVERED_AT} — tracking recipient access`
+      ? `Delivered ${formatDateTime(deliveredAt ?? null)} — tracking recipient access`
       : view === 'step4'
         ? 'Waiting period complete — delivery triggered'
         : view === 'step3'
-          ? `Waiting period — delivers ${DELIVERY_AT}`
+          ? `Waiting period — delivers ${formatDateTime(deliveryScheduledAt ?? null)}`
           : view === 'step2'
-            ? `Initiated ${INITIATED_AT}`
-            : `Start and manage content delivery for ${OWNER_NAME}`
+            ? `Initiated ${formatDateTime(initiatedAt ?? null)}`
+            : `Start and manage content delivery for ${ownerName}`
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -55,7 +65,7 @@ export default function ReleasePlanHeader({ view }: { view: ReleasePlanView }) {
             color: '#111827',
           }}
         >
-          {isActive ? `Release Plan — ${RELEASE_ID}` : 'Release Plan'}
+          {isActive && planId ? `Release Plan — ${planId}` : 'Release Plan'}
         </h1>
         {view === 'intro' && (
           <span
@@ -77,7 +87,7 @@ export default function ReleasePlanHeader({ view }: { view: ReleasePlanView }) {
             No active release
           </span>
         )}
-        {isActive && (
+        {isActive && planId && (
           <span
             className="flex items-center justify-center flex-shrink-0"
             style={{
@@ -93,7 +103,7 @@ export default function ReleasePlanHeader({ view }: { view: ReleasePlanView }) {
               color: isDelivered ? '#10B981' : '#4F46E5',
             }}
           >
-            {RELEASE_ID} ·{' '}
+            {planId} ·{' '}
             {isDelivered ? 'Delivered' : isDelivering ? 'Delivering' : 'Active'}
           </span>
         )}

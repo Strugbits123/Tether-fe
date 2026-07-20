@@ -1,15 +1,23 @@
 'use client'
 
-import { Check, Download } from 'lucide-react'
-import {
-  COMPLETION_STATS,
-  COMPLETION_TIMELINE,
-  FIRST_NAME,
-} from './constants'
+import { Check, Download, Loader2 } from 'lucide-react'
+import type { ReleasePlanActivityEvent } from '@/lib/api/rm'
 
 /** Final completion screen — celebratory recap shown once the release is fully
  * delivered. Stands alone (no header/stepper); centered card layout. */
-export default function CompletionView() {
+export default function CompletionView({
+  firstName,
+  stats,
+  timeline,
+  downloading,
+  onDownload,
+}: {
+  firstName: string
+  stats: { value: string; label: string }[]
+  timeline: ReleasePlanActivityEvent[]
+  downloading: boolean
+  onDownload: () => void
+}) {
   return (
     <div className="w-full max-w-[760px] mx-auto flex flex-col gap-6">
       {/* Hero recap card */}
@@ -48,7 +56,7 @@ export default function CompletionView() {
               color: '#101828',
             }}
           >
-            You carried out {FIRST_NAME}&apos;s wishes.
+            You carried out {firstName}&apos;s wishes.
           </h1>
           <p
             style={{
@@ -68,7 +76,7 @@ export default function CompletionView() {
 
         {/* Stat columns */}
         <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {COMPLETION_STATS.map((stat) => (
+          {stats.map((stat) => (
             <div
               key={stat.label}
               className="flex flex-col items-center"
@@ -103,61 +111,69 @@ export default function CompletionView() {
 
       {/* Activity timeline */}
       <div className="flex flex-col gap-4">
-        {COMPLETION_TIMELINE.map((item) => (
-          <div key={item.title} className="flex items-center gap-4">
-            <span
-              className="flex items-center justify-center flex-shrink-0"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 9999,
-                background: '#00BC7D',
-              }}
-            >
-              <Check className="w-5 h-5 text-white" strokeWidth={2.5} />
-            </span>
-            <div
-              className="flex-1 min-w-0 flex flex-col"
-              style={{
-                borderRadius: 10,
-                background: '#F5EDE2',
-                padding: '16px',
-                gap: 4,
-                boxShadow:
-                  '0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A',
-              }}
-            >
+        {timeline.length === 0 ? (
+          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#9CA3AF', textAlign: 'center' }}>
+            No activity recorded.
+          </p>
+        ) : (
+          timeline.map((item, i) => (
+            <div key={`${item.event_type}-${i}`} className="flex items-center gap-4">
               <span
+                className="flex items-center justify-center flex-shrink-0"
                 style={{
-                  fontFamily: '"Instrument Serif", serif',
-                  fontWeight: 400,
-                  fontSize: 21,
-                  lineHeight: '28px',
-                  color: '#101828',
+                  width: 32,
+                  height: 32,
+                  borderRadius: 9999,
+                  background: '#00BC7D',
                 }}
               >
-                {item.title}
+                <Check className="w-5 h-5 text-white" strokeWidth={2.5} />
               </span>
-              <span
+              <div
+                className="flex-1 min-w-0 flex flex-col"
                 style={{
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 400,
-                  fontSize: 14,
-                  lineHeight: '20px',
-                  color: '#4A5565',
+                  borderRadius: 10,
+                  background: '#F5EDE2',
+                  padding: '16px',
+                  gap: 4,
+                  boxShadow:
+                    '0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A',
                 }}
               >
-                {item.detail}
-              </span>
+                <span
+                  style={{
+                    fontFamily: '"Instrument Serif", serif',
+                    fontWeight: 400,
+                    fontSize: 21,
+                    lineHeight: '28px',
+                    color: '#101828',
+                  }}
+                >
+                  {item.event_label}
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    lineHeight: '20px',
+                    color: '#4A5565',
+                  }}
+                >
+                  {item.actor_name} — {new Date(item.created_at).toLocaleString()}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Download report */}
       <button
         type="button"
-        className="flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 w-full"
+        onClick={onDownload}
+        disabled={downloading}
+        className="flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 w-full disabled:opacity-60"
         style={{
           height: 50,
           borderRadius: 12,
@@ -165,7 +181,11 @@ export default function CompletionView() {
           background: '#FFFFFF',
         }}
       >
-        <Download style={{ width: 20, height: 20, color: '#364153' }} strokeWidth={2} />
+        {downloading ? (
+          <Loader2 style={{ width: 20, height: 20, color: '#364153' }} className="animate-spin" strokeWidth={2} />
+        ) : (
+          <Download style={{ width: 20, height: 20, color: '#364153' }} strokeWidth={2} />
+        )}
         <span
           style={{
             fontFamily: 'Inter, sans-serif',
@@ -175,7 +195,7 @@ export default function CompletionView() {
             color: '#364153',
           }}
         >
-          Download full activity report (PDF)
+          {downloading ? 'Preparing report…' : 'Download full activity report (PDF)'}
         </span>
       </button>
     </div>

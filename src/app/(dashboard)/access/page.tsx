@@ -1,10 +1,30 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Mail, Phone, Plus, Shield, UserPlus, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  Award,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Flag,
+  Image as ImageIcon,
+  Info,
+  Lock,
+  Mail,
+  MessageSquare,
+  Phone,
+  Plus,
+  Shield,
+  Star,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 import Badge from '@/components/ui/Badge'
 import AddRecipientsModal from '@/components/dashboard/AddRecipientsModal'
 import AddReleaseManagerModal from '@/components/dashboard/AddReleaseManagerModal'
+import ReleaseManagerConsentModal from '@/components/dashboard/ReleaseManagerConsentModal'
+import GuardianConsentModal from '@/components/dashboard/GuardianConsentModal'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
@@ -12,7 +32,19 @@ import {
   getReleaseManager,
   type ReleaseManager,
 } from '@/lib/api/release-managers'
+import {
+  designateGuardian,
+  getAccessOverview,
+  removeGuardian,
+  removeRecipient,
+  sendRmReminder,
+  updateRecipient,
+  type AccessOverview,
+  type AccessRecipient,
+  type ContentSummary,
+} from '@/lib/api/access'
 import { displayRelationship } from '@/lib/relationship'
+import { ApiError } from '@/lib/api/client'
 
 type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info'
 
@@ -36,6 +68,14 @@ const RM_STATUS: Record<
   revoked: { label: 'Revoked', variant: 'default' },
 }
 
+const RM_STATUS_LABEL: Record<ReleaseManager['status'], { label: string; color: string }> = {
+  invited: { label: 'RELEASE MANAGER INVITED', color: '#BB4D00' },
+  accepted: { label: 'RELEASE MANAGER CONFIRMED', color: '#008236' },
+  declined: { label: 'RELEASE MANAGER DECLINED', color: '#DC2626' },
+  bounced: { label: 'INVITE BOUNCED', color: '#DC2626' },
+  revoked: { label: 'REVOKED', color: '#6A7282' },
+}
+
 async function getToken(): Promise<string | null> {
   const supabase = createClient()
   const {
@@ -57,12 +97,19 @@ function formatDate(iso: string): string {
 export default function AccessPage() {
   const { showToast } = useToast()
 
+  // Fallback (legacy) data — always fetched so the page still works if the
+  // richer /access/overview endpoint isn't live yet.
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [releaseManager, setReleaseManager] = useState<ReleaseManager | null>(null)
+  // Rich data — powers the full mockup UI when available.
+  const [overview, setOverview] = useState<AccessOverview | null>(null)
+
   const [loading, setLoading] = useState(true)
+  const [sendingReminder, setSendingReminder] = useState(false)
 
   const [addingRecipient, setAddingRecipient] = useState(false)
   const [addingManager, setAddingManager] = useState(false)
+  const [rmConsentOpen, setRmConsentOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     const token = await getToken()
@@ -71,9 +118,10 @@ export default function AccessPage() {
       return
     }
     try {
-      const [recipientsResult, rmResult] = await Promise.allSettled([
+      const [recipientsResult, rmResult, overviewResult] = await Promise.allSettled([
         getRecipients(token),
         getReleaseManager(token),
+        getAccessOverview(token),
       ])
       if (recipientsResult.status === 'fulfilled') {
         setRecipients(recipientsResult.value)
@@ -81,6 +129,7 @@ export default function AccessPage() {
       if (rmResult.status === 'fulfilled') {
         setReleaseManager(rmResult.value)
       }
+      setOverview(overviewResult.status === 'fulfilled' ? overviewResult.value : null)
     } catch {
       showToast('Failed to load your access settings.', 'error')
     } finally {
@@ -91,6 +140,33 @@ export default function AccessPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const handleSendReminder = async () => {
+    const token = await getToken()
+    if (!token) return
+    setSendingReminder(true)
+    try {
+      await sendRmReminder(token)
+      showToast('Reminder sent to your Release Manager.', 'success')
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to send reminder.', 'error')
+    } finally {
+      setSendingReminder(false)
+    }
+  }
+
+  const handleRemoveRecipient = async (recipient: { id: string; name: string }) => {
+    if (!window.confirm(`Remove ${recipient.name} as a recipient? This cannot be undone.`)) return
+    const token = await getToken()
+    if (!token) return
+    try {
+      await removeRecipient(token, recipient.id)
+      showToast(`${recipient.name} was removed.`, 'success')
+      loadData()
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to remove recipient.', 'error')
+    }
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -105,7 +181,7 @@ export default function AccessPage() {
             color: '#101828',
           }}
         >
-          Access
+          Access Control
         </h1>
         <p
           style={{
@@ -117,21 +193,31 @@ export default function AccessPage() {
             color: '#4A5565',
           }}
         >
-          Manage who can receive your legacy and who can release it
+          Manage your recipients and what they will have access to
         </p>
       </div>
 
       {/* Release Manager */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <SectionTitle icon={Shield} label="Release Manager" />
-          {!loading && !releaseManager && (
-            <AddButton label="Add Release Manager" onClick={() => setAddingManager(true)} />
-          )}
-        </div>
-
+      <section className="flex flex-col gap-3">
         {loading ? (
           <CardSkeleton />
+        ) : overview ? (
+          overview.release_manager ? (
+            <RichReleaseManagerCard
+              rm={overview.release_manager}
+              sendingReminder={sendingReminder}
+              onSendReminder={handleSendReminder}
+              onChange={() => setRmConsentOpen(true)}
+            />
+          ) : (
+            <EmptyState
+              icon={Shield}
+              title="No Release Manager designated"
+              description="Designate a trusted person who can release your Tether when the time comes."
+              cta="Designate a Release Manager"
+              onClick={() => setRmConsentOpen(true)}
+            />
+          )
         ) : releaseManager ? (
           <div
             className="flex items-start gap-4"
@@ -180,96 +266,128 @@ export default function AccessPage() {
             title="No Release Manager designated"
             description="Designate a trusted person who can release your Tether when the time comes."
             cta="Designate a Release Manager"
-            onClick={() => setAddingManager(true)}
+            onClick={() => setRmConsentOpen(true)}
           />
         )}
       </section>
 
-      {/* Recipients */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <SectionTitle icon={Users} label="Recipients" count={recipients.length} />
-          {!loading && recipients.length > 0 && (
-            <AddButton label="Add Recipient" onClick={() => setAddingRecipient(true)} />
-          )}
-        </div>
-
-        {loading ? (
-          <div className="flex flex-col gap-4">
-            <CardSkeleton />
-            <CardSkeleton />
-          </div>
-        ) : recipients.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="No recipients yet"
-            description="Recipients are the people who will receive your messages, photos, and documents."
-            cta="Add your first recipient"
-            onClick={() => setAddingRecipient(true)}
+      {overview ? (
+        <>
+          <RecipientGroup
+            label="Family Members"
+            members={overview.recipients.family.members}
+            guardianCount={overview.stats.total_guardians}
+            maxGuardians={overview.stats.max_guardians}
+            loading={loading}
+            onAddPerson={() => setAddingRecipient(true)}
+            onRemove={handleRemoveRecipient}
+            onRefresh={loadData}
           />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {recipients.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-start gap-4"
-                style={{
-                  borderRadius: 14,
-                  border: '1.25px solid rgba(0,0,0,0.1)',
-                  background: '#FFFFFF',
-                  padding: 16,
-                }}
-              >
+          <RecipientGroup
+            label="Friends & Others"
+            members={overview.recipients.friends_and_others.members}
+            guardianCount={overview.stats.total_guardians}
+            maxGuardians={overview.stats.max_guardians}
+            loading={loading}
+            onAddPerson={() => setAddingRecipient(true)}
+            onRemove={handleRemoveRecipient}
+            onRefresh={loadData}
+          />
+        </>
+      ) : (
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <SectionTitle icon={Users} label="Recipients" count={recipients.length} />
+            {!loading && recipients.length > 0 && (
+              <AddButton label="Add Recipient" onClick={() => setAddingRecipient(true)} />
+            )}
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col gap-4">
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          ) : recipients.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No recipients yet"
+              description="Recipients are the people who will receive your messages, photos, and documents."
+              cta="Add your first recipient"
+              onClick={() => setAddingRecipient(true)}
+            />
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {recipients.map((r) => (
                 <div
-                  className="flex items-center justify-center flex-shrink-0"
+                  key={r.id}
+                  className="flex items-start gap-4"
                   style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 10,
-                    background: 'linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)',
+                    borderRadius: 14,
+                    border: '1.25px solid rgba(0,0,0,0.1)',
+                    background: '#FFFFFF',
+                    padding: 16,
                   }}
                 >
-                  <Users className="w-7 h-7" color="#4F39F6" strokeWidth={2} />
-                </div>
-                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3
-                      className="truncate"
-                      style={{
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: 600,
-                        fontSize: 16,
-                        lineHeight: '24px',
-                        color: '#101828',
-                      }}
-                    >
-                      {r.name}
-                    </h3>
-                    <Badge variant={RECIPIENT_STATUS[r.invitation_status].variant}>
-                      {RECIPIENT_STATUS[r.invitation_status].label}
-                    </Badge>
-                  </div>
-                  <MetaRow recipient={r} />
-                  {r.note && <NoteText note={r.note} />}
-                  <p
+                  <div
+                    className="flex items-center justify-center flex-shrink-0"
                     style={{
-                      fontFamily: 'Inter, sans-serif',
-                      fontWeight: 400,
-                      fontSize: 12,
-                      lineHeight: '16px',
-                      color: '#6A7282',
+                      width: 56,
+                      height: 56,
+                      borderRadius: 10,
+                      background: 'linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)',
                     }}
                   >
-                    Added {formatDate(r.created_at)}
-                  </p>
+                    <Users className="w-7 h-7" color="#4F39F6" strokeWidth={2} />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3
+                        className="truncate"
+                        style={{
+                          fontFamily: 'Inter, sans-serif',
+                          fontWeight: 600,
+                          fontSize: 16,
+                          lineHeight: '24px',
+                          color: '#101828',
+                        }}
+                      >
+                        {r.name}
+                      </h3>
+                      <Badge variant={RECIPIENT_STATUS[r.invitation_status].variant}>
+                        {RECIPIENT_STATUS[r.invitation_status].label}
+                      </Badge>
+                    </div>
+                    <MetaRow recipient={r} />
+                    {r.note && <NoteText note={r.note} />}
+                    <p
+                      style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 400,
+                        fontSize: 12,
+                        lineHeight: '16px',
+                        color: '#6A7282',
+                      }}
+                    >
+                      Added {formatDate(r.created_at)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Modals */}
+      <ReleaseManagerConsentModal
+        open={rmConsentOpen}
+        onClose={() => setRmConsentOpen(false)}
+        onConfirm={() => {
+          setRmConsentOpen(false)
+          setAddingManager(true)
+        }}
+      />
       <AddReleaseManagerModal
         open={addingManager}
         onClose={() => setAddingManager(false)}
@@ -281,6 +399,636 @@ export default function AccessPage() {
         onCreated={loadData}
       />
     </div>
+  )
+}
+
+/* ---------------------- Rich Release Manager card ---------------------- */
+
+function RichReleaseManagerCard({
+  rm,
+  sendingReminder,
+  onSendReminder,
+  onChange,
+}: {
+  rm: AccessOverview['release_manager']
+  sendingReminder: boolean
+  onSendReminder: () => void
+  onChange: () => void
+}) {
+  if (!rm) return null
+  const statusMeta = RM_STATUS_LABEL[rm.status]
+
+  return (
+    <div
+      className="flex flex-col gap-4"
+      style={{
+        borderRadius: 14,
+        border: '1.25px solid rgba(0,0,0,0.1)',
+        background: '#FFFFFF',
+        padding: 20,
+      }}
+    >
+      <div className="flex items-start gap-4 flex-wrap">
+        <div
+          className="flex items-center justify-center flex-shrink-0"
+          style={{ width: 48, height: 48, borderRadius: '50%', background: '#4F46E5' }}
+        >
+          <Star className="w-5 h-5 text-white" fill="#FFFFFF" strokeWidth={0} />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <span
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 700,
+              fontSize: 11.5,
+              letterSpacing: '0.5px',
+              color: statusMeta.color,
+            }}
+          >
+            {statusMeta.label}
+          </span>
+          <h3
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              fontSize: 17,
+              color: '#101828',
+            }}
+          >
+            {rm.name}
+          </h3>
+          <MetaRow recipient={rm} />
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {rm.status === 'invited' && (
+            <button
+              type="button"
+              onClick={onSendReminder}
+              disabled={sendingReminder}
+              className="cursor-pointer hover:bg-gray-50 disabled:opacity-50"
+              style={{
+                height: 36,
+                padding: '0 14px',
+                borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.1)',
+                background: '#FFFFFF',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 13.5,
+                color: '#0A0A0A',
+              }}
+            >
+              {sendingReminder ? 'Sending…' : 'Send reminder'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onChange}
+            className="cursor-pointer hover:bg-gray-50"
+            style={{
+              height: 36,
+              padding: '0 14px',
+              borderRadius: 8,
+              border: '1px solid rgba(0,0,0,0.1)',
+              background: '#FFFFFF',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 13.5,
+              color: '#0A0A0A',
+            }}
+          >
+            Change Release Manager
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center flex-wrap gap-x-6 gap-y-2">
+        <FeatureBullet icon={Lock} label="Accesses all documents after verification" />
+        <FeatureBullet icon={Users} label="Manages distribution to all recipients" />
+        <FeatureBullet icon={Flag} label="Carries out your final wishes" />
+      </div>
+
+      <div className="flex items-start gap-1.5">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" color="#F54900" strokeWidth={2} />
+        <p
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 400,
+            fontSize: 13,
+            lineHeight: '18px',
+            color: '#F54900',
+          }}
+        >
+          Designating a Release Manager in Tether does not replace a legal will or
+          court-issued authority.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function FeatureBullet({ icon: Icon, label }: { icon: typeof Lock; label: string }) {
+  return (
+    <span
+      className="flex items-center gap-1.5"
+      style={{
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 400,
+        fontSize: 13.5,
+        color: '#4A5565',
+      }}
+    >
+      <Icon className="w-4 h-4 flex-shrink-0" color="#4F39F6" strokeWidth={2} />
+      {label}
+    </span>
+  )
+}
+
+/* ---------------------- Rich recipient group (family / friends) ---------------------- */
+
+function RecipientGroup({
+  label,
+  members,
+  guardianCount,
+  maxGuardians,
+  loading,
+  onAddPerson,
+  onRemove,
+  onRefresh,
+}: {
+  label: string
+  members: AccessRecipient[]
+  guardianCount: number
+  maxGuardians: number
+  loading: boolean
+  onAddPerson: () => void
+  onRemove: (recipient: { id: string; name: string }) => void
+  onRefresh: () => void
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              fontSize: 12,
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              color: '#6A7282',
+            }}
+          >
+            {label}
+          </span>
+          {members.length > 0 && (
+            <span
+              className="flex items-center justify-center"
+              style={{
+                minWidth: 20,
+                height: 20,
+                padding: '0 6px',
+                borderRadius: 9999,
+                background: '#EEF2FF',
+                color: '#4F39F6',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 11.5,
+              }}
+            >
+              {members.length}
+            </span>
+          )}
+        </div>
+        <AddButton label="Add person" onClick={onAddPerson} />
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col gap-3">
+          <CardSkeleton />
+        </div>
+      ) : members.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={`No ${label.toLowerCase()} yet`}
+          description="Recipients are the people who will receive your messages, photos, and documents."
+          cta="Add a person"
+          onClick={onAddPerson}
+        />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+          {members.map((m) => (
+            <RichRecipientCard
+              key={m.id}
+              member={m}
+              expanded={expandedId === m.id}
+              onToggleExpand={() => setExpandedId((id) => (id === m.id ? null : m.id))}
+              canDesignateGuardian={guardianCount < maxGuardians}
+              onRemove={() => onRemove(m)}
+              onRefresh={onRefresh}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function RichRecipientCard({
+  member,
+  expanded,
+  onToggleExpand,
+  canDesignateGuardian,
+  onRemove,
+  onRefresh,
+}: {
+  member: AccessRecipient
+  expanded: boolean
+  onToggleExpand: () => void
+  canDesignateGuardian: boolean
+  onRemove: () => void
+  onRefresh: () => void
+}) {
+  const { showToast } = useToast()
+  const [email, setEmail] = useState(member.email)
+  const [phone, setPhone] = useState(member.phone ?? '')
+  const [saving, setSaving] = useState(false)
+  const [guardianModalOpen, setGuardianModalOpen] = useState(false)
+  const [guardianSubmitting, setGuardianSubmitting] = useState(false)
+
+  useEffect(() => {
+    setEmail(member.email)
+    setPhone(member.phone ?? '')
+  }, [member.email, member.phone])
+
+  const dirty = email !== member.email || phone !== (member.phone ?? '')
+
+  const handleSave = async () => {
+    const token = await getToken()
+    if (!token) return
+    setSaving(true)
+    try {
+      await updateRecipient(token, member.id, { email, phone })
+      showToast('Contact information updated.', 'success')
+      onRefresh()
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to save changes.', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleConfirmGuardian = async () => {
+    const token = await getToken()
+    if (!token) return
+    setGuardianSubmitting(true)
+    try {
+      await designateGuardian(token, member.id, { legal_acknowledged: true })
+      showToast(`${member.name} is now a guardian.`, 'success')
+      setGuardianModalOpen(false)
+      onRefresh()
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to designate guardian.', 'error')
+    } finally {
+      setGuardianSubmitting(false)
+    }
+  }
+
+  const handleRemoveGuardian = async () => {
+    const token = await getToken()
+    if (!token) return
+    try {
+      await removeGuardian(token, member.id)
+      showToast(`${member.name} is no longer a guardian.`, 'success')
+      onRefresh()
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to remove guardian.', 'error')
+    }
+  }
+
+  const firstName = member.name.split(' ')[0]
+
+  return (
+    <>
+      <div
+        className="flex flex-col"
+        style={{
+          borderRadius: 14,
+          border: '1.25px solid rgba(0,0,0,0.1)',
+          background: '#FFFFFF',
+        }}
+      >
+        {/* Collapsed header row — always visible */}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="w-full flex items-start gap-3 cursor-pointer text-left"
+          style={{ padding: 16 }}
+        >
+          <div
+            className="flex items-center justify-center flex-shrink-0"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 13,
+                color: '#4F39F6',
+              }}
+            >
+              {member.name
+                .split(' ')
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+            <h3
+              className="truncate"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 15,
+                color: '#101828',
+              }}
+            >
+              {member.name}
+            </h3>
+            {member.content_summary && <ContentTags summary={member.content_summary} />}
+            <span
+              className="flex items-center gap-1.5 flex-wrap"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                color: '#6A7282',
+              }}
+            >
+              {member.phone && <span>{member.phone}</span>}
+              {member.phone && member.email && <span aria-hidden>|</span>}
+              <span className="truncate">{member.email}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {member.is_guardian && (
+              <span
+                className="inline-flex items-center gap-1"
+                style={{
+                  height: 22,
+                  borderRadius: 9999,
+                  padding: '0 8px',
+                  background: '#F5F3FF',
+                  color: '#7C3AED',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 11.5,
+                }}
+              >
+                <Award className="w-3 h-3" strokeWidth={2} />
+                Guardian {member.guardian_order ?? ''}
+              </span>
+            )}
+            {expanded ? (
+              <ChevronUp className="w-4 h-4 text-[#6A7282]" strokeWidth={2} />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-[#6A7282]" strokeWidth={2} />
+            )}
+          </div>
+        </button>
+
+        {expanded && (
+          <div className="flex flex-col gap-4" style={{ padding: '0 16px 16px' }}>
+            <div className="flex flex-col gap-2">
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  color: '#101828',
+                }}
+              >
+                Contact Information
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <LabeledInput label="Email" value={email} onChange={setEmail} type="email" />
+                <LabeledInput label="Phone number" value={phone} onChange={setPhone} type="tel" />
+              </div>
+            </div>
+
+            <div
+              className="flex items-start gap-2"
+              style={{ borderRadius: 10, background: '#EFF6FF', padding: 12 }}
+            >
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" color="#2563EB" strokeWidth={2} />
+              <p
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 13,
+                  lineHeight: '18px',
+                  color: '#1D4ED8',
+                }}
+              >
+                Access is released after verification. {firstName} will not see any content
+                until your release manager completes the release plan process.
+              </p>
+            </div>
+
+            <div
+              className="flex flex-col gap-2"
+              style={{ borderRadius: 10, background: '#F5F3FF', padding: 12 }}
+            >
+              <div className="flex items-center gap-1.5">
+                <Shield className="w-4 h-4 flex-shrink-0" color="#7C3AED" strokeWidth={2} />
+                <span
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 600,
+                    fontSize: 13.5,
+                    color: '#4C1D95',
+                  }}
+                >
+                  Guardian Role
+                </span>
+              </div>
+              <p
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 400,
+                  fontSize: 13,
+                  lineHeight: '18px',
+                  color: '#5B21B6',
+                }}
+              >
+                A Guardian acts as a backup Release Manager if your primary Release Manager is
+                unavailable or unwilling to act.
+              </p>
+              {member.is_guardian ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveGuardian}
+                  className="self-start cursor-pointer hover:opacity-80"
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 13,
+                    color: '#DC2626',
+                  }}
+                >
+                  Remove as Guardian
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setGuardianModalOpen(true)}
+                  disabled={!canDesignateGuardian}
+                  className="self-start flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{
+                    height: 32,
+                    padding: '0 14px',
+                    borderRadius: 9999,
+                    border: '1.25px solid #7C3AED',
+                    background: '#FFFFFF',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 13,
+                    color: '#7C3AED',
+                  }}
+                >
+                  <Shield className="w-3.5 h-3.5" strokeWidth={2} />
+                  Select as Guardian
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={onRemove}
+                className="cursor-pointer hover:opacity-80"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 13.5,
+                  color: '#DC2626',
+                }}
+              >
+                Remove {firstName}
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!dirty || saving}
+                className="cursor-pointer hover:opacity-90 disabled:cursor-not-allowed"
+                style={{
+                  height: 32,
+                  padding: '0 16px',
+                  borderRadius: 8,
+                  background: dirty ? '#4F46E5' : '#E5E7EB',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  color: dirty ? '#FFFFFF' : '#9CA3AF',
+                }}
+              >
+                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <GuardianConsentModal
+        open={guardianModalOpen}
+        onClose={() => setGuardianModalOpen(false)}
+        onConfirm={handleConfirmGuardian}
+        loading={guardianSubmitting}
+      />
+    </>
+  )
+}
+
+function LabeledInput({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          fontSize: 12.5,
+          color: '#4A5565',
+        }}
+      >
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full focus:outline-none"
+        style={{
+          height: 36,
+          borderRadius: 8,
+          border: '1px solid rgba(0,0,0,0.1)',
+          background: '#F9FAFB',
+          padding: '0 12px',
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 400,
+          fontSize: 13.5,
+          color: '#101828',
+        }}
+      />
+    </div>
+  )
+}
+
+function ContentTags({ summary }: { summary: ContentSummary }) {
+  const items: { icon: typeof ImageIcon; count: number; label: string }[] = [
+    { icon: ImageIcon, count: summary.photos, label: 'Photos' },
+    { icon: Shield, count: summary.memoir_chapters, label: 'Memoir Chapters' },
+    { icon: FileText, count: summary.documents, label: 'Documents' },
+    { icon: MessageSquare, count: summary.messages, label: 'Messages' },
+  ].filter((i) => i.count > 0)
+
+  if (items.length === 0) return null
+
+  return (
+    <span
+      className="flex flex-wrap items-center gap-x-1 gap-y-0.5"
+      style={{
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 400,
+        fontSize: 13,
+        color: '#6A7282',
+      }}
+    >
+      {items.map((item, i) => (
+        <span key={item.label} className="flex items-center gap-1">
+          {i > 0 && <span aria-hidden>•</span>}
+          {item.count} {item.label}
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -336,18 +1084,19 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center justify-center gap-1.5 cursor-pointer hover:opacity-90"
+      className="flex items-center justify-center gap-1.5 cursor-pointer hover:bg-gray-50"
       style={{
         height: 36,
         borderRadius: 8,
-        background: '#4F46E5',
+        border: '1px solid rgba(0,0,0,0.1)',
+        background: '#FFFFFF',
         padding: '0 16px',
         fontFamily: 'Inter, sans-serif',
         fontWeight: 500,
         fontSize: 14,
         lineHeight: '20px',
         letterSpacing: '-0.15px',
-        color: '#FFFFFF',
+        color: '#101828',
       }}
     >
       <Plus className="w-4 h-4" strokeWidth={2.25} />
@@ -481,7 +1230,6 @@ function EmptyState({
           fontFamily: 'Inter, sans-serif',
           fontWeight: 500,
           fontSize: 14,
-          lineHeight: '20px',
           color: '#FFFFFF',
         }}
       >
