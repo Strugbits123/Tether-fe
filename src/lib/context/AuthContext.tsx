@@ -127,8 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (memberships.length === 1) {
           const ctx = await switchContext(token, memberships[0].id)
           window.localStorage.setItem(ACTIVE_MEMBERSHIP_KEY, ctx.membership_id)
-          if (ctx.portal === 'release_manager' && pathnameRef.current !== '/rm') {
-            router.push('/rm')
+          if (ctx.portal === 'release_manager' && pathnameRef.current !== '/rm/overview') {
+            router.push('/rm/overview')
           }
         } else if (memberships.length > 1 && pathnameRef.current !== '/select-account') {
           router.push('/select-account')

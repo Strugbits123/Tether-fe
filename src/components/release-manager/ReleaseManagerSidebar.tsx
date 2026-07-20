@@ -112,7 +112,7 @@ export default function ReleaseManagerSidebar({
   // live pages. The rest are static for now.
   const PRIMARY_NAV: NavItem[] = [
     { label: 'My Profile', icon: User, onClick: () => setProfileOpen(true) },
-    { label: 'Overview', icon: Home, href: '/rm' },
+    { label: 'Overview', icon: Home, href: '/rm/overview' },
     { label: 'Release Plan', icon: FileCheck, href: '/rm/release-plan' },
     {
       label: 'Recipients',

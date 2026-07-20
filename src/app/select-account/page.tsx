@@ -72,7 +72,7 @@ export default function SelectAccountPage() {
     try {
       const ctx = await switchContext(token, membership.id)
       window.localStorage.setItem('active_membership', ctx.membership_id)
-      router.push(ctx.portal === 'owner' ? '/dashboard' : '/rm')
+      router.push(ctx.portal === 'owner' ? '/dashboard' : '/rm/overview')
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Failed to switch accounts.', 'error')
       setSwitchingId(null)
