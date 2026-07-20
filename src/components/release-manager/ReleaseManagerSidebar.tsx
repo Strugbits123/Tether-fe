@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { createClient } from '@/lib/supabase/client'
 import { getRmOverview, getUnreadCount } from '@/lib/api/rm'
-import FinishProfileModal from '@/components/dashboard/FinishProfileModal'
 import {
   Bell,
   ChevronDown,
@@ -53,7 +52,6 @@ export default function ReleaseManagerSidebar({
   const pathname = usePathname()
   const { profile, signOut, switchAccount } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
   const [ownerName, setOwnerName] = useState<string | null>(null)
   const [recipientCount, setRecipientCount] = useState<number | null>(null)
   const [unreadCount, setUnreadCount] = useState<number | null>(null)
@@ -108,10 +106,8 @@ export default function ReleaseManagerSidebar({
     ? `${firstName[0]}${lastName[0]}`.toUpperCase()
     : displayName.charAt(0).toUpperCase()
 
-  // My Profile opens the shared profile modal; Overview and Release Plan are
-  // live pages. The rest are static for now.
   const PRIMARY_NAV: NavItem[] = [
-    { label: 'My Profile', icon: User, onClick: () => setProfileOpen(true) },
+    { label: 'My Profile', icon: User, href: '/rm/profile' },
     { label: 'Overview', icon: Home, href: '/rm/overview' },
     { label: 'Release Plan', icon: FileCheck, href: '/rm/release-plan' },
     {
@@ -444,13 +440,6 @@ export default function ReleaseManagerSidebar({
           </button>
         </div>
       </aside>
-
-      <FinishProfileModal
-        open={profileOpen}
-        onClose={() => setProfileOpen(false)}
-        title="My Profile"
-        phoneHelpText="We will use this for important account info - never for marketing. See our Privacy Policy for additional details."
-      />
     </>
   )
 }

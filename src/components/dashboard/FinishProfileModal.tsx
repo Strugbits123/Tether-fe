@@ -29,6 +29,10 @@ interface FinishProfileModalProps {
   title?: string;
   /** Overrides the helper text shown under the phone field. */
   phoneHelpText?: string;
+  /** Renders inline as a page section instead of a modal overlay — no
+   *  backdrop, no fixed positioning, no close button. Used by standalone
+   *  profile pages (e.g. the RM portal's /rm/profile). */
+  embedded?: boolean;
 }
 
 // State display name <-> 2-letter code (the API stores/returns the code).
@@ -140,6 +144,7 @@ export default function FinishProfileModal({
   readOnly = false,
   title,
   phoneHelpText,
+  embedded = false,
 }: FinishProfileModalProps) {
   const { showToast } = useToast();
   const [firstName, setFirstName] = useState("");
@@ -336,11 +341,15 @@ export default function FinishProfileModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: "rgba(0,0,0,0.4)" }}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      className={embedded ? "w-full" : "fixed inset-0 z-50 overflow-y-auto"}
+      style={embedded ? undefined : { background: "rgba(0,0,0,0.4)" }}
+      onMouseDown={
+        embedded
+          ? undefined
+          : (e) => {
+              if (e.target === e.currentTarget) onClose();
+            }
+      }
     >
       <input
         ref={fileInputRef}
@@ -350,23 +359,34 @@ export default function FinishProfileModal({
         className="hidden"
       />
       <div
-        className="flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
-        onMouseDown={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
+        className={
+          embedded
+            ? "flex justify-center"
+            : "flex min-h-full items-center justify-center px-2 sm:px-4 py-4 sm:py-10"
+        }
+        onMouseDown={
+          embedded
+            ? undefined
+            : (e) => {
+                if (e.target === e.currentTarget) onClose();
+              }
+        }
       >
         <div
           className="relative bg-white w-full"
           style={{
             maxWidth: 700,
             borderRadius: 10,
-            borderTop: "1px solid rgba(0,0,0,0.1)",
-            boxShadow:
-              "0px 4px 6px -4px rgba(0,0,0,0.1), 0px 10px 15px -3px rgba(0,0,0,0.1)",
+            borderTop: embedded ? undefined : "1px solid rgba(0,0,0,0.1)",
+            border: embedded ? "1.25px solid #E5E7EB" : undefined,
+            boxShadow: embedded
+              ? undefined
+              : "0px 4px 6px -4px rgba(0,0,0,0.1), 0px 10px 15px -3px rgba(0,0,0,0.1)",
             fontFamily: "Inter, sans-serif",
           }}
         >
           {/* Close button */}
+          {!embedded && (
           <button
             type="button"
             onClick={onClose}
@@ -381,9 +401,10 @@ export default function FinishProfileModal({
           >
             <X className="w-[22px] h-[22px] text-[#0A0A0A]" strokeWidth={2} />
           </button>
+          )}
 
           {/* Header */}
-          <div className="pt-6 sm:pt-[37px] px-4 sm:px-6 pr-12 sm:pr-14">
+          <div className={embedded ? "pt-6 sm:pt-[37px] px-4 sm:px-6" : "pt-6 sm:pt-[37px] px-4 sm:px-6 pr-12 sm:pr-14"}>
             <h2
               style={{
                 fontFamily: "Inter, sans-serif",
