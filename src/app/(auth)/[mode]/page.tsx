@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { api, ApiError } from '@/lib/api/client'
 import { collectSignupAttribution } from '@/lib/attribution'
 import { track } from '@/lib/posthog/analytics'
+import { useAuth } from '@/lib/context/AuthContext'
 
 /* ─── Allowed modes ─── */
 const VALID_MODES = ['signin', 'signup'] as const
@@ -68,6 +69,7 @@ function MainAuthForm({
   const router = useRouter()
   const { showToast } = useToast()
   const searchParams = useSearchParams()
+  const { resolveMembership } = useAuth()
 
   useEffect(() => {
     const error = searchParams.get('error')
@@ -195,7 +197,11 @@ function MainAuthForm({
         })
         track('user_logged_in', { login_method: 'password' })
         showToast('Welcome back to Tether!', 'success')
-        router.push('/dashboard')
+        // Resolve membership and navigate directly to the right destination
+        // (dashboard / RM portal / account picker) — avoids an unconditional
+        // push to /dashboard that would flash before this same resolution
+        // (also triggered by the auth-state-change listener) redirects again.
+        await resolveMembership(loginData.access_token)
       }
     } catch (err: any) {
       setFormError(err.message || 'Something went wrong. Please try again.')

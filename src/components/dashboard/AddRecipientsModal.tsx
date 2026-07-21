@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Loader2, ShieldCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ApiError } from "@/lib/api/client";
 import { useToast } from "@/lib/context/ToastContext";
-import { createRecipient } from "@/lib/api/recipients";
+import { addRecipient } from "@/lib/api/access";
 import { toRecipientRelationship } from "@/lib/relationship";
 
 interface AddRecipientsModalProps {
@@ -156,13 +156,14 @@ export default function AddRecipientsModal({
 
     setLoading(true);
     try {
-      await createRecipient(token, {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+      await addRecipient(token, {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim() || undefined,
         relationship: toRecipientRelationship(relationship),
         note: note.trim() || undefined,
+        designate_as_guardian: isGuardian,
       });
       showToast("Recipient added successfully", "success");
       if (isOnboarding) {
@@ -661,7 +662,7 @@ function GuardianBox({
           }}
         >
           A Guardian acts as a backup Release Manager if your primary Release
-          Manager is unavailable. You can add up to 2 Guardians.
+          Manager is unavailable. You can add up to 3 Guardians.
         </span>
       </button>
     </div>

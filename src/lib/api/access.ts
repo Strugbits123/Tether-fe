@@ -63,6 +63,7 @@ export const addRecipient = (
     phone?: string
     relationship: string
     designate_as_guardian?: boolean
+    note?: string
   },
 ) => api.post<AccessRecipient>('/access/recipients', body, token)
 

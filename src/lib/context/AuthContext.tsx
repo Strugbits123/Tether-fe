@@ -14,6 +14,33 @@ export type { UserProfile }
 
 const ACTIVE_MEMBERSHIP_KEY = 'active_membership'
 const PENDING_INVITE_KEY = 'pending_invite_token'
+const ACCEPTED_TOKENS_KEY = 'accepted_invite_tokens'
+const AUTH_PATHS = ['/signin', '/signup']
+
+// Tracks tokens already sent to acceptInvitation from this browser, so a
+// duplicate onAuthStateChange firing (SIGNED_IN followed by TOKEN_REFRESHED,
+// multiple tabs, etc.) can't re-issue the same accept call. Backend accept is
+// idempotent regardless — this just avoids the redundant network round trip.
+function wasInviteAccepted(token: string): boolean {
+  try {
+    const raw = window.localStorage.getItem(ACCEPTED_TOKENS_KEY)
+    const list: string[] = raw ? JSON.parse(raw) : []
+    return list.includes(token)
+  } catch {
+    return false
+  }
+}
+
+function markInviteAccepted(token: string): void {
+  try {
+    const raw = window.localStorage.getItem(ACCEPTED_TOKENS_KEY)
+    const list: string[] = raw ? JSON.parse(raw) : []
+    if (!list.includes(token)) list.push(token)
+    window.localStorage.setItem(ACCEPTED_TOKENS_KEY, JSON.stringify(list.slice(-10)))
+  } catch {
+    // best-effort only
+  }
+}
 
 interface AuthContextValue {
   user: User | null
@@ -28,6 +55,14 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
   switchAccount: () => void
+  /** Resolves the session's membership(s) and navigates to the right
+   *  destination (dashboard / rm portal / account picker). Call directly
+   *  right after establishing a session (e.g. on login) so navigation
+   *  happens once, synchronously with the caller, instead of racing an
+   *  unconditional router.push against this same resolution running via the
+   *  auth-state-change listener. Guarded internally so only one of the two
+   *  callers (explicit vs. automatic) actually does the work. */
+  resolveMembership: (token: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -111,8 +146,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const inviteToken = window.localStorage.getItem(PENDING_INVITE_KEY)
     if (!inviteToken) return
     window.localStorage.removeItem(PENDING_INVITE_KEY)
+    if (wasInviteAccepted(inviteToken)) return
     try {
       await acceptInvitation(inviteToken, token)
+      markInviteAccepted(inviteToken)
     } catch {
       // Nothing more we can do client-side — the user can re-open the
       // original invitation email link if this genuinely failed.
@@ -147,16 +184,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (memberships.length === 1) {
           const ctx = await switchContext(token, memberships[0].id)
           window.localStorage.setItem(ACTIVE_MEMBERSHIP_KEY, ctx.membership_id)
-          if (ctx.portal === 'release_manager' && pathnameRef.current !== '/rm/overview') {
-            router.push('/rm/overview')
-          }
-        } else if (memberships.length > 1 && pathnameRef.current !== '/select-account') {
-          router.push('/select-account')
+          // Single membership: land directly on the right portal — no
+          // intermediate /dashboard flash for RM/guardian/recipient accounts.
+          const destination =
+            ctx.portal === 'owner'
+              ? '/dashboard'
+              : ctx.portal === 'release_manager'
+                ? '/rm/overview'
+                : '/select-account' // guardian/recipient portals don't exist yet
+          if (pathnameRef.current !== destination) router.push(destination)
+        } else if (memberships.length > 1) {
+          if (pathnameRef.current !== '/select-account') router.push('/select-account')
+        } else if (pathnameRef.current !== '/dashboard') {
+          // No memberships at all shouldn't happen (owner self-membership is
+          // auto-created on signup) — fall back rather than stranding the user.
+          router.push('/dashboard')
         }
       } catch {
         // Memberships aren't available (feature not live on the backend yet,
-        // or a transient error) — fall back to single-owner behavior.
+        // or a transient error). Don't yank the user off an unrelated page —
+        // but a fresh login/signup still needs *somewhere* to land.
         resolvedRef.current = false
+        if (AUTH_PATHS.includes(pathnameRef.current ?? '')) {
+          router.push('/dashboard')
+        }
       }
     },
     [router],
@@ -244,6 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         refreshProfile,
         switchAccount,
+        resolveMembership,
       }}
     >
       {children}
