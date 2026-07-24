@@ -23,6 +23,22 @@ export async function GET(request: Request) {
     return NextResponse.redirect(url.toString())
   }
 
+  // Someone who signed up via an invite (RM/guardian/recipient) has no owner
+  // account and must never land in the owner onboarding wizard — route them
+  // to /select-account instead, which resolves their real membership once
+  // AuthContext finalizes invite acceptance client-side.
+  const isInviteSignup = async (userId: string, email: string | undefined) => {
+    if (!email) return false
+    const { data } = await supabase
+      .from('account_memberships')
+      .select('id')
+      .or(`user_id.eq.${userId},invite_email.eq.${email.toLowerCase()}`)
+      .neq('role', 'owner')
+      .limit(1)
+      .maybeSingle()
+    return !!data
+  }
+
   // ── token_hash flow ──
   // Used by: email confirmation, magic link, password reset
   // Does NOT require the original browser session — works from any email client
@@ -43,6 +59,10 @@ export async function GET(request: Request) {
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.redirect(`${siteUrl}/signin`)
+
+    if (await isInviteSignup(user.id, user.email)) {
+      return dest('/select-account', loginMethod)
+    }
 
     const { data: profile } = await supabase
       .from('users')
@@ -72,6 +92,10 @@ export async function GET(request: Request) {
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.redirect(`${siteUrl}/signin`)
+
+    if (await isInviteSignup(user.id, user.email)) {
+      return dest('/select-account', 'oauth')
+    }
 
     const { data: profile } = await supabase
       .from('users')

@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
+import { getAccessToken } from '@/lib/supabase/getAccessToken'
+import { getActiveContext } from '@/lib/api/memberships'
 
 export default function DashboardLayout({
   children,
@@ -10,6 +13,36 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const router = useRouter()
+  const checkedRef = useRef(false)
+
+  // Context guard: this dashboard only makes sense for an owner membership.
+  // A Release Manager with no owner account of their own (the common case)
+  // must never be able to sit on this shell — even if they navigate here
+  // directly, or if a stale active_membership from a previous session lingers.
+  useEffect(() => {
+    if (checkedRef.current) return
+    checkedRef.current = true
+    ;(async () => {
+      const membershipId =
+        typeof window !== 'undefined' ? window.localStorage.getItem('active_membership') : null
+      if (!membershipId) {
+        router.replace('/select-account')
+        return
+      }
+      const token = await getAccessToken()
+      if (!token) return
+      try {
+        const ctx = await getActiveContext(token)
+        if (ctx.portal !== 'owner') {
+          router.replace('/select-account')
+        }
+      } catch {
+        window.localStorage.removeItem('active_membership')
+        router.replace('/select-account')
+      }
+    })()
+  }, [router])
 
   return (
     // Fixed viewport shell: the sidebar stays put and the main content area is

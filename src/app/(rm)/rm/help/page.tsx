@@ -1,3 +1,5 @@
+'use client'
+
 import { Bell, Download, HelpCircle, Lock, Shield, Users } from 'lucide-react'
 import HelpPage, {
   type Faq,

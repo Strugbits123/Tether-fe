@@ -50,6 +50,17 @@ export default function SelectAccountPage() {
     }
     try {
       const data = await getMemberships(token)
+
+      // This picker only makes sense when there's an actual choice to make —
+      // with exactly one membership, switch straight into it instead of
+      // showing a list with a single row.
+      if (data.length === 1) {
+        const ctx = await switchContext(token, data[0].id)
+        window.localStorage.setItem('active_membership', ctx.membership_id)
+        router.replace(ctx.portal === 'owner' ? '/dashboard' : '/rm/overview')
+        return
+      }
+
       setMemberships(data)
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Failed to load your accounts.', 'error')
