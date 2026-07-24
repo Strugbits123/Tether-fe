@@ -141,20 +141,6 @@ export default function RecipientsPage() {
           >
             Recipients
           </h1>
-          <button
-            type="button"
-            className="cursor-pointer hover:opacity-80 whitespace-nowrap"
-            style={{
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 500,
-              fontSize: 14,
-              lineHeight: '21px',
-              letterSpacing: '-0.15px',
-              color: '#4F46E5',
-            }}
-          >
-            View content assignments →
-          </button>
         </div>
 
         <div className="flex items-center flex-wrap" style={{ gap: 12 }}>

@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ApiError } from "@/lib/api/client";
 import { useToast } from "@/lib/context/ToastContext";
-import { createReleaseManager } from "@/lib/api/release-managers";
+import { setReleaseManager } from "@/lib/api/access";
 import { toReleaseManagerRelationship } from "@/lib/relationship";
 
 interface AddReleaseManagerModalProps {
@@ -145,13 +145,15 @@ export default function AddReleaseManagerModal({
 
     setLoading(true);
     try {
-      await createReleaseManager(token, {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+      await setReleaseManager(token, {
+        name: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim().toLowerCase(),
         phone: phone.trim() || undefined,
         relationship: toReleaseManagerRelationship(relationship),
         note: note.trim() || undefined,
+        // The legal disclaimer is gated externally by ReleaseManagerConsentModal
+        // (see the Access page) before this modal is ever opened.
+        legal_acknowledged: true,
       });
       showToast("Release Manager added successfully", "success");
       if (isOnboarding) {

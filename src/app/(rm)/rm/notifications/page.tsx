@@ -1,16 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronRight, X } from 'lucide-react'
+import { ChevronRight, Mail, MailOpen } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
 import { ApiError } from '@/lib/api/client'
 import {
-  dismissNotification,
   getRmNotifications,
   markNotificationRead,
+  markNotificationUnread,
   type RmNotification,
-  type RmNotificationCategory,
 } from '@/lib/api/rm'
 
 async function getToken(): Promise<string | null> {
@@ -21,94 +20,52 @@ async function getToken(): Promise<string | null> {
   return session?.access_token ?? null
 }
 
-type FilterCategory = 'All' | 'Recommendation' | 'Feature' | 'Security Alert' | 'System Update'
-
-const FILTER_TO_API: Record<FilterCategory, RmNotificationCategory> = {
-  All: 'all',
-  Recommendation: 'recommendation',
-  Feature: 'feature',
-  'Security Alert': 'security_alert',
-  'System Update': 'system_update',
-}
-
-const CATEGORY_LABEL: Record<Exclude<RmNotificationCategory, 'all'>, Exclude<FilterCategory, 'All'>> = {
-  recommendation: 'Recommendation',
-  feature: 'Feature',
-  security_alert: 'Security Alert',
-  system_update: 'System Update',
-}
-
-const CATEGORY_STYLES: Record<Exclude<FilterCategory, 'All'>, { bg: string; color: string }> = {
-  Recommendation: { bg: '#DBEAFE', color: '#1447E6' },
-  Feature: { bg: '#D0FAE5', color: '#007A55' },
-  'Security Alert': { bg: '#FFE2E2', color: '#C10007' },
-  'System Update': { bg: '#F3E8FF', color: '#8200DB' },
-}
-
-const CATEGORIES: FilterCategory[] = ['Recommendation', 'Feature', 'Security Alert', 'System Update']
-
 export default function NotificationsPage() {
   const { showToast } = useToast()
   const [items, setItems] = useState<RmNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [filter, setFilter] = useState<FilterCategory>('All')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const load = useCallback(
-    async (category: FilterCategory) => {
-      setLoading(true)
-      const token = await getToken()
-      if (!token) {
-        setLoading(false)
-        return
-      }
-      try {
-        const data = await getRmNotifications(token, FILTER_TO_API[category])
-        setItems(data.notifications)
-        setUnreadCount(data.unread_count)
-      } catch (e) {
-        showToast(e instanceof ApiError ? e.message : 'Failed to load notifications.', 'error')
-      } finally {
-        setLoading(false)
-      }
-    },
-    [showToast],
-  )
+  const load = useCallback(async () => {
+    setLoading(true)
+    const token = await getToken()
+    if (!token) {
+      setLoading(false)
+      return
+    }
+    try {
+      const data = await getRmNotifications(token)
+      setItems(data.notifications)
+      setUnreadCount(data.unread_count)
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Failed to load notifications.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
 
   useEffect(() => {
-    load(filter)
-    setSelectedId(null)
-  }, [filter, load])
+    load()
+  }, [load])
 
   const selected = items.find((n) => n.id === selectedId) ?? null
 
-  const handleSelect = async (n: RmNotification) => {
+  const handleSelect = (n: RmNotification) => {
     setSelectedId(n.id)
-    if (n.is_read) return
-    const token = await getToken()
-    if (!token) return
-    try {
-      await markNotificationRead(token, n.id)
-      setItems((prev) => prev.map((it) => (it.id === n.id ? { ...it, is_read: true } : it)))
-      setUnreadCount((c) => Math.max(0, c - 1))
-    } catch {
-      // Non-critical — leave it unread locally rather than surfacing an error.
-    }
   }
 
-  const dismiss = async (id: string) => {
+  const toggleRead = async (n: RmNotification) => {
     const token = await getToken()
     if (!token) return
-    const wasUnread = items.find((n) => n.id === id)?.is_read === false
-    setItems((prev) => prev.filter((n) => n.id !== id))
-    setSelectedId((prev) => (prev === id ? null : prev))
-    if (wasUnread) setUnreadCount((c) => Math.max(0, c - 1))
+    const nextIsRead = !n.is_read
+    setItems((prev) => prev.map((it) => (it.id === n.id ? { ...it, is_read: nextIsRead } : it)))
+    setUnreadCount((c) => Math.max(0, c + (nextIsRead ? -1 : 1)))
     try {
-      await dismissNotification(token, id)
+      await (nextIsRead ? markNotificationRead(token, n.id) : markNotificationUnread(token, n.id))
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Failed to dismiss notification.', 'error')
-      load(filter)
+      showToast(e instanceof ApiError ? e.message : 'Failed to update notification.', 'error')
+      load()
     }
   }
 
@@ -179,35 +136,6 @@ export default function NotificationsPage() {
         </p>
       </div>
 
-      {/* Filter row */}
-      <div className="flex items-center flex-wrap" style={{ gap: 13.5 }}>
-        <span
-          className="flex-shrink-0"
-          style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 500,
-            fontSize: 15.76,
-            lineHeight: '22.5px',
-            letterSpacing: '-0.17px',
-            color: '#364153',
-          }}
-        >
-          Filter by category:
-        </span>
-        <div className="flex items-center flex-wrap" style={{ gap: 9 }}>
-          <FilterChip label="All" active={filter === 'All'} onClick={() => setFilter('All')} />
-          {CATEGORIES.map((c) => (
-            <FilterChip
-              key={c}
-              label={c}
-              category={c}
-              active={filter === c}
-              onClick={() => setFilter(c)}
-            />
-          ))}
-        </div>
-      </div>
-
       {/* Content: list + detail panel */}
       <div className="flex flex-col lg:flex-row" style={{ gap: 27 }}>
         {/* Notification list */}
@@ -233,12 +161,11 @@ export default function NotificationsPage() {
                 color: '#99A1AF',
               }}
             >
-              No notifications in this category
+              No notifications yet
             </div>
           ) : (
             items.map((n) => {
               const isSelected = n.id === selectedId
-              const categoryLabel = CATEGORY_LABEL[n.category]
               return (
                 <button
                   key={n.id}
@@ -267,23 +194,6 @@ export default function NotificationsPage() {
                       >
                         {n.title}
                       </span>
-                      {categoryLabel && (
-                        <span
-                          className="flex items-center justify-center flex-shrink-0"
-                          style={{
-                            padding: '2px 9px',
-                            borderRadius: 4.5,
-                            background: CATEGORY_STYLES[categoryLabel].bg,
-                            fontFamily: 'Inter, sans-serif',
-                            fontWeight: 600,
-                            fontSize: 13.5,
-                            lineHeight: '18px',
-                            color: CATEGORY_STYLES[categoryLabel].color,
-                          }}
-                        >
-                          {categoryLabel}
-                        </span>
-                      )}
                       {!n.is_read && (
                         <span
                           className="flex-shrink-0"
@@ -325,22 +235,27 @@ export default function NotificationsPage() {
                     <span
                       role="button"
                       tabIndex={0}
-                      aria-label="Dismiss notification"
+                      aria-label={n.is_read ? 'Mark as unread' : 'Mark as read'}
+                      title={n.is_read ? 'Mark as unread' : 'Mark as read'}
                       onClick={(e) => {
                         e.stopPropagation()
-                        dismiss(n.id)
+                        toggleRead(n)
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
                           e.stopPropagation()
-                          dismiss(n.id)
+                          toggleRead(n)
                         }
                       }}
                       className="flex items-center justify-center cursor-pointer rounded-[9px] hover:bg-gray-100 transition-colors"
                       style={{ width: 36, height: 36 }}
                     >
-                      <X style={{ width: 18, height: 18, color: '#99A1AF' }} strokeWidth={2} />
+                      {n.is_read ? (
+                        <MailOpen style={{ width: 18, height: 18, color: '#99A1AF' }} strokeWidth={2} />
+                      ) : (
+                        <Mail style={{ width: 18, height: 18, color: '#155DFC' }} strokeWidth={2} />
+                      )}
                     </span>
                     <ChevronRight
                       className="flex-shrink-0"
@@ -379,23 +294,6 @@ export default function NotificationsPage() {
                   >
                     {selected.title}
                   </span>
-                  {CATEGORY_LABEL[selected.category] && (
-                    <span
-                      className="flex items-center justify-center flex-shrink-0"
-                      style={{
-                        padding: '2px 9px',
-                        borderRadius: 4.5,
-                        background: CATEGORY_STYLES[CATEGORY_LABEL[selected.category]].bg,
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: 600,
-                        fontSize: 13.5,
-                        lineHeight: '18px',
-                        color: CATEGORY_STYLES[CATEGORY_LABEL[selected.category]].color,
-                      }}
-                    >
-                      {CATEGORY_LABEL[selected.category]}
-                    </span>
-                  )}
                 </div>
                 <p
                   style={{
@@ -444,47 +342,5 @@ export default function NotificationsPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-function FilterChip({
-  label,
-  category,
-  active,
-  onClick,
-}: {
-  label: string
-  category?: FilterCategory
-  active: boolean
-  onClick: () => void
-}) {
-  const base =
-    category && category !== 'All' && CATEGORY_STYLES[category]
-      ? CATEGORY_STYLES[category]
-      : { bg: '#101828', color: '#FFFFFF' }
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center justify-center cursor-pointer transition-opacity"
-      style={{
-        height: 41,
-        padding: '0 16.88px',
-        borderRadius: 11.25,
-        background: base.bg,
-        opacity: active ? 1 : 0.55,
-        outline: active && category && category !== 'All' ? `2px solid ${base.color}` : 'none',
-        outlineOffset: -2,
-        fontFamily: 'Inter, sans-serif',
-        fontWeight: 500,
-        fontSize: 15.76,
-        lineHeight: '22.5px',
-        letterSpacing: '-0.17px',
-        color: base.color,
-      }}
-    >
-      {label}
-    </button>
   )
 }

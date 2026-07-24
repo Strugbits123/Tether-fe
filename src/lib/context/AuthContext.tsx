@@ -195,18 +195,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (pathnameRef.current !== destination) router.push(destination)
         } else if (memberships.length > 1) {
           if (pathnameRef.current !== '/select-account') router.push('/select-account')
-        } else if (pathnameRef.current !== '/dashboard') {
+        } else if (pathnameRef.current !== '/select-account') {
           // No memberships at all shouldn't happen (owner self-membership is
-          // auto-created on signup) — fall back rather than stranding the user.
-          router.push('/dashboard')
+          // auto-created on signup), but never default an unresolved account to
+          // the owner dashboard — that's a different account's data surface.
+          // Land on the picker (empty-state + sign-out) instead of guessing.
+          router.push('/select-account')
         }
       } catch {
         // Memberships aren't available (feature not live on the backend yet,
         // or a transient error). Don't yank the user off an unrelated page —
-        // but a fresh login/signup still needs *somewhere* to land.
+        // but a fresh login/signup still needs *somewhere* to land, and it must
+        // never be the owner dashboard when we can't confirm that's who they are.
         resolvedRef.current = false
         if (AUTH_PATHS.includes(pathnameRef.current ?? '')) {
-          router.push('/dashboard')
+          router.push('/select-account')
         }
       }
     },

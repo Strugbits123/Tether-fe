@@ -29,6 +29,8 @@ async function getToken(): Promise<string | null> {
 interface ReleaseManagerSidebarProps {
   mobileOpen: boolean
   onClose: () => void
+  /** Resolved server-side by the (rm) layout to avoid a client-fetch flicker. */
+  hasOwnerAccount: boolean
 }
 
 type NavItem = {
@@ -40,13 +42,14 @@ type NavItem = {
 }
 
 const SECONDARY_NAV: NavItem[] = [
-  { label: 'Download everything', icon: Download },
-  { label: 'Get support', icon: HelpCircle },
+  { label: 'Download everything', icon: Download, href: '/rm/downloads' },
+  { label: 'Get support', icon: HelpCircle, href: '/rm/help' },
 ]
 
 export default function ReleaseManagerSidebar({
   mobileOpen,
   onClose,
+  hasOwnerAccount,
 }: ReleaseManagerSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -264,54 +267,57 @@ export default function ReleaseManagerSidebar({
           <nav className="flex flex-col" style={{ gap: 4 }}>
             {SECONDARY_NAV.map(renderNavItem)}
 
-            {/* Create my Tether — links back to the main app */}
-            <button
-              type="button"
-              onClick={() => {
-                router.push('/rm/create-account')
-                onClose()
-              }}
-              className="flex items-center w-full text-left rounded-[10px] hover:bg-white/5 transition-colors cursor-pointer"
-              style={{ gap: 10, padding: '10px 12px' }}
-            >
-              <Image
-                src="/images/Dashboard/Greet.svg"
-                alt=""
-                width={17}
-                height={17}
-                className="flex-shrink-0"
-              />
-              <span
-                className="flex-1"
-                style={{
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 500,
-                  fontSize: 14,
-                  lineHeight: '19px',
-                  letterSpacing: '-0.15px',
-                  color: 'rgba(255,255,255,0.6)',
+            {/* Create my Tether — links back to the main app. Only relevant
+                for RMs who don't already have their own owner account. */}
+            {!hasOwnerAccount && (
+              <button
+                type="button"
+                onClick={() => {
+                  router.push('/rm/create-account')
+                  onClose()
                 }}
+                className="flex items-center w-full text-left rounded-[10px] hover:bg-white/5 transition-colors cursor-pointer"
+                style={{ gap: 10, padding: '10px 12px' }}
               >
-                Create my Tether
-              </span>
-              <span
-                className="flex items-center justify-center flex-shrink-0"
-                style={{
-                  height: 19,
-                  padding: '0 8px',
-                  borderRadius: 9999,
-                  background: '#10B981',
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 700,
-                  fontSize: 10,
-                  lineHeight: '15px',
-                  letterSpacing: '0.12px',
-                  color: '#FFFFFF',
-                }}
-              >
-                25% off
-              </span>
-            </button>
+                <Image
+                  src="/images/Dashboard/Greet.svg"
+                  alt=""
+                  width={17}
+                  height={17}
+                  className="flex-shrink-0"
+                />
+                <span
+                  className="flex-1"
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: '19px',
+                    letterSpacing: '-0.15px',
+                    color: 'rgba(255,255,255,0.6)',
+                  }}
+                >
+                  Create my Tether
+                </span>
+                <span
+                  className="flex items-center justify-center flex-shrink-0"
+                  style={{
+                    height: 19,
+                    padding: '0 8px',
+                    borderRadius: 9999,
+                    background: '#10B981',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 700,
+                    fontSize: 10,
+                    lineHeight: '15px',
+                    letterSpacing: '0.12px',
+                    color: '#FFFFFF',
+                  }}
+                >
+                  25% off
+                </span>
+              </button>
+            )}
           </nav>
         </div>
 

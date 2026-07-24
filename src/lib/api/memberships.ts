@@ -26,8 +26,13 @@ export interface SwitchContextResult {
   portal: MembershipPortal
 }
 
-export const getMemberships = (token: string) =>
-  api.get<Membership[]>('/auth/memberships', token)
+// Backend returns { memberships: [...] } (see MembershipsService.listMemberships),
+// not a bare array — unwrap it here so every caller can keep treating this as
+// a plain Membership[].
+export const getMemberships = async (token: string): Promise<Membership[]> => {
+  const result = await api.get<{ memberships: Membership[] }>('/auth/memberships', token)
+  return result?.memberships ?? []
+}
 
 export const switchContext = (token: string, membershipId: string) =>
   api.post<SwitchContextResult>('/auth/switch-context', { membershipId }, token)

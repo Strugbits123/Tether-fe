@@ -189,17 +189,10 @@ export const retryDeliveryEmail = (token: string, id: string, email: string) =>
 
 /* ─── Notifications ──────────────────────────────────────────────────────── */
 
-export type RmNotificationCategory =
-  | 'all'
-  | 'recommendation'
-  | 'feature'
-  | 'security_alert'
-  | 'system_update'
-
 export interface RmNotification {
   id: string
   source: string
-  category: Exclude<RmNotificationCategory, 'all'>
+  category: string | null
   title: string
   message: string
   is_read: boolean
@@ -207,17 +200,17 @@ export interface RmNotification {
   time_ago: string
 }
 
-export const getRmNotifications = (token: string, category?: RmNotificationCategory) =>
+export const getRmNotifications = (token: string) =>
   api.get<{ notifications: RmNotification[]; unread_count: number; total: number }>(
-    `/rm/notifications${category && category !== 'all' ? `?category=${category}` : ''}`,
+    '/rm/notifications',
     token,
   )
 
 export const markNotificationRead = (token: string, id: string) =>
   api.patch<{ id: string; is_read: boolean }>(`/rm/notifications/${id}/read`, {}, token)
 
-export const dismissNotification = (token: string, id: string) =>
-  api.delete<{ message: string }>(`/rm/notifications/${id}`, token)
+export const markNotificationUnread = (token: string, id: string) =>
+  api.patch<{ id: string; is_read: boolean }>(`/rm/notifications/${id}/unread`, {}, token)
 
 export const getUnreadCount = (token: string) =>
   api.get<{ unread_count: number }>('/rm/notifications/unread-count', token)
@@ -226,13 +219,16 @@ export const getUnreadCount = (token: string) =>
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
-export async function downloadActivityReport(token: string): Promise<void> {
+function authHeaders(token: string): Record<string, string> {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
   if (typeof window !== 'undefined') {
     const membershipId = window.localStorage.getItem('active_membership')
     if (membershipId) headers['X-Account-Context'] = membershipId
   }
-  const response = await fetch(`${API_URL}/rm/release-plan/activity-report`, { headers })
+  return headers
+}
+
+async function downloadBlob(response: Response, filename: string): Promise<void> {
   if (!response.ok) {
     throw new Error('Download failed. Please try again.')
   }
@@ -240,9 +236,63 @@ export async function downloadActivityReport(token: string): Promise<void> {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'Release-Plan-Activity-Report.pdf'
+  a.download = filename
   document.body.appendChild(a)
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+export async function downloadActivityReport(token: string): Promise<void> {
+  const response = await fetch(`${API_URL}/rm/release-plan/activity-report`, {
+    headers: authHeaders(token),
+  })
+  await downloadBlob(response, 'Release-Plan-Activity-Report.pdf')
+}
+
+/* ─── Downloads (content package) ────────────────────────────────────────── */
+
+export interface DownloadCategorySummary {
+  count: number
+}
+
+export interface DownloadSummary {
+  audio_messages: DownloadCategorySummary
+  documents: DownloadCategorySummary
+  photos: DownloadCategorySummary
+  transcripts: DownloadCategorySummary
+  life_story: DownloadCategorySummary
+}
+
+export const getDownloadSummary = (token: string) =>
+  api.get<DownloadSummary>('/rm/downloads/summary', token)
+
+export interface PrepareDownloadSelection {
+  audio?: boolean
+  documents?: boolean
+  photos?: boolean
+  transcripts?: boolean
+  life_story?: boolean
+}
+
+export async function prepareDownload(
+  token: string,
+  selection: PrepareDownloadSelection,
+): Promise<void> {
+  const response = await fetch(`${API_URL}/rm/downloads/prepare`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(selection),
+  })
+  if (!response.ok) {
+    let message = 'Download failed. Please try again.'
+    try {
+      const body = await response.json()
+      if (typeof body?.message === 'string') message = body.message
+    } catch {
+      // non-JSON error body — keep the generic message
+    }
+    throw new Error(message)
+  }
+  await downloadBlob(response, 'Tether-Content.zip')
 }

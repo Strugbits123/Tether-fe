@@ -1,5 +1,6 @@
 'use client'
 
+import { Clock } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
@@ -40,6 +41,44 @@ async function getToken(): Promise<string | null> {
   return session?.access_token ?? null
 }
 
+// Release Plan is temporarily hidden — the flow below is fully built but
+// paused for this sprint. Swap this back to ReleasePlanPageImpl to re-enable.
+export default function ReleasePlanPage() {
+  return (
+    <div className="w-full max-w-[700px] mx-auto flex flex-col items-center text-center gap-4 p-6 sm:p-8" style={{ paddingTop: 96 }}>
+      <span
+        className="flex items-center justify-center flex-shrink-0"
+        style={{ width: 64, height: 64, borderRadius: 9999, background: '#EEF2FF' }}
+      >
+        <Clock style={{ width: 28, height: 28, color: '#4F46E5' }} strokeWidth={2} />
+      </span>
+      <h1
+        style={{
+          fontFamily: '"Instrument Serif", serif',
+          fontWeight: 400,
+          fontSize: 32,
+          lineHeight: '48px',
+          color: '#111827',
+        }}
+      >
+        Release Plan
+      </h1>
+      <p
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 400,
+          fontSize: 15,
+          lineHeight: '22.5px',
+          letterSpacing: '-0.23px',
+          color: '#6B7280',
+        }}
+      >
+        Coming in next sprint.
+      </p>
+    </div>
+  )
+}
+
 function viewForStep(step: number): ReleasePlanView {
   if (step <= 2) return 'step2'
   if (step === 3) return 'step3'
@@ -47,7 +86,9 @@ function viewForStep(step: number): ReleasePlanView {
   return 'complete'
 }
 
-export default function ReleasePlanPage() {
+// Full release-plan flow — kept intact for next sprint, not currently wired
+// up as the page's default export (see ReleasePlanPage below).
+export function ReleasePlanPageImpl() {
   const { showToast } = useToast()
 
   const [loading, setLoading] = useState(true)

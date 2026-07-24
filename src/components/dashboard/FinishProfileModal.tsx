@@ -33,6 +33,14 @@ interface FinishProfileModalProps {
    *  backdrop, no fixed positioning, no close button. Used by standalone
    *  profile pages (e.g. the RM portal's /rm/profile). */
   embedded?: boolean;
+  /** Hides the SMS opt-in checkbox/field. Used for the Release Manager
+   *  profile form, where SMS opt-in isn't applicable. */
+  hideSmsOptIn?: boolean;
+  /** When set, the readOnly view's footer button becomes "Edit Profile" and
+   *  calls this instead of the default "Close" (which calls onClose). Used
+   *  by standalone profile pages that toggle between a saved-data view and
+   *  the edit form in place. */
+  onEdit?: () => void;
 }
 
 // State display name <-> 2-letter code (the API stores/returns the code).
@@ -145,6 +153,8 @@ export default function FinishProfileModal({
   title,
   phoneHelpText,
   embedded = false,
+  hideSmsOptIn = false,
+  onEdit,
 }: FinishProfileModalProps) {
   const { showToast } = useToast();
   const [firstName, setFirstName] = useState("");
@@ -236,9 +246,10 @@ export default function FinishProfileModal({
     };
   }, [open]);
 
-  // Escape-to-close + scroll lock.
+  // Escape-to-close + scroll lock. Embedded mode renders as a plain page
+  // section (no backdrop/overlay), so it must never lock page scroll.
   useEffect(() => {
-    if (!open) return;
+    if (!open || embedded) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -249,7 +260,7 @@ export default function FinishProfileModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onClose]);
+  }, [open, embedded, onClose]);
 
   // Revoke object URLs to avoid memory leaks.
   useEffect(() => {
@@ -320,7 +331,7 @@ export default function FinishProfileModal({
           : undefined,
         phone_number: phone.trim() || undefined,
         // Can only opt into SMS with a phone number on file.
-        sms_opted_in: phone.trim() ? smsOptedIn : false,
+        sms_opted_in: hideSmsOptIn ? false : phone.trim() ? smsOptedIn : false,
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       });
 
@@ -448,6 +459,7 @@ export default function FinishProfileModal({
                 status={status}
                 phone={phone}
                 smsOptedIn={smsOptedIn}
+                hideSmsOptIn={hideSmsOptIn}
               />
             ) : (
               <>
@@ -791,7 +803,7 @@ export default function FinishProfileModal({
                     </p>
 
                     {/* SMS opt-in — only relevant once a mobile number is entered. */}
-                    {phone.trim().length > 0 && (
+                    {!hideSmsOptIn && phone.trim().length > 0 && (
                       <label className="flex items-start gap-2 mt-3 cursor-pointer">
                         <input
                           type="checkbox"
@@ -877,7 +889,7 @@ export default function FinishProfileModal({
               {readOnly ? (
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={onEdit ?? onClose}
                   className="flex items-center justify-center cursor-pointer hover:opacity-90"
                   style={{
                     height: 36,
@@ -891,7 +903,7 @@ export default function FinishProfileModal({
                     color: "#FFFFFF",
                   }}
                 >
-                  Close
+                  {onEdit ? "Edit Profile" : "Close"}
                 </button>
               ) : (
                 <>
@@ -961,6 +973,7 @@ function ReadOnlyProfile({
   status,
   phone,
   smsOptedIn,
+  hideSmsOptIn,
 }: {
   photo: string | null;
   firstName: string;
@@ -972,6 +985,7 @@ function ReadOnlyProfile({
   status: string;
   phone: string;
   smsOptedIn: boolean;
+  hideSmsOptIn?: boolean;
 }) {
   const rows: { label: string; value: string }[] = [
     { label: "Zip Code", value: zipCode },
@@ -1044,7 +1058,7 @@ function ReadOnlyProfile({
         ))}
       </div>
 
-      {phone.trim().length > 0 && (
+      {!hideSmsOptIn && phone.trim().length > 0 && (
         <div className="flex flex-col gap-1">
           <span style={labelStyle}>Text updates</span>
           <span style={valueStyle}>{smsOptedIn ? "Enabled" : "Disabled"}</span>

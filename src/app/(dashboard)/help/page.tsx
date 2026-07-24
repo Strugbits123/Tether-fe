@@ -299,7 +299,19 @@ const FAQ_PAGE_SIZE = 5;
 
 type ModalKind = "feedback" | "feature" | "bug" | "thanks" | null;
 
-export default function HelpPage() {
+interface HelpPageProps {
+  /** Primary accent used for the hero gradient, "Book a time" button, and
+   *  the "Load More" link. Defaults to the account-owner dashboard's accent;
+   *  other portals (e.g. the RM portal) pass their own. */
+  accentColor?: string;
+  /** Second stop of the hero gradient — should be a darker shade of accentColor. */
+  accentColorDark?: string;
+}
+
+export default function HelpPage({
+  accentColor = "#4F39F6",
+  accentColorDark = "#432DD7",
+}: HelpPageProps = {}) {
   const { profile, user } = useAuth();
   const firstName =
     profile?.first_name?.trim() ||
@@ -397,7 +409,7 @@ export default function HelpPage() {
         className="flex flex-col items-center"
         style={{
           borderRadius: 14,
-          background: "linear-gradient(90deg, #4F39F6 0%, #432DD7 100%)",
+          background: `linear-gradient(90deg, ${accentColor} 0%, ${accentColorDark} 100%)`,
           padding: "clamp(28px, 5vw, 47.99px) clamp(16px, 5vw, 48px)",
         }}
       >
@@ -516,7 +528,7 @@ export default function HelpPage() {
                     icon={
                       <Video
                         style={{ width: 16, height: 16 }}
-                        color="#4F39F6"
+                        color={accentColor}
                         strokeWidth={2}
                       />
                     }
@@ -668,7 +680,7 @@ export default function HelpPage() {
             height: 36,
             padding: "8px 16px",
             borderRadius: 8,
-            background: "#4F39F6",
+            background: accentColor,
             fontFamily: "Inter, sans-serif",
             fontWeight: 500,
             fontSize: 14,
@@ -790,14 +802,14 @@ export default function HelpPage() {
                   fontSize: 16,
                   lineHeight: "24px",
                   letterSpacing: "-0.31px",
-                  color: "#4F39F6",
+                  color: accentColor,
                 }}
               >
                 Load More
               </span>
               <ChevronDown
                 style={{ width: 20, height: 20, flexShrink: 0 }}
-                color="#4F39F6"
+                color={accentColor}
                 strokeWidth={2}
               />
             </button>
