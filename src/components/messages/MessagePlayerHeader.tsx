@@ -1,41 +1,59 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Users, X } from "lucide-react";
 
 interface MessagePlayerHeaderProps {
   type: "audio" | "video";
-  recipientName?: string;
   messageTitle?: string;
+  /** Distinct people this message reaches (+RM). Hidden when undefined. */
+  recipientCount?: number;
   onClose: () => void;
 }
 
 /**
  * Shared header for the audio + video players:
- *   "AUDIO MESSAGE FOR" (small caps, gray)
- *   <recipient name, bold>  <message title, italic indigo>
+ *   "AUDIO MESSAGE" (small caps, gray)
+ *   <message title, bold>
+ *   <recipient icon + count>
  * with a circular close button on the right.
  */
 export default function MessagePlayerHeader({
   type,
-  recipientName,
   messageTitle,
+  recipientCount,
   onClose,
 }: MessagePlayerHeaderProps) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <p
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            color: "#9CA3AF",
-          }}
-        >
-          {type === "audio" ? "AUDIO" : "VIDEO"} MESSAGE FOR
-        </p>
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
+          <p
+            style={{
+              fontFamily: "Inter, sans-serif",
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "1.5px",
+              color: "#9CA3AF",
+            }}
+          >
+            {type === "audio" ? "AUDIO" : "VIDEO"} MESSAGE
+          </p>
+          {recipientCount !== undefined && (
+            <span
+              className="flex items-center gap-1.5"
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: 13,
+                fontWeight: 500,
+                color: "#6B7280",
+              }}
+            >
+              <Users className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+              {recipientCount} {recipientCount === 1 ? "recipient" : "recipients"}
+            </span>
+          )}
+        </div>
         <h2
           className="mt-1"
           style={{
@@ -47,20 +65,7 @@ export default function MessagePlayerHeader({
             wordBreak: "break-word",
           }}
         >
-          {recipientName || "Your Voice, Preserved"}
-          {messageTitle && (
-            <span
-              style={{
-                fontStyle: "italic",
-                fontWeight: 400,
-                color: "#4F39F6",
-                marginLeft: 8,
-                fontFamily: 'Georgia, "Times New Roman", serif',
-              }}
-            >
-              {messageTitle}
-            </span>
-          )}
+          {messageTitle || "Your Voice, Preserved"}
         </h2>
       </div>
       <button

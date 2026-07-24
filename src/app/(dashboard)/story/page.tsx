@@ -6,6 +6,7 @@ import {
   Clock,
   Download,
   Grid3x3,
+  Image as ImageIcon,
   List,
   Loader2,
   Mic,
@@ -103,6 +104,7 @@ interface DisplayChapter {
   initials: string[]
   extra: number
   noRecipients: boolean
+  exhibitCount: number
 }
 
 const MAX_INITIALS = 3
@@ -126,6 +128,7 @@ function toDisplay(c: ChapterListItem, index: number): DisplayChapter {
     initials: initials.slice(0, MAX_INITIALS),
     extra: Math.max(0, initials.length - MAX_INITIALS),
     noRecipients,
+    exhibitCount: c.exhibit_count,
   }
 }
 
@@ -184,7 +187,7 @@ export default function StoryPage() {
     <div className="flex flex-col gap-6">
       {/* Header row */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex flex-col" style={{ gap: 8, maxWidth: 623 }}>
+        <div className="flex flex-col" style={{ gap: 8, maxWidth: 'none' }}>
           <h1
             style={{
               fontFamily: '"Instrument Serif", serif',
@@ -204,6 +207,7 @@ export default function StoryPage() {
               lineHeight: '24px',
               letterSpacing: '-0.31px',
               color: '#4A5565',
+              whiteSpace: 'nowrap',
             }}
           >
             Your life in your words — organized into chapters your family will read for generations.
@@ -508,6 +512,32 @@ function StatusPill({ status }: { status: DisplayStatus }) {
   )
 }
 
+function ExhibitPill({ count }: { count: number }) {
+  if (!count) return null
+  return (
+    <span
+      className="inline-flex items-center justify-center"
+      style={{
+        height: 23.95,
+        gap: 4,
+        borderRadius: 9999,
+        padding: '0 12px',
+        background: '#8983F0',
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 400,
+        fontSize: 12,
+        lineHeight: '16px',
+        color: '#FFFFFF',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}
+    >
+      <ImageIcon style={{ width: 12, height: 12, flexShrink: 0 }} color="#FFFFFF" strokeWidth={2} />
+      {count} {count === 1 ? 'exhibit' : 'exhibits'}
+    </span>
+  )
+}
+
 function DateLabel({ date }: { date: string }) {
   return (
     <span className="inline-flex items-center" style={{ gap: 4, flexShrink: 0 }}>
@@ -674,6 +704,7 @@ function ChapterGridCard({ chapter, onOpen }: { chapter: DisplayChapter; onOpen:
       <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: 16 }}>
         <PeriodPill period={chapter.period} />
         <StatusPill status={chapter.status} />
+        <ExhibitPill count={chapter.exhibitCount} />
       </div>
 
       <div style={{ marginTop: 16 }}>
@@ -791,6 +822,7 @@ function ChapterListCard({ chapter, onOpen }: { chapter: DisplayChapter; onOpen:
               </span>
             )}
             <StatusPill status={chapter.status} />
+            <ExhibitPill count={chapter.exhibitCount} />
             {chapter.words ? (
               <span
                 style={{

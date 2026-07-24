@@ -12,7 +12,12 @@ import {
   setChapterAssignments,
 } from '@/lib/api/chapters'
 import { getRecipients, type Recipient } from '@/lib/api/recipients'
-import { assignmentsToSelection } from '@/lib/utils/assignments'
+import {
+  assignmentsToSelection,
+  countFromSelection,
+  selectGroup,
+  toggleIndividual as toggleIndividualSelection,
+} from '@/lib/utils/assignments'
 import { displayRelationship } from '@/lib/relationship'
 
 /* ---------------------- Helpers ---------------------- */
@@ -102,7 +107,9 @@ export default function ChapterRecipientsPage() {
 
   const toggleGroup = (g: string) => {
     setAssignLater(false)
-    setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))
+    const next = selectGroup(g, { groups, individuals: individualIds }, recipients)
+    setGroups(next.groups)
+    setIndividualIds(next.individuals)
   }
 
   const toggleAssignLater = () => {
@@ -118,7 +125,9 @@ export default function ChapterRecipientsPage() {
 
   const togglePerson = (id: string) => {
     setAssignLater(false)
-    setIndividualIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+    const next = toggleIndividualSelection(id, { groups, individuals: individualIds })
+    setGroups(next.groups)
+    setIndividualIds(next.individuals)
   }
 
   const handleSave = async () => {
@@ -146,7 +155,7 @@ export default function ChapterRecipientsPage() {
     }
   }
 
-  const receiveCount = individualIds.length
+  const receiveCount = countFromSelection(groups, individualIds, recipients)
 
   if (loading) {
     return (
@@ -298,7 +307,7 @@ export default function ChapterRecipientsPage() {
         <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: 16, lineHeight: '24px', letterSpacing: '-0.31px', color: '#4F46E5' }}>
           {assignLater
             ? 'Assignments will be decided later'
-            : `${receiveCount} ${receiveCount === 1 ? 'person' : 'people'} selected individually`}
+            : `${receiveCount} ${receiveCount === 1 ? 'recipient' : 'recipients'} will receive this`}
         </span>
       </div>
 

@@ -23,6 +23,8 @@ import AssignRecipientsModal from "@/components/dashboard/AssignRecipientsModal"
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/context/ToastContext";
 import { withRetry } from "@/lib/utils/retry";
+import { getRecipients } from "@/lib/api/recipients";
+import { countRecipients } from "@/lib/utils/assignments";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 import VideoPlayer from "@/components/video/VideoPlayer";
 import MessagePlayerHeader from "@/components/messages/MessagePlayerHeader";
@@ -364,11 +366,15 @@ export default function MessagesPage() {
       return;
     }
     const assignments: Assignment[] = [];
-    for (const g of groups) {
-      if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
-    }
-    for (const id of individualIds) {
-      assignments.push({ scope: "individual", recipientId: id });
+    if (groups.includes("All Recipients")) {
+      assignments.push(ASSIGN_GROUP_MAP["All Recipients"]);
+    } else {
+      for (const g of groups) {
+        if (ASSIGN_GROUP_MAP[g]) assignments.push(ASSIGN_GROUP_MAP[g]);
+      }
+      for (const id of individualIds) {
+        assignments.push({ scope: "individual", recipientId: id });
+      }
     }
     if (assignments.length === 0) assignments.push({ scope: "assign_later" });
     try {
@@ -676,6 +682,9 @@ function MessageCard({
   const isPlayable =
     (item.type === "video" || item.type === "audio") &&
     item.processing_status === "ready";
+  const isReadable =
+    item.type === "text" && item.processing_status === "ready";
+  const isInteractive = isPlayable || isReadable;
 
   return (
     <div
@@ -690,10 +699,14 @@ function MessageCard({
       {/* Icon tile */}
       <button
         type="button"
-        onClick={isPlayable ? onPlay : undefined}
-        aria-label={isPlayable ? "Play message" : undefined}
+        onClick={
+          isPlayable ? onPlay : isReadable ? onRead : undefined
+        }
+        aria-label={
+          isPlayable ? "Play message" : isReadable ? "Read message" : undefined
+        }
         className={`flex items-center justify-center flex-shrink-0 relative ${
-          isPlayable ? "cursor-pointer group" : "cursor-default"
+          isInteractive ? "cursor-pointer group" : "cursor-default"
         }`}
         style={{
           width: 80,
@@ -702,13 +715,29 @@ function MessageCard({
           background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
         }}
       >
-        <Icon className="w-8 h-8" color="#4F39F6" strokeWidth={2} />
+        <Icon
+          className={`w-8 h-8 ${
+            isReadable
+              ? "transition-transform duration-200 group-hover:opacity-0 group-hover:scale-90"
+              : ""
+          }`}
+          color="#4F39F6"
+          strokeWidth={2}
+        />
         {isPlayable && (
           <span
             className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             style={{ borderRadius: 10, background: "rgba(79,57,246,0.85)" }}
           >
             <Play className="w-7 h-7 text-white fill-white" strokeWidth={2} />
+          </span>
+        )}
+        {isReadable && (
+          <span
+            className="absolute inset-0 flex items-center justify-center opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200"
+            style={{ borderRadius: 10, background: "rgba(79,57,246,0.85)" }}
+          >
+            <Eye className="w-7 h-7 text-white" strokeWidth={2} />
           </span>
         )}
       </button>
@@ -740,6 +769,8 @@ function MessageCard({
           }}
         >
           <span>{typeLabel(item.type)}</span>
+          <span aria-hidden>•</span>
+          <span>{recipientLabel(item)}</span>
           {duration && (
             <>
               <span aria-hidden>•</span>
@@ -914,6 +945,35 @@ function PlaybackModal({
     token: string;
   } | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [recipientCount, setRecipientCount] = useState<number | undefined>(
+    undefined,
+  );
+
+  // Resolve the distinct people this message reaches (+RM). The list row has no
+  // assignments, so fetch the full message + recipients and compute it.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const [full, recipients] = await Promise.all([
+          getMessage(token, message.id),
+          getRecipients(token),
+        ]);
+        if (active) {
+          setRecipientCount(
+            countRecipients(full.assignments ?? [], recipients),
+          );
+        }
+      } catch {
+        /* count is non-critical — leave it hidden */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [message.id]);
 
   useEffect(() => {
     let active = true;
@@ -990,8 +1050,8 @@ function PlaybackModal({
           >
             <MessagePlayerHeader
               type={message.type === "video" ? "video" : "audio"}
-              recipientName={recipientLabel(message)}
               messageTitle={message.title}
+              recipientCount={recipientCount}
               onClose={onClose}
             />
 

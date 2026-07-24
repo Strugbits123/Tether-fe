@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from '@sentry/nextjs'
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**.supabase.co',
+        protocol: "https",
+        hostname: "**.supabase.co",
       },
     ],
   },
@@ -14,10 +14,10 @@ const nextConfig: NextConfig = {
     // In development (and any non-HTTPS backend like the current staging API),
     // the browser must be allowed to reach http://localhost and ws://localhost.
     // In production the API/Supabase are HTTPS, covered by `https:`/`wss:`.
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = process.env.NODE_ENV !== "production";
     const apiOrigin = process.env.NEXT_PUBLIC_API_URL
       ? new URL(process.env.NEXT_PUBLIC_API_URL).origin
-      : '';
+      : "";
     // Explicit allowlist instead of a blanket `https:` — limits where an
     // injected script could exfiltrate tokens to.
     const connectSrc = [
@@ -26,17 +26,17 @@ const nextConfig: NextConfig = {
       // waveform; fetch is governed by connect-src, so blob: must be allowed.
       'blob:',
       apiOrigin,
-      'https://*.supabase.co',
-      'wss://*.supabase.co',
-      'https://*.posthog.com',
-      'https://*.i.posthog.com',
-      'https://*.sentry.io',
-      'https://*.ingest.us.sentry.io',
-      'https://*.mux.com',
-      ...(isDev ? ['http://localhost:*', 'ws://localhost:*'] : []),
+      "https://*.supabase.co",
+      "wss://*.supabase.co",
+      "https://*.posthog.com",
+      "https://*.i.posthog.com",
+      "https://*.sentry.io",
+      "https://*.ingest.us.sentry.io",
+      "https://*.mux.com",
+      ...(isDev ? ["http://localhost:*", "ws://localhost:*"] : []),
     ]
       .filter(Boolean)
-      .join(' ');
+      .join(" ");
 
     // React/Next dev mode requires 'unsafe-eval'; production never uses eval,
     // so it is dropped there.
@@ -44,24 +44,27 @@ const nextConfig: NextConfig = {
       "'self'",
       "'unsafe-inline'",
       ...(isDev ? ["'unsafe-eval'"] : []),
-      'https://*.posthog.com',
-      'https://*.i.posthog.com',
-      'https://*.sentry.io',
-      'https://*.mux.com',
-    ].join(' ');
+      "https://*.posthog.com",
+      "https://*.i.posthog.com",
+      "https://*.sentry.io",
+      "https://*.mux.com",
+    ].join(" ");
 
     return [
       {
-        source: '/(.*)',
+        source: "/(.*)",
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // Allow same-origin camera/mic so getUserMedia() works for the
           // audio/video recorders; still deny cross-origin (and geolocation).
-          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
           {
-            key: 'Content-Security-Policy',
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(self), geolocation=()",
+          },
+          {
+            key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
               // 'unsafe-eval' is dev-only (see scriptSrc). 'unsafe-inline' is
@@ -75,7 +78,7 @@ const nextConfig: NextConfig = {
               `connect-src ${connectSrc}`,
               "font-src 'self' data:",
               "frame-ancestors 'none'",
-            ].join('; '),
+            ].join("; "),
           },
         ],
       },
@@ -84,14 +87,14 @@ const nextConfig: NextConfig = {
 };
 
 export default withSentryConfig(nextConfig, {
-  org: 'tether-inc',
-  project: 'tether-web',
+  org: "tether-inc",
+  project: "tether-web",
   silent: true,
   widenClientFileUpload: true,
-  tunnelRoute: '/monitoring',
+  tunnelRoute: "/monitoring",
   sourcemaps: { disable: true },
   webpack: {
     treeshake: { removeDebugLogging: true },
     automaticVercelMonitors: true,
   },
-})
+});
