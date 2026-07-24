@@ -15,11 +15,13 @@ export default function DashboardLayout({
   const [mobileOpen, setMobileOpen] = useState(false)
   const router = useRouter()
   const checkedRef = useRef(false)
+  // Starts unverified — the shell (and everything inside it) must not render
+  // until an owner context is confirmed. A Release Manager with no owner
+  // account of their own must never be able to see this dashboard even
+  // briefly, whether by navigating here directly or via a stale
+  // active_membership from a previous session.
+  const [verified, setVerified] = useState(false)
 
-  // Context guard: this dashboard only makes sense for an owner membership.
-  // A Release Manager with no owner account of their own (the common case)
-  // must never be able to sit on this shell — even if they navigate here
-  // directly, or if a stale active_membership from a previous session lingers.
   useEffect(() => {
     if (checkedRef.current) return
     checkedRef.current = true
@@ -31,18 +33,25 @@ export default function DashboardLayout({
         return
       }
       const token = await getAccessToken()
-      if (!token) return
+      if (!token) {
+        router.replace('/signin')
+        return
+      }
       try {
         const ctx = await getActiveContext(token)
         if (ctx.portal !== 'owner') {
           router.replace('/select-account')
+          return
         }
+        setVerified(true)
       } catch {
         window.localStorage.removeItem('active_membership')
         router.replace('/select-account')
       }
     })()
   }, [router])
+
+  if (!verified) return null
 
   return (
     // Fixed viewport shell: the sidebar stays put and the main content area is

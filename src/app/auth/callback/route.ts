@@ -28,11 +28,16 @@ export async function GET(request: Request) {
   // to /select-account instead, which resolves their real membership once
   // AuthContext finalizes invite acceptance client-side.
   const isInviteSignup = async (userId: string, email: string | undefined) => {
-    if (!email) return false
+    // user_id alone can identify an already-linked non-owner membership (e.g.
+    // an accepted invite) — the email claim can be absent for some OAuth
+    // providers, so it must only ever widen this check, never gate it.
+    const filter = email
+      ? `user_id.eq.${userId},invite_email.eq.${email.toLowerCase()}`
+      : `user_id.eq.${userId}`
     const { data } = await supabase
       .from('account_memberships')
       .select('id')
-      .or(`user_id.eq.${userId},invite_email.eq.${email.toLowerCase()}`)
+      .or(filter)
       .neq('role', 'owner')
       .limit(1)
       .maybeSingle()
