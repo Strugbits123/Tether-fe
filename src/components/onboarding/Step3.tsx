@@ -188,36 +188,9 @@ export default function Step3({ onNext, onBack, loading, initialManager }: Step3
               </div>
             </div>
 
-            {/* Phone Number */}
-            <div>
-              <label
-                className="block mb-1.5"
-                style={{
-                  fontFamily: 'Inter, sans-serif',
-                  fontWeight: 500,
-                  fontSize: '14px',
-                  lineHeight: '14px',
-                  letterSpacing: '-0.15px',
-                  color: '#374151',
-                }}
-              >
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 (555) 000-0000"
-                className="w-full text-sm focus:outline-none focus:border-indigo-600 transition-all"
-                style={{
-                  height: '48px',
-                  borderRadius: '12px',
-                  border: '1.25px solid #D1D5DC',
-                  padding: '0 16px',
-                  fontFamily: 'Inter, sans-serif',
-                }}
-              />
-            </div>
+            {/* Phone Number is intentionally not collected here — Release
+                Managers set their own phone from their portal's My Profile
+                form instead. */}
 
             {/* Email */}
             <div>

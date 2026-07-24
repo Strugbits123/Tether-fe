@@ -328,22 +328,7 @@ export default function AddRecipientsModal({
               )}
             </Field>
 
-            {/* Phone Number — no asterisk */}
-            <Field label="Phone Number">
-              <TextInput
-                value={phone}
-                onChange={(v) => {
-                  setPhone(v);
-                  if (fieldErrors.phone)
-                    setFieldErrors((p) => ({ ...p, phone: "" }));
-                }}
-                placeholder="+1 (555) 123-4567"
-                type="tel"
-                invalid={!!fieldErrors.phone}
-                readOnly={readOnly}
-              />
-              {fieldErrors.phone && <FieldError message={fieldErrors.phone} />}
-            </Field>
+            {/* Phone Number is intentionally not collected here. */}
 
             {/* Relationship */}
             <Field label="Relationship" required>

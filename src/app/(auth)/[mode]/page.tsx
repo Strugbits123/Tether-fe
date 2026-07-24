@@ -109,6 +109,17 @@ function MainAuthForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // The invited email is locked — accepting an invite only makes sense for
+  // the address it was sent to (the backend rejects a mismatched email on
+  // accept), so let people change everything except that.
+  const inviteEmail = searchParams.get('email')
+  const emailLocked = isSignUp && !!inviteToken && !!inviteEmail
+  useEffect(() => {
+    if (!inviteEmail || !isSignUp) return
+    setEmail(inviteEmail)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const DUPLICATE_EMAIL_MESSAGE =
     'An account with this email already exists. Please sign in or reset your password.'
 
@@ -266,7 +277,9 @@ function MainAuthForm({
               value={email}
               onChange={e => { setEmail(e.target.value); if (formError) setFormError(null) }}
               placeholder="you@example.com"
-              className="w-full px-4 py-3 bg-white border border-[#D1D5DB] rounded-[10px] text-sm text-[#111827] focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all font-sans h-[50px]"
+              disabled={emailLocked}
+              title={emailLocked ? 'You cannot change the email as it is the email you are invited from' : undefined}
+              className="w-full px-4 py-3 bg-white border border-[#D1D5DB] rounded-[10px] text-sm text-[#111827] focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all font-sans h-[50px] disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
             />
           </div>
 

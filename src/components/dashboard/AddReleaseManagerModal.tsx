@@ -315,22 +315,9 @@ export default function AddReleaseManagerModal({
               )}
             </Field>
 
-            {/* Phone Number — no asterisk */}
-            <Field label="Phone Number">
-              <TextInput
-                value={phone}
-                onChange={(v) => {
-                  setPhone(v);
-                  if (fieldErrors.phone)
-                    setFieldErrors((p) => ({ ...p, phone: "" }));
-                }}
-                placeholder="+1 (555) 123-4567"
-                type="tel"
-                invalid={!!fieldErrors.phone}
-                readOnly={readOnly}
-              />
-              {fieldErrors.phone && <FieldError message={fieldErrors.phone} />}
-            </Field>
+            {/* Phone Number is intentionally not collected here — Release
+                Managers set their own phone from their portal's My Profile
+                form instead. */}
 
             {/* Relationship */}
             <Field label="Relationship" required>
