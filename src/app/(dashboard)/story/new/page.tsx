@@ -402,6 +402,7 @@ function RecordStep({
   const [elapsed, setElapsed] = useState(0)
   const [blob, setBlob] = useState<Blob | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewPlaying, setPreviewPlaying] = useState(false)
 
   const recorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -467,6 +468,7 @@ function RecordStep({
     setPreviewUrl(null)
     setElapsed(0)
     durationRef.current = 0
+    setPreviewPlaying(false)
     setPhase('idle')
   }
 
@@ -542,19 +544,59 @@ function RecordStep({
         className="flex flex-col items-center"
         style={{ borderRadius: 14, border: '1.25px solid #E5E7EB', background: '#FFFFFF', padding: 40, gap: 24 }}
       >
-        {/* Mic circle */}
-        <div
-          className="flex items-center justify-center"
-          style={{
-            width: 96,
-            height: 96,
-            borderRadius: 9999,
-            background: phase === 'recording' ? '#FEE2E2' : '#EEF2FF',
-            transition: 'background 0.2s',
-          }}
-        >
-          <Mic style={{ width: 40, height: 40 }} color={phase === 'recording' ? '#DC2626' : '#4F46E5'} strokeWidth={2} />
-        </div>
+        {/* Mic circle / vinyl disc */}
+        {phase === 'recorded' ? (
+          <div
+            className={`flex-shrink-0 vinyl-disc vinyl-spin ${previewPlaying ? 'vinyl-playing' : 'vinyl-paused'}`}
+            style={{
+              position: 'relative',
+              width: 96,
+              height: 96,
+              borderRadius: '50%',
+              background:
+                'conic-gradient(from 0deg, #2e1065 0deg, #4c1d95 30deg, #6d28d9 60deg, #7c3aed 90deg, #a78bfa 110deg, #7c3aed 130deg, #5b21b6 160deg, #3730a3 190deg, #4338ca 220deg, #6d28d9 260deg, #a78bfa 290deg, #6d28d9 320deg, #2e1065 360deg)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 12px rgba(109,40,217,0.5)',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                width: 96,
+                height: 96,
+                borderRadius: '50%',
+                background:
+                  'radial-gradient(circle at 38% 38%, rgba(167,139,250,0.35) 0%, transparent 55%), radial-gradient(circle at center, rgba(30,27,75,0.4) 30%, transparent 70%)',
+                pointerEvents: 'none',
+              }}
+            />
+            <span
+              style={{
+                position: 'relative',
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: '#1E1B4B',
+                boxShadow: '0 0 0 3px rgba(255,255,255,0.25)',
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: 9999,
+              background: phase === 'recording' ? '#FEE2E2' : '#EEF2FF',
+              transition: 'background 0.2s',
+            }}
+          >
+            <Mic style={{ width: 40, height: 40 }} color={phase === 'recording' ? '#DC2626' : '#4F46E5'} strokeWidth={2} />
+          </div>
+        )}
 
         {/* Timer */}
         <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 32, lineHeight: '40px', color: '#101828', fontVariantNumeric: 'tabular-nums' }}>
@@ -563,7 +605,14 @@ function RecordStep({
 
         {/* Preview */}
         {phase === 'recorded' && previewUrl && (
-          <audio controls src={previewUrl} className="w-full" />
+          <audio
+            controls
+            src={previewUrl}
+            className="w-full"
+            onPlay={() => setPreviewPlaying(true)}
+            onPause={() => setPreviewPlaying(false)}
+            onEnded={() => setPreviewPlaying(false)}
+          />
         )}
 
         {/* Controls */}
@@ -588,6 +637,24 @@ function RecordStep({
           )}
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes vinyl-rotate {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        .vinyl-spin {
+          animation: vinyl-rotate 3s linear infinite;
+          animation-play-state: paused;
+        }
+        .vinyl-spin.vinyl-playing {
+          animation-play-state: running;
+        }
+      `}</style>
     </div>
   )
 }

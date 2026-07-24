@@ -11,6 +11,7 @@ import {
   Download,
   File as FileIcon,
   FileText,
+  Image as ImageIcon,
   Folder,
   Globe,
   Grid3x3,
@@ -47,13 +48,18 @@ import {
   type DocumentStats,
   type DocumentDetail,
 } from "@/lib/api/documents";
-import { formatFileSize, buildAssignments } from "@/lib/utils/assignments";
+import {
+  formatFileSize,
+  buildAssignments,
+  selectGroup,
+  toggleIndividual as toggleIndividualSelection,
+} from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
 import { track } from "@/lib/posthog/analytics";
 
 /* ---------------------- Types ---------------------- */
 
-type FileKind = "document" | "audio" | "video" | "other";
+type FileKind = "document" | "image" | "audio" | "video" | "other";
 type FilterKey = "all" | "document" | "audio" | "video" | "other";
 type ApiDoc = ApiDocument & { assignmentCount: number };
 
@@ -286,11 +292,30 @@ async function getToken(): Promise<string | null> {
 }
 
 function fileTypeToKind(fileType: string): FileKind {
-  if (["pdf", "docx", "doc"].includes(fileType)) return "document";
-  if (["mp3", "wav", "aac", "m4a", "ogg", "flac"].includes(fileType))
-    return "audio";
-  if (["mp4", "mov", "avi", "mkv", "webm"].includes(fileType)) return "video";
+  const ext = (fileType || "").toLowerCase();
+  if (["pdf", "docx", "doc", "txt", "rtf", "odt"].includes(ext)) return "document";
+  if (["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "svg", "bmp", "tiff"].includes(ext))
+    return "image";
+  if (["mp3", "wav", "aac", "m4a", "ogg", "flac"].includes(ext)) return "audio";
+  if (["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpeg"].includes(ext)) return "video";
   return "other";
+}
+
+// Icon for a file kind — a plain doc icon only for real documents; images,
+// audio and video get their own icon instead of the generic file icon.
+function iconForKind(kind: FileKind): typeof FileText {
+  switch (kind) {
+    case "image":
+      return ImageIcon;
+    case "audio":
+      return Mic;
+    case "video":
+      return Video;
+    case "document":
+      return FileText;
+    default:
+      return FileIcon;
+  }
 }
 
 function formatTimeAgo(iso: string): string {
@@ -337,7 +362,16 @@ function assignmentsToSelections(assignments: DocumentDetail["assignments"]): {
       individuals.push(a.recipient_id);
     }
   }
-  return { groups, individuals };
+  // A covering group owns its members — drop any individual rows stored
+  // alongside it so only the group checkbox shows selected on load.
+  const hasCoveringGroup = groups.some(
+    (g) =>
+      g === "All Recipients" ||
+      g === "All Family" ||
+      g === "All Friends" ||
+      g === "All Others",
+  );
+  return { groups, individuals: hasCoveringGroup ? [] : individuals };
 }
 
 /* ---------------------- Page ---------------------- */
@@ -1149,14 +1183,7 @@ function DocumentViewModal({
   onEditRecipients: () => void;
 }) {
   const kind = fileTypeToKind(doc.file_type);
-  const KindIcon =
-    kind === "audio"
-      ? Mic
-      : kind === "video"
-        ? Video
-        : kind === "other"
-          ? FileIcon
-          : FileText;
+  const KindIcon = iconForKind(kind);
   const cat = getCategoryMeta(doc.category);
 
   useEffect(() => {
@@ -1386,26 +1413,28 @@ function EditDocumentModal({
 
   const toggleGroup = (g: string) => {
     if (g === "Assign Later") {
+      const active = selectedGroups.includes("Assign Later");
+      setSelectedGroups(active ? [] : ["Assign Later"]);
       setSelectedIndividuals([]);
-      setSelectedGroups((prev) =>
-        prev.includes("Assign Later") ? [] : ["Assign Later"],
-      );
       return;
     }
-    setSelectedIndividuals([]);
-    setSelectedGroups((prev) => {
-      const withoutLater = prev.filter((x) => x !== "Assign Later");
-      return withoutLater.includes(g)
-        ? withoutLater.filter((x) => x !== g)
-        : [...withoutLater, g];
-    });
+    const base = selectedGroups.filter((x) => x !== "Assign Later");
+    const next = selectGroup(
+      g,
+      { groups: base, individuals: selectedIndividuals },
+      recipients,
+    );
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const toggleIndividual = (id: string) => {
-    setSelectedGroups([]);
-    setSelectedIndividuals((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    const next = toggleIndividualSelection(id, {
+      groups: selectedGroups.filter((x) => x !== "Assign Later"),
+      individuals: selectedIndividuals,
+    });
+    setSelectedGroups(next.groups);
+    setSelectedIndividuals(next.individuals);
   };
 
   const handleSubmit = async () => {
@@ -2118,14 +2147,7 @@ function DocRow({
   }, [menuOpen]);
 
   const kind = fileTypeToKind(doc.file_type);
-  const KindIcon =
-    kind === "audio"
-      ? Mic
-      : kind === "video"
-        ? Video
-        : kind === "other"
-          ? FileIcon
-          : FileText;
+  const KindIcon = iconForKind(kind);
   const cat = getCategoryMeta(doc.category);
 
   return (
@@ -2316,14 +2338,7 @@ function DocCard({
   }, [menuOpen]);
 
   const kind = fileTypeToKind(doc.file_type);
-  const KindIcon =
-    kind === "audio"
-      ? Mic
-      : kind === "video"
-        ? Video
-        : kind === "other"
-          ? FileIcon
-          : FileText;
+  const KindIcon = iconForKind(kind);
 
   return (
     <div
