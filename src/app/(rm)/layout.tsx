@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getMemberships } from '@/lib/api/memberships'
+import { hasOwnerMembership } from '@/lib/api/memberships'
 import ReleaseManagerLayoutClient from './rm-layout-client'
 
 // Server component: resolves whether this user already has an owner account
@@ -18,8 +18,7 @@ export default async function ReleaseManagerLayout({
   let hasOwnerAccount = false
   if (session?.access_token) {
     try {
-      const memberships = await getMemberships(session.access_token)
-      hasOwnerAccount = memberships.some((m) => m.portal === 'owner')
+      hasOwnerAccount = await hasOwnerMembership(session.access_token)
     } catch {
       // Default to false — worst case the promo shows for a user who
       // happens to already have an owner account, which is harmless.

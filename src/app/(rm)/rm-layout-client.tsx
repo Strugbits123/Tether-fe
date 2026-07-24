@@ -4,16 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Menu } from 'lucide-react'
 import ReleaseManagerSidebar from '@/components/release-manager/ReleaseManagerSidebar'
-import { createClient } from '@/lib/supabase/client'
+import { getAccessToken } from '@/lib/supabase/getAccessToken'
 import { getActiveContext } from '@/lib/api/memberships'
-
-async function getToken(): Promise<string | null> {
-  const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  return session?.access_token ?? null
-}
 
 export default function ReleaseManagerLayoutClient({
   hasOwnerAccount,
@@ -40,8 +32,15 @@ export default function ReleaseManagerLayoutClient({
         router.push('/select-account')
         return
       }
-      const token = await getToken()
-      if (!token) return
+      const token = await getAccessToken()
+      if (!token) {
+        // A membership is flagged as active but there's no valid session to
+        // confirm it with — don't strand the user on a gated page with data
+        // fetches that will just fail silently.
+        window.localStorage.removeItem('active_membership')
+        router.push('/select-account')
+        return
+      }
       try {
         const ctx = await getActiveContext(token)
         if (ctx.portal !== 'release_manager') {

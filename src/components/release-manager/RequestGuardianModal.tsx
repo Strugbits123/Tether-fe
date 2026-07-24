@@ -3,18 +3,10 @@
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { Bell, Info, Loader2, Mail, MessageSquare, Send, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { getAccessToken } from '@/lib/supabase/getAccessToken'
 import { useToast } from '@/lib/context/ToastContext'
 import { ApiError } from '@/lib/api/client'
 import { requestGuardian } from '@/lib/api/rm'
-
-async function getToken(): Promise<string | null> {
-  const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  return session?.access_token ?? null
-}
 
 interface RequestGuardianModalProps {
   open: boolean
@@ -67,7 +59,7 @@ export default function RequestGuardianModal({
   const canSend = explanation.trim().length > 0 && explanation.trim().length <= 300
 
   const handleSend = async () => {
-    const token = await getToken()
+    const token = await getAccessToken()
     if (!token) return
     setSending(true)
     try {

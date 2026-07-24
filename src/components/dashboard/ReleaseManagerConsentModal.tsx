@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
 interface ReleaseManagerConsentModalProps {
@@ -18,15 +18,40 @@ export default function ReleaseManagerConsentModal({
   onConfirm,
 }: ReleaseManagerConsentModalProps) {
   const [acknowledged, setAcknowledged] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
 
-  useEffect(() => {
+  // Runs before paint so a reopened modal never briefly shows the previous
+  // session's checked state (and thus an enabled Continue button).
+  useLayoutEffect(() => {
     if (open) setAcknowledged(false)
   }, [open])
 
   useEffect(() => {
     if (!open) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    closeRef.current?.focus()
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -34,6 +59,7 @@ export default function ReleaseManagerConsentModal({
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      previouslyFocused?.focus()
     }
   }, [open, onClose])
 
@@ -54,6 +80,10 @@ export default function ReleaseManagerConsentModal({
         }}
       >
         <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
           className="relative bg-white w-full"
           style={{
             maxWidth: 480,
@@ -63,6 +93,7 @@ export default function ReleaseManagerConsentModal({
           }}
         >
           <button
+            ref={closeRef}
             type="button"
             onClick={onClose}
             aria-label="Close"
@@ -74,6 +105,7 @@ export default function ReleaseManagerConsentModal({
 
           <div className="flex flex-col gap-4 px-6 pt-6 pb-6">
             <h2
+              id={titleId}
               style={{
                 fontFamily: 'Inter, sans-serif',
                 fontWeight: 600,

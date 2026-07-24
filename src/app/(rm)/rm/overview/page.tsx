@@ -2,20 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { getAccessToken } from '@/lib/supabase/getAccessToken'
 import { useToast } from '@/lib/context/ToastContext'
 import { ApiError } from '@/lib/api/client'
 import { getRmOverview, type RmOverview } from '@/lib/api/rm'
 
 // Release Manager portal — Overview.
-
-async function getToken(): Promise<string | null> {
-  const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  return session?.access_token ?? null
-}
 
 function statCards(overview: RmOverview): { value: string; label: string }[] {
   const s = overview.content_stats
@@ -39,7 +31,7 @@ export default function ReleaseManagerOverviewPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const token = await getToken()
+    const token = await getAccessToken()
     if (!token) {
       setLoading(false)
       return

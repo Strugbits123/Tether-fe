@@ -34,6 +34,15 @@ export const getMemberships = async (token: string): Promise<Membership[]> => {
   return result?.memberships ?? []
 }
 
+/** Whether this user has an owner-portal membership (their own Tether
+ *  account), used to gate RM-only affordances like the "Create my Tether"
+ *  promo. Shared so the sidebar CTA and the create-account redirect guard
+ *  can never disagree on the check. */
+export const hasOwnerMembership = async (token: string): Promise<boolean> => {
+  const memberships = await getMemberships(token)
+  return memberships.some((m) => m.portal === 'owner')
+}
+
 export const switchContext = (token: string, membershipId: string) =>
   api.post<SwitchContextResult>('/auth/switch-context', { membershipId }, token)
 

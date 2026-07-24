@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getMemberships } from '@/lib/api/memberships'
+import { hasOwnerMembership } from '@/lib/api/memberships'
 import CreateAccountForm from './CreateAccountForm'
 
 // Only relevant for RMs who don't already have their own owner account.
@@ -15,8 +15,7 @@ export default async function CreateAccountPage() {
   let hasOwnerAccount = false
   if (session?.access_token) {
     try {
-      const memberships = await getMemberships(session.access_token)
-      hasOwnerAccount = memberships.some((m) => m.portal === 'owner')
+      hasOwnerAccount = await hasOwnerMembership(session.access_token)
     } catch {
       // If the check fails, fall through and show the page rather than
       // trapping the user on a broken redirect.

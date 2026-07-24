@@ -65,7 +65,7 @@ async function uploadScreenshot(token: string, file: File): Promise<string> {
 
 /* ---------------------- Data ---------------------- */
 
-interface VideoTutorial {
+export interface VideoTutorial {
   duration: string;
   title: string;
   desc: string;
@@ -104,7 +104,7 @@ const VIDEOS: VideoTutorial[] = [
   },
 ];
 
-interface FaqCategory {
+export interface FaqCategory {
   label: string;
   Icon: React.ComponentType<{
     style?: React.CSSProperties;
@@ -169,9 +169,9 @@ const CATEGORIES: FaqCategory[] = [
   },
 ];
 
-interface Faq {
+export interface Faq {
   question: string;
-  /** Must match one of the CATEGORIES labels (other than "All Questions"). */
+  /** Must match one of the categories' labels (other than "All Questions"). */
   category: string;
   answer: string;
 }
@@ -306,11 +306,22 @@ interface HelpPageProps {
   accentColor?: string;
   /** Second stop of the hero gradient — should be a darker shade of accentColor. */
   accentColorDark?: string;
+  /** FAQ category cards. Defaults to the account-owner set; other portals
+   *  (e.g. the RM portal) pass their own so users see relevant content
+   *  instead of owner-facing topics like vault ownership or billing. */
+  categories?: FaqCategory[];
+  /** FAQ entries — `category` must match one of `categories`' labels. */
+  faqs?: Faq[];
+  /** Video tutorial cards. */
+  videos?: VideoTutorial[];
 }
 
 export default function HelpPage({
   accentColor = "#4F39F6",
   accentColorDark = "#432DD7",
+  categories = CATEGORIES,
+  faqs = FAQS,
+  videos = VIDEOS,
 }: HelpPageProps = {}) {
   const { profile, user } = useAuth();
   const firstName =
@@ -338,15 +349,16 @@ export default function HelpPage({
   // FAQ display order. Starts as the authored order (so server/client render
   // matches), then gets shuffled once on the client so "Load More" surfaces a
   // fresh mix. (Dummy data for now.)
-  const [faqOrder, setFaqOrder] = useState<Faq[]>(FAQS);
+  const [faqOrder, setFaqOrder] = useState<Faq[]>(faqs);
   useEffect(() => {
-    const shuffled = [...FAQS];
+    const shuffled = [...faqs];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFaqOrder(shuffled);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openEmail = () => {
@@ -373,10 +385,10 @@ export default function HelpPage({
   // Search matches across video titles and FAQ questions.
   const query = search.trim().toLowerCase();
   const videoResults = query
-    ? VIDEOS.filter((v) => v.title.toLowerCase().includes(query))
+    ? videos.filter((v) => v.title.toLowerCase().includes(query))
     : [];
   const faqResults = query
-    ? FAQS.filter((f) => f.question.toLowerCase().includes(query))
+    ? faqs.filter((f) => f.question.toLowerCase().includes(query))
     : [];
   const showResults =
     searchFocused && query.length > 0 && videoResults.length + faqResults.length > 0;
@@ -390,7 +402,7 @@ export default function HelpPage({
   const goToFaq = (faq: Faq) => {
     setActiveCategory(faq.category);
     // Reveal every question in the target category so the linked one is shown.
-    setVisibleCount(FAQS.length);
+    setVisibleCount(faqs.length);
     setOpenFaq(faq.question);
     setSearch("");
     setSearchFocused(false);
@@ -711,7 +723,7 @@ export default function HelpPage({
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
           style={{ gap: 23.98 }}
         >
-          {VIDEOS.map((v) => (
+          {videos.map((v) => (
             <VideoCard
               key={v.title}
               video={v}
@@ -741,7 +753,7 @@ export default function HelpPage({
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
           style={{ gap: 16 }}
         >
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <CategoryCard
               key={c.label}
               category={c}

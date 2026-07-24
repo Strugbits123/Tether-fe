@@ -173,7 +173,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Validate a previously-stored membership is still valid (e.g. it
           // wasn't revoked since the last visit) rather than trusting it blindly.
           try {
-            await getActiveContext(token)
+            const ctx = await getActiveContext(token)
+            // A returning user landing back on /signin (session expired, then
+            // re-authenticated) still needs to be routed into the app — don't
+            // leave them stranded on the sign-in page just because their
+            // membership was already resolved in a prior session. Only forces
+            // navigation from an auth page — someone already deep in the app
+            // (e.g. browsing /rm/recipients) is left alone.
+            if (AUTH_PATHS.includes(pathnameRef.current ?? '')) {
+              const destination =
+                ctx.portal === 'owner'
+                  ? '/dashboard'
+                  : ctx.portal === 'release_manager'
+                    ? '/rm/overview'
+                    : '/select-account'
+              router.push(destination)
+            }
           } catch {
             window.localStorage.removeItem(ACTIVE_MEMBERSHIP_KEY)
             if (pathnameRef.current !== '/select-account') router.push('/select-account')

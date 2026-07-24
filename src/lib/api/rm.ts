@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, buildAuthHeaders } from './client'
 
 /* ─── Overview ───────────────────────────────────────────────────────────── */
 
@@ -219,15 +219,6 @@ export const getUnreadCount = (token: string) =>
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
-function authHeaders(token: string): Record<string, string> {
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
-  if (typeof window !== 'undefined') {
-    const membershipId = window.localStorage.getItem('active_membership')
-    if (membershipId) headers['X-Account-Context'] = membershipId
-  }
-  return headers
-}
-
 async function downloadBlob(response: Response, filename: string): Promise<void> {
   if (!response.ok) {
     throw new Error('Download failed. Please try again.')
@@ -245,7 +236,7 @@ async function downloadBlob(response: Response, filename: string): Promise<void>
 
 export async function downloadActivityReport(token: string): Promise<void> {
   const response = await fetch(`${API_URL}/rm/release-plan/activity-report`, {
-    headers: authHeaders(token),
+    headers: buildAuthHeaders(token),
   })
   await downloadBlob(response, 'Release-Plan-Activity-Report.pdf')
 }
@@ -281,7 +272,7 @@ export async function prepareDownload(
 ): Promise<void> {
   const response = await fetch(`${API_URL}/rm/downloads/prepare`, {
     method: 'POST',
-    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    headers: { ...buildAuthHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify(selection),
   })
   if (!response.ok) {

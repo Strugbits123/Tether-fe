@@ -31,6 +31,31 @@ function fallbackMessage(status: number): string {
 }
 
 /**
+ * Auth + account-context headers shared by every request this app makes —
+ * the JSON envelope client below, and any caller that bypasses it (e.g.
+ * binary downloads using raw `fetch`), so the two never drift apart.
+ */
+export function buildAuthHeaders(token?: string): Record<string, string> {
+  const headers: Record<string, string> = {}
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  // Identifies which membership (owner vs. guardian/recipient portal) the
+  // request acts as. Absent entirely when there's no active membership —
+  // the backend then auto-resolves the caller's own owner account.
+  if (typeof window !== 'undefined') {
+    const membershipId = window.localStorage.getItem('active_membership')
+    if (membershipId) {
+      headers['X-Account-Context'] = membershipId
+    }
+  }
+
+  return headers
+}
+
+/**
  * The one place that decides success vs. failure for the whole app.
  *
  * Resolves with the unwrapped `data` payload ONLY when the response is a 2xx
@@ -52,20 +77,7 @@ async function request<T>(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(fetchOptions.headers as Record<string, string>),
-  }
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  // Identifies which membership (owner vs. guardian/recipient portal) the
-  // request acts as. Absent entirely when there's no active membership —
-  // the backend then auto-resolves the caller's own owner account.
-  if (typeof window !== 'undefined') {
-    const membershipId = window.localStorage.getItem('active_membership')
-    if (membershipId) {
-      headers['X-Account-Context'] = membershipId
-    }
+    ...buildAuthHeaders(token),
   }
 
   // (4) Network / DNS / CORS / abort — fetch itself rejects before any response.

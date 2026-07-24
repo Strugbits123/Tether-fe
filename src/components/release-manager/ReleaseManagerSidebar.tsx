@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
-import { createClient } from '@/lib/supabase/client'
+import { getAccessToken } from '@/lib/supabase/getAccessToken'
 import { getRmOverview, getUnreadCount } from '@/lib/api/rm'
 import {
   Bell,
@@ -17,14 +17,6 @@ import {
   User,
   Users,
 } from 'lucide-react'
-
-async function getToken(): Promise<string | null> {
-  const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  return session?.access_token ?? null
-}
 
 interface ReleaseManagerSidebarProps {
   mobileOpen: boolean
@@ -63,7 +55,7 @@ export default function ReleaseManagerSidebar({
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const token = await getToken()
+      const token = await getAccessToken()
       if (!token || cancelled) return
       try {
         const overview = await getRmOverview(token)
@@ -84,7 +76,7 @@ export default function ReleaseManagerSidebar({
   useEffect(() => {
     let cancelled = false
     const poll = async () => {
-      const token = await getToken()
+      const token = await getAccessToken()
       if (!token || cancelled) return
       try {
         const { unread_count } = await getUnreadCount(token)

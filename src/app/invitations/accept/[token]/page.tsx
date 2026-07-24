@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ApiError } from '@/lib/api/client'
@@ -43,7 +43,7 @@ async function routeAfterAcceptance(
   window.location.href = fallbackUrl
 }
 
-type Status = 'loading' | 'already-accepted' | 'error'
+type Status = 'confirm' | 'loading' | 'already-accepted' | 'error'
 
 export default function AcceptInvitationPage({
   params,
@@ -52,60 +52,55 @@ export default function AcceptInvitationPage({
 }) {
   const { token } = use(params)
   const router = useRouter()
-  const [status, setStatus] = useState<Status>('loading')
+  // Acceptance only happens on an explicit click (see handleAccept) — the
+  // accept endpoint is a GET with a side effect, and this page must not fire
+  // it just because a browser (or a link-preview crawler) loaded the URL.
+  const [status, setStatus] = useState<Status>('confirm')
   const [message, setMessage] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const supabase = createClient()
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const accessToken = session?.access_token
+  const handleAccept = async () => {
+    setStatus('loading')
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
 
-      try {
-        const res = await acceptInvitation(token, accessToken)
-        if (cancelled) return
+    try {
+      const res = await acceptInvitation(token, accessToken)
 
-        if (res.alreadyAccepted) {
-          setStatus('already-accepted')
-          setMessage("You've already accepted this invitation.")
-          setTimeout(() => {
-            router.push(res.loggedIn ? portalForRole(res.role) : '/signin')
-          }, 1800)
-          return
-        }
-
-        if (!res.loggedIn) {
-          // Needs to sign up first — persist the invite token so it survives
-          // the entire signup flow (password, magic link, or OAuth all pass
-          // through the same browser storage regardless of which redirects
-          // happen in between).
-          window.localStorage.setItem(PENDING_INVITE_KEY, token)
-          window.location.href = res.redirectUrl
-          return
-        }
-
-        // Already logged in — the backend accepted it server-side as part of
-        // this call. Clear any stale pending token and route by membership.
-        window.localStorage.removeItem(PENDING_INVITE_KEY)
-        await routeAfterAcceptance(accessToken as string, res.redirectUrl, router)
-      } catch (e) {
-        if (cancelled) return
-        setStatus('error')
-        setMessage(
-          e instanceof ApiError
-            ? e.message
-            : 'This invitation link is invalid or has expired.',
-        )
+      if (res.alreadyAccepted) {
+        setStatus('already-accepted')
+        setMessage("You've already accepted this invitation.")
+        setTimeout(() => {
+          router.push(res.loggedIn ? portalForRole(res.role) : '/signin')
+        }, 1800)
+        return
       }
-    })()
-    return () => {
-      cancelled = true
+
+      if (!res.loggedIn) {
+        // Needs to sign up first — persist the invite token so it survives
+        // the entire signup flow (password, magic link, or OAuth all pass
+        // through the same browser storage regardless of which redirects
+        // happen in between).
+        window.localStorage.setItem(PENDING_INVITE_KEY, token)
+        window.location.href = res.redirectUrl
+        return
+      }
+
+      // Already logged in — the backend accepted it server-side as part of
+      // this call. Clear any stale pending token and route by membership.
+      window.localStorage.removeItem(PENDING_INVITE_KEY)
+      await routeAfterAcceptance(accessToken as string, res.redirectUrl, router)
+    } catch (e) {
+      setStatus('error')
+      setMessage(
+        e instanceof ApiError
+          ? e.message
+          : 'This invitation link is invalid or has expired.',
+      )
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }
 
   return (
     <div
@@ -128,6 +123,42 @@ export default function AcceptInvitationPage({
             boxShadow: '0px 8px 10px -6px rgba(0,0,0,0.1), 0px 20px 25px -5px rgba(0,0,0,0.1)',
           }}
         >
+          {status === 'confirm' && (
+            <>
+              <h1
+                style={{
+                  fontFamily: '"Instrument Serif", serif',
+                  fontWeight: 400,
+                  fontSize: 26,
+                  lineHeight: '34px',
+                  color: '#111827',
+                }}
+              >
+                You&apos;ve been invited
+              </h1>
+              <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#4A5565' }}>
+                Accept this invitation to continue.
+              </p>
+              <button
+                type="button"
+                onClick={handleAccept}
+                className="cursor-pointer hover:opacity-90 mt-2"
+                style={{
+                  height: 40,
+                  padding: '0 24px',
+                  borderRadius: 8,
+                  background: '#4F46E5',
+                  fontFamily: 'Inter, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  color: '#FFFFFF',
+                }}
+              >
+                Accept invitation
+              </button>
+            </>
+          )}
+
           {status === 'loading' && (
             <>
               <svg className="animate-spin h-8 w-8 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
