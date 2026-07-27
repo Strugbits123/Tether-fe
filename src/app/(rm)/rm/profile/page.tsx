@@ -16,23 +16,20 @@ async function getToken(): Promise<string | null> {
 
 // A profile is considered "saved" once the fields the form requires are
 // filled in — mirrors FinishProfileModal's own required-field validation.
+// Age Group and Status are excluded here since the RM profile hides them.
 function isProfileComplete(user: {
   first_name: string | null
   last_name: string | null
   zip_code: string | null
   state: string | null
-  age_group: string | null
   gender: string | null
-  relationship_status: string | null
 }): boolean {
   return Boolean(
     user.first_name?.trim() &&
       user.last_name?.trim() &&
       user.zip_code?.trim() &&
       user.state &&
-      user.age_group &&
-      user.gender &&
-      user.relationship_status,
+      user.gender,
   )
 }
 
@@ -107,6 +104,7 @@ export default function RmProfilePage() {
         title="My Profile"
         phoneHelpText="We will use this for important account info - never for marketing. See our Privacy Policy for additional details."
         hideSmsOptIn
+        hideAgeAndStatus
       />
     </div>
   )

@@ -36,6 +36,9 @@ interface FinishProfileModalProps {
   /** Hides the SMS opt-in checkbox/field. Used for the Release Manager
    *  profile form, where SMS opt-in isn't applicable. */
   hideSmsOptIn?: boolean;
+  /** Hides the Age Group and Status fields. Used for the Release Manager
+   *  profile form only — not applicable there. */
+  hideAgeAndStatus?: boolean;
   /** When set, the readOnly view's footer button becomes "Edit Profile" and
    *  calls this instead of the default "Close" (which calls onClose). Used
    *  by standalone profile pages that toggle between a saved-data view and
@@ -154,6 +157,7 @@ export default function FinishProfileModal({
   phoneHelpText,
   embedded = false,
   hideSmsOptIn = false,
+  hideAgeAndStatus = false,
   onEdit,
 }: FinishProfileModalProps) {
   const { showToast } = useToast();
@@ -279,9 +283,9 @@ export default function FinishProfileModal({
     else if (!/^\d{5}(-\d{4})?$/.test(zipCode.trim()))
       errs.zipCode = "Enter a valid US zip code (e.g. 10001).";
     if (!state) errs.state = "Please select your state.";
-    if (!ageGroup) errs.ageGroup = "Please select an age group.";
+    if (!hideAgeAndStatus && !ageGroup) errs.ageGroup = "Please select an age group.";
     if (!gender) errs.gender = "Please select a gender identity.";
-    if (!status) errs.status = "Please select a status.";
+    if (!hideAgeAndStatus && !status) errs.status = "Please select a status.";
     if (phone.trim() && !/^\+?[\d\s()-]{7,20}$/.test(phone.trim()))
       errs.phone = "Enter a valid phone number.";
     setFieldErrors(errs);
@@ -460,6 +464,7 @@ export default function FinishProfileModal({
                 phone={phone}
                 smsOptedIn={smsOptedIn}
                 hideSmsOptIn={hideSmsOptIn}
+                hideAgeAndStatus={hideAgeAndStatus}
               />
             ) : (
               <>
@@ -637,31 +642,33 @@ export default function FinishProfileModal({
                 </div>
 
                 {/* Age Group */}
-                <div
-                  className="flex flex-col gap-2"
-                  style={{
-                    borderBottom: "1px solid rgba(0,0,0,0.1)",
-                    paddingBottom: 20,
-                  }}
-                >
-                  <FieldLabelInline label="Age Group" required />
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {AGE_GROUPS.map((g) => (
-                      <RadioPill
-                        key={g}
-                        label={g}
-                        selected={ageGroup === g}
-                        onClick={() => {
-                          setAgeGroup(g);
-                          clearFieldError("ageGroup");
-                        }}
-                      />
-                    ))}
+                {!hideAgeAndStatus && (
+                  <div
+                    className="flex flex-col gap-2"
+                    style={{
+                      borderBottom: "1px solid rgba(0,0,0,0.1)",
+                      paddingBottom: 20,
+                    }}
+                  >
+                    <FieldLabelInline label="Age Group" required />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {AGE_GROUPS.map((g) => (
+                        <RadioPill
+                          key={g}
+                          label={g}
+                          selected={ageGroup === g}
+                          onClick={() => {
+                            setAgeGroup(g);
+                            clearFieldError("ageGroup");
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {fieldErrors.ageGroup && (
+                      <FieldError message={fieldErrors.ageGroup} />
+                    )}
                   </div>
-                  {fieldErrors.ageGroup && (
-                    <FieldError message={fieldErrors.ageGroup} />
-                  )}
-                </div>
+                )}
 
                 {/* Gender Identity */}
                 <div
@@ -691,34 +698,36 @@ export default function FinishProfileModal({
                 </div>
 
                 {/* Status */}
-                <div
-                  className="flex flex-col gap-2"
-                  style={{
-                    borderBottom: "1px solid rgba(0,0,0,0.1)",
-                    paddingBottom: 20,
-                  }}
-                >
-                  <div className="flex items-center gap-1">
-                    <FieldLabelInline label="Status" required />
-                    <Info className="w-4 h-4 text-[#717182]" />
+                {!hideAgeAndStatus && (
+                  <div
+                    className="flex flex-col gap-2"
+                    style={{
+                      borderBottom: "1px solid rgba(0,0,0,0.1)",
+                      paddingBottom: 20,
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      <FieldLabelInline label="Status" required />
+                      <Info className="w-4 h-4 text-[#717182]" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {STATUSES.map((s) => (
+                        <RadioPill
+                          key={s}
+                          label={s}
+                          selected={status === s}
+                          onClick={() => {
+                            setStatus(s);
+                            clearFieldError("status");
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {fieldErrors.status && (
+                      <FieldError message={fieldErrors.status} />
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {STATUSES.map((s) => (
-                      <RadioPill
-                        key={s}
-                        label={s}
-                        selected={status === s}
-                        onClick={() => {
-                          setStatus(s);
-                          clearFieldError("status");
-                        }}
-                      />
-                    ))}
-                  </div>
-                  {fieldErrors.status && (
-                    <FieldError message={fieldErrors.status} />
-                  )}
-                </div>
+                )}
 
                 {/* Contact Information */}
                 <div
@@ -974,6 +983,7 @@ function ReadOnlyProfile({
   phone,
   smsOptedIn,
   hideSmsOptIn,
+  hideAgeAndStatus,
 }: {
   photo: string | null;
   firstName: string;
@@ -986,13 +996,14 @@ function ReadOnlyProfile({
   phone: string;
   smsOptedIn: boolean;
   hideSmsOptIn?: boolean;
+  hideAgeAndStatus?: boolean;
 }) {
   const rows: { label: string; value: string }[] = [
     { label: "Zip Code", value: zipCode },
     { label: "State", value: state },
-    { label: "Age Group", value: ageGroup },
+    ...(hideAgeAndStatus ? [] : [{ label: "Age Group", value: ageGroup }]),
     { label: "Gender Identity", value: gender },
-    { label: "Status", value: status },
+    ...(hideAgeAndStatus ? [] : [{ label: "Status", value: status }]),
     { label: "Phone", value: phone },
   ];
   const labelStyle = {
