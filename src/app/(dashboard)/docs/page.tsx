@@ -293,7 +293,25 @@ async function getToken(): Promise<string | null> {
 }
 
 function fileTypeToKind(fileType: string): FileKind {
-  const ext = (fileType || "").toLowerCase();
+  const value = (fileType || "").toLowerCase();
+
+  // The backend stores the full MIME type (e.g. "application/pdf",
+  // "image/jpeg") in file_type, not a bare extension — check that first.
+  if (value.startsWith("image/")) return "image";
+  if (value.startsWith("audio/")) return "audio";
+  if (value.startsWith("video/")) return "video";
+  if (
+    value.startsWith("application/pdf") ||
+    value.includes("wordprocessingml") ||
+    value === "application/msword" ||
+    value.startsWith("text/") ||
+    value.startsWith("application/vnd.oasis.opendocument")
+  )
+    return "document";
+
+  // Fall back to treating the value as a bare extension, in case any caller
+  // ever passes one instead of a MIME type.
+  const ext = value.replace(/^\./, "");
   if (["pdf", "docx", "doc", "txt", "rtf", "odt"].includes(ext)) return "document";
   if (["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "svg", "bmp", "tiff"].includes(ext))
     return "image";

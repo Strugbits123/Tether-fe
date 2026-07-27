@@ -9,6 +9,7 @@ import {
   selectGroup,
   toggleIndividual as toggleIndividualSelection,
 } from '@/lib/utils/assignments'
+import { displayRelationship } from '@/lib/relationship'
 
 interface AssignRecipientsModalProps {
   open: boolean
@@ -340,7 +341,7 @@ export default function AssignRecipientsModal({
                                 color: '#717182',
                               }}
                             >
-                              {p.relationship}
+                              {displayRelationship(p.relationship)}
                             </span>
                           </div>
                         </button>

@@ -297,7 +297,7 @@ export default function Step2({ onNext, onBack, loading, initialRecipients = [] 
                   <span className="font-medium text-sm text-[#101828]">
                     {r.firstName} {r.lastName}
                   </span>
-                  <span className="text-xs text-[#6A7282] ml-2">
+                  <span className="text-xs text-[#6A7282] ml-2 capitalize">
                     ({r.relationship})
                   </span>
                 </div>
