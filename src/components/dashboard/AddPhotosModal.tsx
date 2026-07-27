@@ -116,17 +116,34 @@ const DOC_MAX_BYTES = 25 * 1024 * 1024;
 const isMediaFile = (f: File) =>
   f.type.startsWith("audio/") || f.type.startsWith("video/");
 
+// Must match the backend's DocumentItemDto.fileType enum exactly
+// (src/documents/dto/create-documents-batch.dto.ts) — and its MIME_TO_EXT map
+// (src/documents/documents.service.ts) for which extension each MIME resolves
+// to. Getting this wrong doesn't just mis-tag the icon — it's the actual
+// file_type value the vault stores and reads back for that document forever.
 function deriveDocFileType(mimeType: string): string {
   const map: Record<string, string> = {
     "application/pdf": "pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-      "docx",
-    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/msword": "docx",
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/heic": "heic",
+    "audio/webm": "webm",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/aac": "aac",
+    "audio/x-m4a": "m4a",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "video/x-m4v": "m4v",
+    "video/x-msvideo": "avi",
+    "video/mpeg": "mpeg",
   };
-  return map[mimeType] || "pdf";
+  return map[mimeType] ?? "pdf";
 }
 
 function getImageDimensions(
@@ -364,7 +381,7 @@ export default function AddPhotosModal({
         {
           storagePath: urlInfo.storagePath,
           originalFilename: file.name,
-          fileType: file.type.split("/")[1] || "bin",
+          fileType: deriveDocFileType(file.type),
           fileSizeBytes: file.size,
           mimeType: file.type,
         },

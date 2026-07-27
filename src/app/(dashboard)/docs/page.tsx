@@ -292,31 +292,16 @@ async function getToken(): Promise<string | null> {
   return session?.access_token ?? null;
 }
 
+// doc.file_type is always a bare extension — see the backend's
+// DocumentItemDto.fileType enum ('pdf' | 'docx' | 'jpg' | ... | 'mp4' | ...),
+// never a MIME type. (The 'mime_type' column is a separate field.)
 function fileTypeToKind(fileType: string): FileKind {
-  const value = (fileType || "").toLowerCase();
-
-  // The backend stores the full MIME type (e.g. "application/pdf",
-  // "image/jpeg") in file_type, not a bare extension — check that first.
-  if (value.startsWith("image/")) return "image";
-  if (value.startsWith("audio/")) return "audio";
-  if (value.startsWith("video/")) return "video";
-  if (
-    value.startsWith("application/pdf") ||
-    value.includes("wordprocessingml") ||
-    value === "application/msword" ||
-    value.startsWith("text/") ||
-    value.startsWith("application/vnd.oasis.opendocument")
-  )
-    return "document";
-
-  // Fall back to treating the value as a bare extension, in case any caller
-  // ever passes one instead of a MIME type.
-  const ext = value.replace(/^\./, "");
+  const ext = (fileType || "").toLowerCase().replace(/^\./, "");
   if (["pdf", "docx", "doc", "txt", "rtf", "odt"].includes(ext)) return "document";
   if (["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "svg", "bmp", "tiff"].includes(ext))
     return "image";
-  if (["mp3", "wav", "aac", "m4a", "ogg", "flac"].includes(ext)) return "audio";
-  if (["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpeg"].includes(ext)) return "video";
+  if (["mp3", "wav", "aac", "m4a", "ogg", "flac", "webm"].includes(ext)) return "audio";
+  if (["mp4", "mov", "avi", "mkv", "m4v", "mpeg"].includes(ext)) return "video";
   return "other";
 }
 
