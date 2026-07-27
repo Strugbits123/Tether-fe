@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
@@ -27,21 +29,22 @@ export async function GET(request: Request) {
   // account and must never land in the owner onboarding wizard — route them
   // to /select-account instead, which resolves their real membership once
   // AuthContext finalizes invite acceptance client-side.
-  const isInviteSignup = async (userId: string, email: string | undefined) => {
-    // user_id alone can identify an already-linked non-owner membership (e.g.
-    // an accepted invite) — the email claim can be absent for some OAuth
-    // providers, so it must only ever widen this check, never gate it.
-    const filter = email
-      ? `user_id.eq.${userId},invite_email.eq.${email.toLowerCase()}`
-      : `user_id.eq.${userId}`
-    const { data } = await supabase
-      .from('account_memberships')
-      .select('id')
-      .or(filter)
-      .neq('role', 'owner')
-      .limit(1)
-      .maybeSingle()
-    return !!data
+  //
+  // This MUST go through the backend (service-role access), not a direct
+  // Supabase query from here: account_memberships has no RLS read policy, so
+  // a query using the anon-key session client always returns empty — even
+  // for the user's own rows — and would silently never detect an invite.
+  const isInviteSignup = async (accessToken: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/pending-invite-check`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) return false
+      const body = await res.json()
+      return !!body?.data?.has_pending_invite
+    } catch {
+      return false
+    }
   }
 
   // ── token_hash flow ──
@@ -63,9 +66,10 @@ export async function GET(request: Request) {
     const loginMethod = type === 'magiclink' ? 'magic_link' : undefined
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.redirect(`${siteUrl}/signin`)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!user || !session) return NextResponse.redirect(`${siteUrl}/signin`)
 
-    if (await isInviteSignup(user.id, user.email)) {
+    if (await isInviteSignup(session.access_token)) {
       return dest('/select-account', loginMethod)
     }
 
@@ -98,7 +102,8 @@ export async function GET(request: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.redirect(`${siteUrl}/signin`)
 
-    if (await isInviteSignup(user.id, user.email)) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session && (await isInviteSignup(session.access_token))) {
       return dest('/select-account', 'oauth')
     }
 
