@@ -60,120 +60,236 @@ All PRs require CodeRabbit review before merge.
 | Staging     | Auto-deploy on `Tether-Inc/develop` update | https://staging.jointether.com |
 | Production  | Auto-deploy on `Tether-Inc/main` update    | https://jointether.com         |
 
+## Two Portals
+
+The app serves two distinct experiences off the same session, chosen by which
+**membership** is active:
+
+- **Owner portal** (`(dashboard)` route group) — the account owner's own vault:
+  messages, photos, documents, memoir, recipients, access management.
+- **Release Manager portal** (`(rm)` route group, under `/rm/*`) — what a
+  designated Release Manager (or Guardian) sees when acting on someone else's
+  account: an overview, the release plan, recipient delivery status, a content
+  download center, and notifications. A single person can hold both kinds of
+  membership (their own owner account, plus RM duty on someone else's), switching
+  between them via `/select-account`.
+
+Which portal renders is resolved from `GET /auth/memberships` (see **Auth Flow**
+below), not from the route alone — both `(dashboard)/layout.tsx` and
+`(rm)/layout.tsx` independently verify the active membership actually matches
+their portal before rendering anything, so one can never bleed into the other.
+
 ## Project Structure
 
 ```
 src/
 ├── app/
-│   ├── (auth)/                  # Unauthenticated routes
-│   │   ├── [mode]/              # Sign-in / sign-up (mode param)
-│   │   ├── register/            # Registration
-│   │   ├── verify-email/        # Email verification prompt
-│   │   ├── update-password/     # Password reset
-│   │   └── onboarding/          # 5-step onboarding wizard
-│   ├── (dashboard)/             # Protected routes — shared sidebar + topbar layout
-│   │   ├── dashboard/           # Home: stats, quick actions, activity feed
-│   │   ├── messages/            # Messages: create/edit/play audio, video & text
-│   │   ├── photos/              # Photos: upload, folders, lightbox, assign
-│   │   ├── docs/                # Documents & files: upload, manage, assign
-│   │   ├── story/               # Memoir: chapters (new/[id]), preview, settings
-│   │   ├── access/              # Recipients & release manager management
-│   │   ├── help/                # Feedback / support (bug, feature, general)
-│   │   └── unassigned/          # Unassigned content: bulk assign / bulk delete
-│   └── auth/callback/           # Supabase OAuth (PKCE) callback handler
+│   ├── (auth)/                     # Unauthenticated routes
+│   │   ├── [mode]/                 # Sign-in / sign-up (mode param). Locks the email
+│   │   │                            field when arriving via an invite link.
+│   │   ├── register/               # Registration
+│   │   ├── verify-email/           # Email verification prompt
+│   │   ├── update-password/        # Password reset
+│   │   └── onboarding/             # 5-step onboarding wizard (owner only)
+│   ├── (dashboard)/                # Owner portal — shared sidebar + topbar layout.
+│   │   │                            Guarded: renders nothing until the active
+│   │   │                            membership is confirmed to be "owner".
+│   │   ├── dashboard/              # Home: stats, quick actions, activity feed
+│   │   ├── messages/               # Messages: create/edit/play audio, video & text
+│   │   ├── photos/                 # Photos: upload, folders, lightbox, assign
+│   │   ├── docs/                   # Documents & files: upload, manage, assign
+│   │   ├── story/                  # Memoir: chapters (new/[id]), preview, settings
+│   │   ├── access/                 # Recipients & release manager management (owner side)
+│   │   ├── help/                   # Feedback / support — also reused, re-themed and
+│   │   │                            re-contented, by the RM portal's Help page
+│   │   └── unassigned/             # Unassigned content: bulk assign / bulk delete
+│   ├── (rm)/                       # Release Manager portal — separate layout/sidebar.
+│   │   │                            Server component resolves whether the RM has an
+│   │   │                            owner account (for the "Create my Tether" promo)
+│   │   │                            before first paint; client half re-verifies the
+│   │   │                            active membership's portal is "release_manager".
+│   │   ├── layout.tsx
+│   │   ├── rm-layout-client.tsx
+│   │   └── rm/
+│   │       ├── overview/           # Dashboard: content stats, recent activity
+│   │       ├── profile/            # My Profile — view saved / edit toggle. SMS opt-in,
+│   │       │                        Age Group, and Status are hidden (not applicable)
+│   │       ├── release-plan/       # Currently a "Coming in next sprint" placeholder.
+│   │       │                        Full step 1–5 flow lives on as ReleasePlanPageImpl
+│   │       │                        in the same file — swap the default export back
+│   │       │                        to re-enable it
+│   │       ├── recipients/         # Recipient delivery/access status once a release exists
+│   │       ├── downloads/          # Prepare & download a content package post-release
+│   │       ├── notifications/      # Announcements + activity feed; mark read/unread
+│   │       │                        (never deleted)
+│   │       ├── help/               # RM-specific FAQs/tutorials — not the owner's
+│   │       └── create-account/     # Static "Create my Tether" promo (billing wiring TBD);
+│   │                                only reachable if the RM has no owner account
+│   ├── select-account/              # Multi-membership picker. Auto-redirects straight
+│   │                                 into the only membership when there's exactly one —
+│   │                                 the list UI only ever renders for 2+ memberships
+│   ├── invitations/accept/[token]/  # Invite acceptance landing. Acceptance only fires
+│   │                                 on an explicit button click, never as a side effect
+│   │                                 of the page loading (the accept endpoint is a GET)
+│   └── auth/callback/               # Supabase email-confirmation (token_hash) + OAuth
+│                                     (PKCE) callback. Routes invite signups straight to
+│                                     /select-account instead of the owner onboarding wizard
 ├── components/
-│   ├── ui/                      # Button, Input, Card, Badge, Spinner, Toast
-│   ├── layout/                  # Sidebar, TopBar
-│   ├── dashboard/               # Modals and widgets (see below)
-│   ├── audio/                   # AudioPlayer, AudioRecorder, waveform components
-│   ├── video/                   # VideoPlayer (Mux-backed, custom controls)
-│   ├── messages/                # MessagePlayerHeader
-│   ├── onboarding/              # Step1–Step5, CustomSelect
-│   └── landing/                 # Marketing page sections
+│   ├── ui/                         # Button, Input, Card, Badge, Spinner, Toast
+│   ├── layout/                     # Sidebar, TopBar
+│   ├── dashboard/                  # Modals and widgets (see below)
+│   ├── release-manager/            # RM portal components (see below)
+│   ├── audio/                      # AudioPlayer, AudioRecorder, waveform components
+│   ├── video/                      # VideoPlayer (Mux-backed, custom controls)
+│   ├── messages/                   # MessagePlayerHeader
+│   ├── onboarding/                 # Step1–Step5, CustomSelect
+│   └── landing/                    # Marketing page sections
 ├── lib/
-│   ├── supabase/                # Browser and server Supabase clients
-│   ├── api/                     # Typed API client + per-resource modules (see below)
-│   ├── posthog/                 # PostHogProvider + PostHogPageView (manual pageviews)
-│   ├── attribution.ts           # First-touch UTM/referrer capture
-│   ├── context/                 # AuthContext, ToastContext
-│   └── utils/                   # assignments, retry, audio duration helpers
-└── types/                       # Shared TypeScript types
+│   ├── supabase/                   # Browser + server Supabase clients; getAccessToken()
+│   │                                 — shared token-fetch helper used across RM components
+│   ├── api/                        # Typed API client + per-resource modules (see below)
+│   ├── posthog/                    # PostHogProvider + PostHogPageView (manual pageviews)
+│   ├── attribution.ts              # First-touch UTM/referrer capture
+│   ├── relationship.ts             # Relationship label <-> backend enum mapping;
+│   │                                 displayRelationship() for capitalized display
+│   ├── context/                    # AuthContext (session + membership resolution), ToastContext
+│   └── utils/                      # assignments, retry, audio duration helpers
+└── types/                          # Shared TypeScript types
 ```
 
 ## Pages
 
-| Route                     | Description                                                                                                   |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `/`                       | Marketing landing page                                                                                        |
-| `/(auth)/[mode]`          | Sign-in / sign-up                                                                                             |
-| `/(auth)/verify-email`    | Email verification prompt + resend                                                                            |
-| `/(auth)/update-password` | Password reset                                                                                                |
-| `/(auth)/onboarding`      | 5-step guided onboarding wizard                                                                               |
-| `/(dashboard)/dashboard`  | Home — stats, setup checklist, quick actions, activity                                                        |
-| `/(dashboard)/messages`   | Messages list — create, edit, read, play audio/video/text                                                     |
-| `/(dashboard)/photos`     | Photos — upload, folders, lightbox, edit, assign                                                              |
-| `/(dashboard)/docs`       | Documents & files — upload, manage, assign                                                                    |
-| `/(dashboard)/story`      | Memoir — chapter list, editor (`new`, `[id]`), `preview`, `settings`                                          |
-| `/(dashboard)/access`     | Recipients and release manager CRUD                                                                           |
-| `/(dashboard)/help`       | Feedback & support — bug report, feature request, general feedback                                            |
-| `/(dashboard)/unassigned` | Unassigned content — filter by type, bulk assign/delete (the "Memoir" tab filters the `chapter` content type) |
+| Route                        | Description                                                                                                   |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `/`                            | Marketing landing page                                                                                         |
+| `/(auth)/[mode]`               | Sign-in / sign-up — locks the email field when the URL carries an `invite_token`                               |
+| `/(auth)/verify-email`         | Email verification prompt + resend                                                                             |
+| `/(auth)/update-password`      | Password reset                                                                                                 |
+| `/(auth)/onboarding`            | 5-step guided onboarding wizard (owner only)                                                                    |
+| `/(dashboard)/dashboard`        | Owner home — stats, setup checklist, quick actions, activity                                                    |
+| `/(dashboard)/messages`         | Messages list — create, edit, read, play audio/video/text                                                      |
+| `/(dashboard)/photos`           | Photos — upload, folders, lightbox, edit, assign                                                                |
+| `/(dashboard)/docs`             | Documents & files — upload, manage, assign                                                                      |
+| `/(dashboard)/story`            | Memoir — chapter list, editor (`new`, `[id]`), `preview`, `settings`                                            |
+| `/(dashboard)/access`           | Recipients and release manager CRUD (owner side)                                                                |
+| `/(dashboard)/help`             | Feedback & support — bug report, feature request, general feedback                                             |
+| `/(dashboard)/unassigned`       | Unassigned content — filter by type, bulk assign/delete (the "Memoir" tab filters the `chapter` content type) |
+| `/rm/overview`                  | Release Manager dashboard — content stats, recent activity                                                      |
+| `/rm/profile`                   | RM's own profile (view saved / edit toggle)                                                                     |
+| `/rm/release-plan`              | Placeholder — full release flow built but paused for this sprint                                                |
+| `/rm/recipients`                | Recipient delivery/access status                                                                                |
+| `/rm/downloads`                 | Prepare and download a released content package                                                                 |
+| `/rm/notifications`             | Announcements + activity feed; mark read/unread (never deleted)                                                 |
+| `/rm/help`                      | RM-specific Help Center (same shared component as `/help`, re-themed + re-contented)                            |
+| `/rm/create-account`            | "Create my Tether" promo — only reachable/visible if the RM has no owner account                                |
+| `/select-account`               | Multi-membership picker — skipped automatically when there's only one membership                                |
+| `/invitations/accept/[token]`   | Invite acceptance — explicit button click, not an auto-run side effect of the page load                         |
 
 ## API Modules (`src/lib/api`)
 
-| Module                | Endpoints covered                                                                   |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| `client.ts`           | Base `request()`, `api.{get,post,patch,delete}`, `ApiError`                         |
-| `users.ts`            | `GET /users/me`, profile update                                                     |
-| `recipients.ts`       | `/recipients` CRUD                                                                  |
-| `release-managers.ts` | `/release-managers` CRUD                                                            |
-| `messages.ts`         | `/messages` CRUD, playback tokens, audio signed URLs, status polling                |
-| `documents.ts`        | `/documents` — signed upload URLs, batch create, list, delete                       |
-| `photos.ts`           | `/photos` — signed upload URLs, batch create, list, delete                          |
-| `chapters.ts`         | `/chapters` — text/voice chapters, autosave, reorder, exhibits, assignments         |
-| `memoir.ts`           | `/memoir` — preview, PDF/text export, per-chapter TTS narration                     |
-| `content.ts`          | `GET /content/unassigned`, `POST /content/bulk-assign`, `POST /content/bulk-delete` |
-| `activity.ts`         | `GET /activity` feed                                                                |
-| `feedback.ts`         | `/feedback` — screenshot upload URL, submit feedback                                |
+| Module                | Endpoints covered                                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `client.ts`           | Base `request()`, `api.{get,post,patch,delete}`, `ApiError`, `buildAuthHeaders()`                                  |
+| `users.ts`            | `GET /users/me`, profile update                                                                                    |
+| `recipients.ts`       | `/recipients` CRUD                                                                                                  |
+| `release-managers.ts` | `/release-managers` CRUD                                                                                            |
+| `messages.ts`         | `/messages` CRUD, playback tokens, audio signed URLs, status polling                                                |
+| `documents.ts`        | `/documents` — signed upload URLs, batch create, list, delete                                                       |
+| `photos.ts`           | `/photos` — signed upload URLs, batch create, list, delete                                                          |
+| `chapters.ts`         | `/chapters` — text/voice chapters, autosave, reorder, exhibits, assignments                                         |
+| `memoir.ts`           | `/memoir` — preview, PDF/text export, per-chapter TTS narration                                                     |
+| `content.ts`          | `GET /content/unassigned`, `POST /content/bulk-assign`, `POST /content/bulk-delete`                                 |
+| `activity.ts`         | `GET /activity` feed                                                                                                |
+| `feedback.ts`         | `/feedback` — screenshot upload URL, submit feedback                                                                |
+| `access.ts`           | `/access/*` — owner-side recipient/guardian/release-manager management, overview                                   |
+| `invitations.ts`      | `/invitations/*` — send/resend/revoke invites, `acceptInvitation` (token-based accept)                              |
+| `memberships.ts`      | `/auth/memberships`, `switchContext`, `getActiveContext`, `hasOwnerMembership`                                      |
+| `rm.ts`               | `/rm/*` — overview, release-plan, recipients, notifications, downloads (includes raw-`fetch` ZIP/PDF streaming that intentionally bypasses the JSON envelope client) |
 
 `client.ts` is the **single source of truth** for success/failure. It unwraps `data` on
 success and throws a typed `ApiError(statusCode, message)` for every failure class
 (non-2xx, `success: false`, malformed body, network error). Call sites surface
-`error.message` and branch on `error.statusCode`.
+`error.message` and branch on `error.statusCode`. `buildAuthHeaders()` centralizes the
+`Authorization` + `X-Account-Context` header logic so raw-`fetch` callers (binary
+downloads) never drift from the JSON client's behavior.
 
-## Key Components (`src/components/dashboard`)
+## Key Components
 
-| Component                         | Purpose                                                                           |
-| --------------------------------- | --------------------------------------------------------------------------------- |
-| `CreateMessageModal`              | 3-step wizard (type → content → details) for new messages; `EditWizard` for edits |
-| `AssignRecipientsModal`           | Shared recipient assignment modal (groups + individuals)                          |
-| `AddPhotosModal`                  | Photo upload with folder support                                                  |
-| `AddRecipientsModal`              | Recipient create/edit form                                                        |
-| `AddReleaseManagerModal`          | Release manager create/edit form                                                  |
-| `FinishProfileModal`              | Profile completion prompt                                                         |
-| `QuickActions`                    | Dashboard quick-action cards                                                      |
-| `SetupSteps` / `OnboardingWidget` | Setup checklist, mirrors onboarding completion                                    |
-| `WelcomeBanner`                   | Shown while onboarding is incomplete                                              |
-| `ActivityFeed` / `StatCard`       | Dashboard data widgets                                                            |
+**`src/components/dashboard`**
+
+| Component                    | Purpose                                                                                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CreateMessageModal`          | 3-step wizard (type → content → details) for new messages; `EditWizard` for edits                                                            |
+| `AssignRecipientsModal`       | Shared recipient assignment modal (groups + individuals)                                                                                     |
+| `AddPhotosModal`              | Photo/document upload with folder support; picks a per-file preview icon (image/audio/video/document/other) instead of one generic icon      |
+| `AddRecipientsModal`          | Recipient create/edit form — no phone field collected here                                                                                    |
+| `AddReleaseManagerModal`      | Release manager create/edit form — no phone field collected here (the RM sets their own from their portal's My Profile)                       |
+| `ReleaseManagerConsentModal`  | Legal-notice gate before designating/changing an RM — dialog semantics, focus trap, synchronous reset on reopen                               |
+| `FinishProfileModal`          | Shared profile form — modal (onboarding) or `embedded` (owner "Finish Your Profile" / RM "My Profile"); `hideSmsOptIn` / `hideAgeAndStatus` / `onEdit` props tailor it per portal |
+| `QuickActions`                | Dashboard quick-action cards                                                                                                                 |
+| `SetupSteps` / `OnboardingWidget` | Setup checklist, mirrors onboarding completion                                                                                           |
+| `WelcomeBanner`               | Shown while onboarding is incomplete                                                                                                          |
+| `ActivityFeed` / `StatCard`   | Dashboard data widgets                                                                                                                        |
+
+**`src/components/release-manager`**
+
+| Component               | Purpose                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ReleaseManagerSidebar` | RM portal nav — content stats, polled unread-notification badge; "Switch Account" only shown with 2+ memberships; "Create my Tether" only shown with no owner account |
+| `RequestGuardianModal`  | Two-step "ask a Guardian to complete the release" flow                                                                                                       |
+| `release-plan/*`        | Step1–Step5 views + header/constants for the full release-plan flow (currently unmounted from the page — see Pages table)                                    |
 
 ## Auth Flow
 
-Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
-`/auth/login` side-call syncs the backend after sign-in.
+Auth primitives (sign up/in, session, email verification) are **Supabase-direct**, but
+membership/portal resolution goes through the backend's `/auth/*` REST routes — that's the
+only place with service-role access to `account_memberships`. That table's RLS has **no
+read policy**, so a frontend Supabase query against it always returns empty, even for the
+caller's own rows. (This bit us once — `auth/callback/route.ts` now calls the backend's
+`GET /auth/pending-invite-check` instead of querying Supabase directly, for exactly this
+reason.)
 
-1. **Sign up** (email/password via `supabase.auth.signUp`):
+1. **Sign up** (`POST /auth/signup`, wrapping `supabase.auth.signUp`):
    - Duplicate email → inline error + "Sign in instead".
+   - Via an invite link (`?invite_token=...`) → the invited email is prefilled and
+     **locked** in the form (tooltip explains why), and the backend skips
+     auto-creating an owner self-membership for that signup — they're joining purely
+     as RM/Guardian/Recipient, not becoming an account owner.
    - Unverified → `/verify-email`.
-   - Active session → `/onboarding`.
-2. **Email confirmation / magic link / password reset** — all "check your inbox"
-   screens have working resend.
-3. **Google OAuth** → `/auth/callback` (PKCE code flow).
-4. New user → `/onboarding`; returning user → `/dashboard`.
+2. **Email confirmation / magic link / password reset** (`auth/callback/route.ts`,
+   `token_hash` flow) — checks `GET /auth/pending-invite-check` first. If this signup
+   came from an invite, redirects straight to `/select-account` instead of the owner
+   onboarding wizard. Otherwise: existing owner → `/dashboard` or `/onboarding`
+   depending on completion.
+3. **Google OAuth** → `/auth/callback` (PKCE `code` flow) — same invite check applies.
+4. **Membership resolution** (`AuthContext.resolveMembership`, runs once per session):
+   calls `GET /auth/memberships`.
+   - Exactly one membership → switches into it directly (`/dashboard` for an owner,
+     `/rm/overview` for a Release Manager) — no intermediate picker screen.
+   - More than one → `/select-account`, which itself re-checks on load and
+     auto-redirects if the count has since dropped to one (e.g. right after an
+     invite was just accepted).
+   - A stored `active_membership` from a prior session is re-validated
+     (`getActiveContext`) rather than trusted blindly. A returning user who
+     re-authenticates from `/signin` with a still-valid stored membership is routed
+     onward instead of being left stuck on the sign-in page.
+5. **Invitation acceptance** (`/invitations/accept/[token]`) — requires an explicit
+   "Accept invitation" click; the accept endpoint is a `GET` with a side effect, so it
+   must never fire just because the page loaded. If not logged in, redirects to
+   `/signin` instead of `/signup` when the invited email already belongs to an
+   existing user (signing up again would always 409). The accepting user's email is
+   verified server-side against the invite before it's honored.
+6. **Portal guards** — both `(dashboard)/layout.tsx` and `(rm)/layout.tsx` verify the
+   active membership's portal client-side and render **nothing** until confirmed, so
+   a Release Manager with no owner account can never even briefly see the owner
+   dashboard shell (or vice versa).
 
 ## Onboarding & Dashboard
 
 - **Onboarding** (`Step1–Step5`) creates real resources via the API as you go
   (recipients, release manager, message, document/media upload). Skipping a step
-  creates nothing; a step only advances after its API call succeeds.
+  creates nothing; a step only advances after its API call succeeds. Phone number is
+  not collected on the release-manager step — the RM sets their own later.
 - **Dashboard setup checklist** mirrors onboarding completion (read from
   `/users/me`), refreshed on entry. Hides once every step is complete.
 - **Unassigned content** — items with only `assign_later` assignments (or none)
@@ -182,10 +298,10 @@ Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
 ## Message Types
 
 | Type  | Recording                                             | Player                                      |
-| ----- | ----------------------------------------------------- | ------------------------------------------- |
-| Text  | `WriteMessageStep` (contentEditable rich-text editor) | `ReadOnlyMessage` modal                     |
-| Audio | `AudioRecorder` (WaveSurfer + MediaRecorder)          | `AudioPlayer` (WaveSurfer, custom controls) |
-| Video | `RecordStep` (MediaRecorder)                          | `VideoPlayer` (Mux, custom controls)        |
+| ----- | ------------------------------------------------------ | -------------------------------------------- |
+| Text  | `WriteMessageStep` (contentEditable rich-text editor) | `ReadOnlyMessage` modal                      |
+| Audio | `AudioRecorder` (WaveSurfer + MediaRecorder)          | `AudioPlayer` (WaveSurfer, custom controls)  |
+| Video | `RecordStep` (MediaRecorder, "Record up to 5 minutes") | `VideoPlayer` (Mux, custom controls)        |
 
 ## Security
 
@@ -198,9 +314,18 @@ Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
   `Referrer-Policy`, and a restrictive `Permissions-Policy`. Changes require a
   dev-server restart (headers are computed at startup).
 - **Route protection** — the `(dashboard)` group is gated by `middleware.ts`
-  using server-validated `supabase.auth.getUser()`.
+  using server-validated `supabase.auth.getUser()`, *and* by a client-side
+  membership-portal check in its layout (see Auth Flow, step 6). The `(rm)` group
+  has the equivalent client-side guard plus a server-side pre-check for the
+  "Create my Tether" promo's visibility.
 - **Auth tokens** — held by the Supabase browser client; the API client
-  (`client.ts`) attaches `Authorization: Bearer <access_token>` per request.
+  (`client.ts`) attaches `Authorization: Bearer <access_token>` per request, plus
+  `X-Account-Context: <membership_id>` from `localStorage` so the backend knows
+  which membership a multi-account user is currently acting as.
+- **Invitation integrity** — accepting an invite while logged in requires the
+  authenticated user's email to match the invite's `invite_email`; a mismatch is
+  rejected server-side rather than silently letting a signed-in user claim someone
+  else's pending invite.
 - **Analytics/replay privacy** — PostHog (`src/lib/posthog/PostHogProvider.tsx`) runs
   with `person_profiles: 'identified_only'`, and session recording masks all inputs
   (`maskAllInputs`) and all text (`maskTextSelector: '*'`), so no user content is
@@ -208,10 +333,18 @@ Auth is **Supabase-direct** (`/auth/*` REST routes are not used); a single
   `PostHogPageView`) so client-side route changes are tracked correctly. PostHog is
   a no-op when `NEXT_PUBLIC_POSTHOG_KEY` is unset (e.g. local dev).
 
+## Known Follow-ups
+
+- `/rm/release-plan` is intentionally a placeholder this sprint — the real
+  implementation (`ReleasePlanPageImpl` in the same file) is complete and just
+  needs to be swapped back in as the default export.
+- `/rm/create-account` is a static promo/signup form — billing isn't wired up yet.
+
 ## Sprint Progress
 
 - **Sprint 1** ✅ — Auth, onboarding, dashboard shell
 - **Sprint 2** ✅ — Messages (text/video/audio), recipients, release manager, photos & documents, centralised API client
 - **Sprint 3** ✅ — Unassigned content page, message read/edit wizard, audio/video player polish, editorial write-message UI
 - **Sprint 4** ✅ — Memoir (`/story`): chapter editor, voice chapters, preview, PDF/text export, TTS narration; feedback/help page; PostHog analytics + first-touch attribution
-- **Sprint 5–10** — See sprint execution plan
+- **Sprint 5** ✅ — Release Manager portal (`/rm/*`): overview, recipients, notifications, content downloads, RM-specific Help Center; multi-membership auth flow (`/select-account`, `/invitations/accept/[token]`); portal guards on both `(dashboard)` and `(rm)`; invite-signup email locking and redirect fixes
+- **Sprint 6–10** — See sprint execution plan

@@ -5,10 +5,14 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  File as FileIcon,
   FileImage,
+  FileText,
   Loader2,
+  Mic,
   Search,
   Upload,
+  Video,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -20,12 +24,27 @@ import {
   toggleIndividual as toggleIndividualSelection,
 } from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { displayRelationship } from "@/lib/relationship";
 import { requestPhotoUploadUrls, createPhotosBatch } from "@/lib/api/photos";
 import {
   requestDocUploadUrls,
   createDocumentsBatch,
 } from "@/lib/api/documents";
 import { track } from "@/lib/posthog/analytics";
+
+// Icon for a file with no visual thumbnail (non-image, or an image preview
+// that hasn't loaded yet) — matches by type, not a single generic icon.
+function iconForFile(file: File): typeof FileText {
+  const type = file.type.toLowerCase();
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (type.startsWith("image/")) return FileImage;
+  if (type.startsWith("audio/") || ["mp3", "wav", "aac", "m4a", "ogg", "flac"].includes(ext))
+    return Mic;
+  if (type.startsWith("video/") || ["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpeg"].includes(ext))
+    return Video;
+  if (["pdf", "doc", "docx", "txt", "rtf", "odt"].includes(ext)) return FileText;
+  return FileIcon;
+}
 
 interface AddPhotosModalProps {
   open: boolean;
@@ -696,6 +715,7 @@ export default function AddPhotosModal({
                     >
                       {files.map((f, idx) => {
                         const preview = previews[idx];
+                        const FileTypeIcon = iconForFile(f);
                         return (
                           <div
                             key={`${f.name}-${f.size}-${idx}`}
@@ -719,7 +739,7 @@ export default function AddPhotosModal({
                               />
                             ) : (
                               <div className="w-full h-full flex flex-col items-center justify-center px-1 gap-1">
-                                <FileImage
+                                <FileTypeIcon
                                   className="w-5 h-5 text-[#4F46E5]"
                                   strokeWidth={2}
                                 />
@@ -1065,7 +1085,7 @@ export default function AddPhotosModal({
                                       color: "#717182",
                                     }}
                                   >
-                                    {p.relationship}
+                                    {displayRelationship(p.relationship)}
                                   </span>
                                 </div>
                               </button>

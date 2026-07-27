@@ -45,6 +45,7 @@ import {
   toggleIndividual as toggleIndividualSelection,
 } from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { displayRelationship } from "@/lib/relationship";
 import AddPhotosModal from "@/components/dashboard/AddPhotosModal";
 
 /* ---------------------- Helpers ---------------------- */
@@ -1857,7 +1858,7 @@ function CreateFolderModal({
                                   color: "#717182",
                                 }}
                               >
-                                {p.relationship}
+                                {displayRelationship(p.relationship)}
                               </span>
                             </div>
                           </button>
@@ -2276,7 +2277,7 @@ function EditFolderModal({
                                   color: "#717182",
                                 }}
                               >
-                                {p.relationship}
+                                {displayRelationship(p.relationship)}
                               </span>
                             </div>
                           </button>
@@ -2753,7 +2754,7 @@ function EditPhotoModal({
                                   color: "#717182",
                                 }}
                               >
-                                {r.relationship}
+                                {displayRelationship(r.relationship)}
                               </span>
                             </div>
                           </button>

@@ -55,6 +55,7 @@ import {
   toggleIndividual as toggleIndividualSelection,
 } from "@/lib/utils/assignments";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { displayRelationship } from "@/lib/relationship";
 import { track } from "@/lib/posthog/analytics";
 
 /* ---------------------- Types ---------------------- */
@@ -1860,7 +1861,7 @@ function EditDocumentModal({
                                   color: "#717182",
                                 }}
                               >
-                                {p.relationship}
+                                {displayRelationship(p.relationship)}
                               </span>
                             </div>
                           </button>

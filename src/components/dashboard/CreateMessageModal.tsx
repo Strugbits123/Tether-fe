@@ -37,6 +37,7 @@ import {
   confirmAudioUpload,
 } from "@/lib/api/messages";
 import { getRecipients, type Recipient } from "@/lib/api/recipients";
+import { displayRelationship } from "@/lib/relationship";
 import { countFromSelection } from "@/lib/utils/assignments";
 import AudioRecordingWaveform from "@/components/audio/AudioRecordingWaveform";
 import AudioPlaybackWaveform from "@/components/audio/AudioPlaybackWaveform";
@@ -1431,7 +1432,7 @@ function IndividualPicker({
                       color: "#717182",
                     }}
                   >
-                    {p.relationship}
+                    {displayRelationship(p.relationship)}
                   </span>
                 </div>
               </button>
@@ -2064,7 +2065,7 @@ function RecordStep({
               color: "#0A0A0A",
             }}
           >
-            Maximum recording time:{" "}
+            Record up to{" "}
             <span style={{ fontWeight: 600, color: "#4F46E5" }}>5 minutes</span>
           </p>
         )}
@@ -3734,7 +3735,7 @@ function DetailsStep({
                               color: "#717182",
                             }}
                           >
-                            {p.relationship}
+                            {displayRelationship(p.relationship)}
                           </span>
                         </div>
                       </button>
