@@ -152,7 +152,9 @@ const DOC_MIME_TO_EXT: Record<string, string> = {
   "application/pdf": "pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
     "docx",
-  "application/msword": "docx",
+  // Legacy Word format — a real .doc, not .docx. The docs viewer renders
+  // file_type verbatim, so mislabelling it here shows the file as DOCX forever.
+  "application/msword": "doc",
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/heic": "heic",
@@ -179,6 +181,7 @@ const DOC_MIME_TO_EXT: Record<string, string> = {
 const DOC_FILE_TYPES = new Set([
   "pdf",
   "docx",
+  "doc",
   "jpg",
   "jpeg",
   "png",
