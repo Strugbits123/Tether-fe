@@ -2,7 +2,9 @@
 // expects lowercase enum values. These maps translate the UI labels into the
 // values each endpoint accepts.
 
-// Release Manager enum: family | friend | partner | attorney | colleague | other
+// Release Manager enum: family | friend | partner | attorney | colleague | other.
+// The dropdown now only offers Family/Friend/Other, but legacy labels are still
+// mapped defensively so no caller can submit an out-of-enum value.
 const RELEASE_MANAGER_VALUES: Record<string, string> = {
   Family: 'family',
   Spouse: 'partner',

@@ -125,12 +125,20 @@ export default function ReleaseManagerConsentModal({
                 color: '#4A5565',
               }}
             >
-              Designating a Release Manager in Tether is not a substitute for a legal will. If
-              you do not have a valid will, your estate will be governed by the intestacy laws
-              of your state, which may not reflect your wishes. Your Tether Release Manager will
-              be able to access and distribute your Tether content, but will have no legal
-              authority over your financial accounts, property, or estate without a court
-              appointment.
+              Your Tether Release Manager will be able to access and distribute all of your
+              Tether content, including photos, documents, messages, and memoir.
+            </p>
+            <p
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 400,
+                fontSize: 14,
+                lineHeight: '21px',
+                color: '#4A5565',
+              }}
+            >
+              This is isn&apos;t a legal will - your Release Manager has no authority over your
+              financial accounts, property, or estate without a court appointment.
             </p>
 
             <label
@@ -158,8 +166,7 @@ export default function ReleaseManagerConsentModal({
                   color: '#364153',
                 }}
               >
-                I understand that my Tether Release Manager designation does not replace a
-                legal will and does not confer legal authority over my estate.
+                Got it - I understand my Release Manager&apos;s role
               </span>
             </label>
           </div>

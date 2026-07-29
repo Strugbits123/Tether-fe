@@ -24,6 +24,10 @@ interface AddRecipientsModalProps {
   bottomVariant?: "note" | "guardian";
   /** Override the relationship dropdown choices. Defaults to the full list. */
   relationshipOptions?: string[];
+  /** Pre-selects the relationship dropdown when the form opens (e.g. the
+   *  Access page's "+ Add Family" / "+ Add Friend" shortcuts). Ignored in
+   *  readOnly mode, where the saved value always wins. */
+  defaultRelationship?: string;
   /** Read-only view of an existing recipient (inputs locked, no Add). */
   readOnly?: boolean;
   /** Values to display in read-only mode. */
@@ -60,6 +64,7 @@ export default function AddRecipientsModal({
   subtitle = "Recipients are the people who will receive access to your messages, photos, and documents when your Tether is released. You can add more in the Access page.",
   bottomVariant = "note",
   relationshipOptions = RELATIONSHIP_OPTIONS,
+  defaultRelationship,
   readOnly = false,
   initialData,
 }: AddRecipientsModalProps) {
@@ -94,7 +99,7 @@ export default function AddRecipientsModal({
       setLastName("");
       setEmail("");
       setPhone("");
-      setRelationship("Family");
+      setRelationship(defaultRelationship || "Family");
       setNote("");
     }
     setIsGuardian(false);

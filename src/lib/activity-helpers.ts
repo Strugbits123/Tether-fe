@@ -64,18 +64,14 @@ export function getActivityIconStyle(eventType: string): { bg: string; color: st
 export function formatActivityTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
   const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const dateStr = date.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  })
 
-  if (diffDays === 0) return `Today, ${time}`
-  if (diffDays === 1) return `Yesterday, ${time}`
-  if (diffDays < 7) {
-    const day = date.toLocaleDateString(undefined, { weekday: 'long' })
-    return `${day}, ${time}`
-  }
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return `${dateStr}, ${time}`
 }
 
 export function getActivityMeta(eventType: string, metadata: Meta): string {
@@ -110,6 +106,19 @@ export function getActivityMeta(eventType: string, metadata: Meta): string {
   }
 }
 
+const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
+  legal: 'Legal',
+  financial: 'Financial',
+  insurance: 'Insurance',
+  property: 'Property',
+  digital: 'Digital',
+  digital_accounts: 'Digital',
+  medical: 'Medical',
+  military: 'Military',
+  personal: 'Personal',
+  other: 'Other',
+}
+
 export function getActivityBadge(
   eventType: string,
   metadata: Meta,
@@ -117,7 +126,8 @@ export function getActivityBadge(
   if (eventType === 'document_uploaded') {
     const category = str(metadata?.category)
     if (category && category !== 'personal') {
-      return { label: capitalize(category), bg: '#EEF2FF', color: '#4F39F6' }
+      const label = DOCUMENT_CATEGORY_LABELS[category] ?? capitalize(category)
+      return { label, bg: '#EEF2FF', color: '#4F39F6' }
     }
   }
   return null

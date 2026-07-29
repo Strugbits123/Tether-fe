@@ -126,13 +126,13 @@ const STATUSES = [
   "Single",
   "Married or partnered",
   "Married/partnered with children",
-  "Single parent",
+  "Single with children",
 ];
 const STATUS_TO_VALUE: Record<string, string> = {
   Single: "single",
   "Married or partnered": "married_partnered",
   "Married/partnered with children": "married_partnered_children",
-  "Single parent": "single_parent",
+  "Single with children": "single_parent",
 };
 const STATUS_TO_LABEL: Record<string, string> = Object.fromEntries(
   Object.entries(STATUS_TO_VALUE).map(([label, value]) => [value, label]),

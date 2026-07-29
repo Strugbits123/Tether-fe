@@ -116,6 +116,30 @@ const DOC_MAX_BYTES = 25 * 1024 * 1024;
 const isMediaFile = (f: File) =>
   f.type.startsWith("audio/") || f.type.startsWith("video/");
 
+const isHeicFile = (f: File) =>
+  f.type === "image/heic" ||
+  f.type === "image/heif" ||
+  /\.(heic|heif)$/i.test(f.name);
+
+// Browsers (other than Safari) can't decode/display HEIC in an <img> tag, and
+// this app stores/serves whatever was uploaded with no server-side
+// conversion — so a raw HEIC upload would silently never render for most
+// users. Convert to JPEG client-side before it ever reaches state/preview/upload.
+async function convertHeicIfNeeded(file: File): Promise<File> {
+  if (!isHeicFile(file)) return file;
+  try {
+    const heic2any = (await import("heic2any")).default;
+    const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    const blob = Array.isArray(result) ? result[0] : result;
+    const newName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+    return new File([blob], newName, { type: "image/jpeg" });
+  } catch {
+    // Conversion failed (corrupt file, unsupported variant, etc.) — fall back
+    // to the original file rather than blocking the upload entirely.
+    return file;
+  }
+}
+
 // Must match the backend's DocumentItemDto.fileType enum exactly
 // (src/documents/dto/create-documents-batch.dto.ts) — and its MIME_TO_EXT map
 // (src/documents/documents.service.ts) for which extension each MIME resolves
@@ -297,7 +321,8 @@ export default function AddPhotosModal({
     setSelectedIndividuals(next.individuals);
   };
 
-  const mergeFiles = (incoming: File[]) => {
+  const mergeFiles = async (incomingRaw: File[]) => {
+    const incoming = await Promise.all(incomingRaw.map(convertHeicIfNeeded));
     const errs: string[] = [];
     const maxAllowed = isOnboarding ? 1 : MAX_FILES;
     setFiles((prev) => {
@@ -350,14 +375,14 @@ export default function AddPhotosModal({
   const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files;
     if (!list) return;
-    mergeFiles(Array.from(list));
+    void mergeFiles(Array.from(list));
     e.target.value = "";
   };
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const list = e.dataTransfer.files;
     if (!list) return;
-    mergeFiles(Array.from(list));
+    void mergeFiles(Array.from(list));
   };
   const removeFile = (idx: number) =>
     setFiles((prev) => prev.filter((_, i) => i !== idx));
