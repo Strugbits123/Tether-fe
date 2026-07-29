@@ -113,7 +113,8 @@ export default function ReleaseManagerOverviewPage() {
             color: '#6B7280',
           }}
         >
-          Overview of what {overview.account_owner.name} is leaving for family and friends
+          Overview of what {overview.account_owner.name || 'your Tether account owner'} is leaving
+          for family and friends
         </p>
       </div>
 
