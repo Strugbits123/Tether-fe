@@ -32,17 +32,7 @@ interface AddReleaseManagerModalProps {
   } | null;
 }
 
-const RELATIONSHIP_OPTIONS = [
-  "Family",
-  "Spouse",
-  "Child",
-  "Parent",
-  "Sibling",
-  "Friend",
-  "Colleague",
-  "Lawyer",
-  "Other",
-];
+const RELATIONSHIP_OPTIONS = ["Family", "Friend", "Other"];
 
 export default function AddReleaseManagerModal({
   open,
