@@ -52,9 +52,9 @@ export default function AcceptInvitationPage({
 }) {
   const { token } = use(params)
   const router = useRouter()
-  // Acceptance only happens on an explicit click (see handleAccept) — the
-  // accept endpoint is a GET with a side effect, and this page must not fire
-  // it just because a browser (or a link-preview crawler) loaded the URL.
+  // Acceptance only happens on an explicit click (see handleAccept) — this page
+  // must not fire it just because a browser (or a link-preview crawler) loaded
+  // the URL. The endpoint is a POST, so a prefetch can't trigger it either.
   const [status, setStatus] = useState<Status>('confirm')
   const [message, setMessage] = useState('')
 

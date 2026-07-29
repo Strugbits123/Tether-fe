@@ -11,6 +11,10 @@ export interface Document {
   original_filename: string;
   storage_path: string;
   file_type: string;
+  /** Full MIME type as stored on upload. Needed to disambiguate extensions that
+   *  map to more than one kind of media — `webm` is both audio and video. Null
+   *  for rows uploaded before the column existed. */
+  mime_type: string | null;
   file_size_bytes: number;
   created_at: string;
   signedUrl: string | null;

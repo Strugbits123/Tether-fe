@@ -32,9 +32,17 @@ export type InvitationAcceptResponse =
   | InvitationAcceptedNow
 
 /**
- * GET /invitations/accept/:token. `token` here is optional and, when
+ * POST /invitations/accept/:token. `token` here is optional and, when
  * present, forwards the caller's session so the backend can link/finalize
  * the invitation against the already-authenticated user.
+ *
+ * A POST rather than a GET because acceptance creates the membership: a
+ * mutating GET could be triggered by a link previewer or browser prefetch
+ * rather than by the user's explicit click.
  */
 export const acceptInvitation = (inviteToken: string, token?: string) =>
-  api.get<InvitationAcceptResponse>(`/invitations/accept/${inviteToken}`, token)
+  api.post<InvitationAcceptResponse>(
+    `/invitations/accept/${inviteToken}`,
+    {},
+    token,
+  )

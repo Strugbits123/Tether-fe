@@ -2,6 +2,11 @@
 // expects lowercase enum values. These maps translate the UI labels into the
 // values each endpoint accepts.
 
+// The labels both relationship dropdowns offer. Shared so the Release Manager
+// and Recipient modals can't silently drift apart — every label here must have
+// an entry in both value maps below.
+export const RELATIONSHIP_OPTIONS: string[] = ['Family', 'Friend', 'Other']
+
 // Release Manager enum: family | friend | partner | attorney | colleague | other.
 // The dropdown now only offers Family/Friend/Other, but legacy labels are still
 // mapped defensively so no caller can submit an out-of-enum value.

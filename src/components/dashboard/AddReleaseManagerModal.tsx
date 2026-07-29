@@ -6,7 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { ApiError } from "@/lib/api/client";
 import { useToast } from "@/lib/context/ToastContext";
 import { setReleaseManager } from "@/lib/api/access";
-import { toReleaseManagerRelationship } from "@/lib/relationship";
+import {
+  RELATIONSHIP_OPTIONS,
+  toReleaseManagerRelationship,
+} from "@/lib/relationship";
 
 interface AddReleaseManagerModalProps {
   open: boolean;
@@ -31,8 +34,6 @@ interface AddReleaseManagerModalProps {
     note: string;
   } | null;
 }
-
-const RELATIONSHIP_OPTIONS = ["Family", "Friend", "Other"];
 
 export default function AddReleaseManagerModal({
   open,
@@ -60,6 +61,9 @@ export default function AddReleaseManagerModal({
 
   // Reset the form ONLY when the modal transitions to open — never on a
   // re-render or after an API error, so the user's input is preserved on failure.
+  // Deliberately a synchronous effect keyed on `open` rather than a `key`-based
+  // remount, which every call site would have to opt into.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return;
     if (readOnly && initialData) {
@@ -84,6 +88,7 @@ export default function AddReleaseManagerModal({
     setAddedThisSession(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Escape-to-close + scroll lock.
   useEffect(() => {

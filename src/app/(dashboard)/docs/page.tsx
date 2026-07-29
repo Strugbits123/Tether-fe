@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Briefcase,
   Check,
@@ -295,7 +295,18 @@ async function getToken(): Promise<string | null> {
 // doc.file_type is always a bare extension — see the backend's
 // DocumentItemDto.fileType enum ('pdf' | 'docx' | 'jpg' | ... | 'mp4' | ...),
 // never a MIME type. (The 'mime_type' column is a separate field.)
-function fileTypeToKind(fileType: string): FileKind {
+//
+// Some extensions map to more than one kind: `webm` is a container used for both
+// audio/webm and video/webm, and the extension lists below can only guess one of
+// them (they guess audio). So when the row carries a mime_type, its top-level
+// type wins; the extension lists stay as the fallback for older rows with a null
+// mime_type and for formats whose extension is already unambiguous.
+function fileTypeToKind(fileType: string, mimeType?: string | null): FileKind {
+  const mime = (mimeType || "").toLowerCase();
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("image/")) return "image";
+
   const ext = (fileType || "").toLowerCase().replace(/^\./, "");
   if (["pdf", "docx", "doc", "txt", "rtf", "odt"].includes(ext)) return "document";
   if (["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "svg", "bmp", "tiff"].includes(ext))
@@ -307,18 +318,37 @@ function fileTypeToKind(fileType: string): FileKind {
 
 // Icon for a file kind — a plain doc icon only for real documents; images,
 // audio and video get their own icon instead of the generic file icon.
-function iconForKind(kind: FileKind): typeof FileText {
+//
+// A component that switches internally, rather than a helper returning the icon
+// for callers to render as `const KindIcon = iconForKind(kind)` + `<KindIcon />`.
+// Binding a component to a local and rendering it reads to the React compiler as
+// creating a component during render (react-hooks/static-components); switching
+// over static JSX here keeps every element a module-level reference.
+function KindGlyph({
+  kind,
+  className,
+  style,
+  color,
+  strokeWidth,
+}: {
+  kind: FileKind;
+  className?: string;
+  style?: CSSProperties;
+  color?: string;
+  strokeWidth?: number;
+}) {
+  const props = { className, style, color, strokeWidth };
   switch (kind) {
     case "image":
-      return ImageIcon;
+      return <ImageIcon {...props} />;
     case "audio":
-      return Mic;
+      return <Mic {...props} />;
     case "video":
-      return Video;
+      return <Video {...props} />;
     case "document":
-      return FileText;
+      return <FileText {...props} />;
     default:
-      return FileIcon;
+      return <FileIcon {...props} />;
   }
 }
 
@@ -1186,8 +1216,7 @@ function DocumentViewModal({
   onDownload: () => void;
   onEditRecipients: () => void;
 }) {
-  const kind = fileTypeToKind(doc.file_type);
-  const KindIcon = iconForKind(kind);
+  const kind = fileTypeToKind(doc.file_type, doc.mime_type);
   const cat = getCategoryMeta(doc.category);
 
   useEffect(() => {
@@ -1253,7 +1282,8 @@ function DocumentViewModal({
                   background: "#E0E7FF",
                 }}
               >
-                <KindIcon
+                <KindGlyph
+                  kind={kind}
                   className="w-7 h-7"
                   color="#4F46E5"
                   strokeWidth={1.75}
@@ -2150,8 +2180,7 @@ function DocRow({
     return () => document.removeEventListener("mousedown", handle);
   }, [menuOpen]);
 
-  const kind = fileTypeToKind(doc.file_type);
-  const KindIcon = iconForKind(kind);
+  const kind = fileTypeToKind(doc.file_type, doc.mime_type);
   const cat = getCategoryMeta(doc.category);
 
   return (
@@ -2174,7 +2203,8 @@ function DocRow({
           flexShrink: 0,
         }}
       >
-        <KindIcon
+        <KindGlyph
+          kind={kind}
           style={{ width: 16, height: 16, flexShrink: 0 }}
           color="#4F46E5"
           strokeWidth={2}
@@ -2341,8 +2371,7 @@ function DocCard({
     return () => document.removeEventListener("mousedown", handle);
   }, [menuOpen]);
 
-  const kind = fileTypeToKind(doc.file_type);
-  const KindIcon = iconForKind(kind);
+  const kind = fileTypeToKind(doc.file_type, doc.mime_type);
 
   return (
     <div
@@ -2365,7 +2394,12 @@ function DocCard({
           background: "linear-gradient(135deg, #E0E7FF 0%, #C6D2FF 100%)",
         }}
       >
-        <KindIcon className="w-12 h-12" color="#4F39F6" strokeWidth={1.75} />
+        <KindGlyph
+          kind={kind}
+          className="w-12 h-12"
+          color="#4F39F6"
+          strokeWidth={1.75}
+        />
       </div>
 
       {/* Title + badge */}

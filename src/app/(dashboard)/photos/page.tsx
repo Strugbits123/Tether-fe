@@ -135,7 +135,10 @@ export default function PhotosPage() {
     [showToast],
   );
 
-  // Initial load
+  // Data-fetch-on-mount / on-folder-change. The setState calls inside these
+  // fetchers run after an await (never synchronously in the effect body), so
+  // the cascading-render the rule guards against doesn't apply here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     loadFolders();
   }, [loadFolders]);
@@ -143,6 +146,7 @@ export default function PhotosPage() {
   useEffect(() => {
     loadPhotos(activeFolderId);
   }, [activeFolderId, loadPhotos]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleDeletePhoto = async (photoId: string) => {
     const token = await getToken();

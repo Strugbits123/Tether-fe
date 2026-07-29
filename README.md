@@ -81,7 +81,7 @@ their portal before rendering anything, so one can never bleed into the other.
 
 ## Project Structure
 
-```
+```text
 src/
 ├── app/
 │   ├── (auth)/                     # Unauthenticated routes
@@ -130,7 +130,7 @@ src/
 │   │                                 the list UI only ever renders for 2+ memberships
 │   ├── invitations/accept/[token]/  # Invite acceptance landing. Acceptance only fires
 │   │                                 on an explicit button click, never as a side effect
-│   │                                 of the page loading (the accept endpoint is a GET)
+│   │                                 of the page loading (the accept endpoint is a POST)
 │   └── auth/callback/               # Supabase email-confirmation (token_hash) + OAuth
 │                                     (PKCE) callback. Routes invite signups straight to
 │                                     /select-account instead of the owner onboarding wizard

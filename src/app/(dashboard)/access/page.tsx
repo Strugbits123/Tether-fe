@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Award,
   ChevronDown,
@@ -111,7 +111,7 @@ async function getToken(): Promise<string | null> {
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -168,9 +168,22 @@ export default function AccessPage() {
     }
   }, [showToast]);
 
+  // Data-fetch-on-mount. The setState calls inside loadData run after an await
+  // (never synchronously in the effect body), so the cascading-render the rule
+  // guards against doesn't apply here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     loadData();
   }, [loadData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Computed once per `overview` rather than per RecipientGroup: both groups
+  // derive the same ranking from the same full member list, and a fresh Map
+  // identity on every render would also churn the groups needlessly.
+  const guardianOrderMap = useMemo(
+    () => (overview ? getGuardianOrderMap(overview) : new Map<string, number>()),
+    [overview],
+  );
 
   const handleSendReminder = async () => {
     const token = await getToken();
@@ -324,7 +337,7 @@ export default function AccessPage() {
             members={overview.recipients.family.members}
             guardianCount={overview.stats.total_guardians}
             maxGuardians={overview.stats.max_guardians}
-            guardianOrderMap={getGuardianOrderMap(overview)}
+            guardianOrderMap={guardianOrderMap}
             loading={loading}
             onAddPerson={() => {
               setAddRecipientRelationship("Family");
@@ -338,7 +351,7 @@ export default function AccessPage() {
             members={overview.recipients.friends_and_others.members}
             guardianCount={overview.stats.total_guardians}
             maxGuardians={overview.stats.max_guardians}
-            guardianOrderMap={getGuardianOrderMap(overview)}
+            guardianOrderMap={guardianOrderMap}
             loading={loading}
             onAddPerson={() => {
               setAddRecipientRelationship("Friend");
@@ -743,10 +756,16 @@ function RichRecipientCard({
   const [guardianModalOpen, setGuardianModalOpen] = useState(false);
   const [guardianSubmitting, setGuardianSubmitting] = useState(false);
 
+  // Re-sync the editable fields when the parent refetches and hands down a
+  // changed member. Deliberately a synchronous effect rather than a `key`-based
+  // remount, so the surrounding expand/collapse and modal state survive a
+  // refresh; the writes are guarded by the dep array and settle in one pass.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setEmail(member.email);
     setPhone(member.phone ?? "");
   }, [member.email, member.phone]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const dirty = email !== member.email || phone !== (member.phone ?? "");
 

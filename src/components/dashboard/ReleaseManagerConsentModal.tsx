@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 interface ReleaseManagerConsentModalProps {
@@ -17,19 +17,24 @@ export default function ReleaseManagerConsentModal({
   onClose,
   onConfirm,
 }: ReleaseManagerConsentModalProps) {
+  // Gate on `open` out here so the dialog below mounts fresh on every open.
+  // That makes `acknowledged` start unchecked each time without an effect
+  // resetting it after the fact — a reopened modal can never briefly show the
+  // previous session's checked state (and thus an enabled Continue button).
+  if (!open) return null;
+  return <ConsentDialog onClose={onClose} onConfirm={onConfirm} />;
+}
+
+function ConsentDialog({
+  onClose,
+  onConfirm,
+}: Omit<ReleaseManagerConsentModalProps, "open">) {
   const [acknowledged, setAcknowledged] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
 
-  // Runs before paint so a reopened modal never briefly shows the previous
-  // session's checked state (and thus an enabled Continue button).
-  useLayoutEffect(() => {
-    if (open) setAcknowledged(false);
-  }, [open]);
-
   useEffect(() => {
-    if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
 
@@ -39,8 +44,11 @@ export default function ReleaseManagerConsentModal({
         return;
       }
       if (e.key !== "Tab" || !dialogRef.current) return;
+      // `:not([disabled])` matters here: Continue is disabled until the box is
+      // checked, and a disabled button can't take focus — including it would
+      // make Tab wrapping jump to an element that never receives focus.
       const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -61,9 +69,7 @@ export default function ReleaseManagerConsentModal({
       document.body.style.overflow = prev;
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [onClose]);
 
   return (
     <div

@@ -148,29 +148,67 @@ async function convertHeicIfNeeded(file: File): Promise<File> {
 // (src/documents/documents.service.ts) for which extension each MIME resolves
 // to. Getting this wrong doesn't just mis-tag the icon — it's the actual
 // file_type value the vault stores and reads back for that document forever.
-function deriveDocFileType(mimeType: string): string {
-  const map: Record<string, string> = {
-    "application/pdf": "pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-    "application/msword": "docx",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/heic": "heic",
-    "audio/webm": "webm",
-    "audio/mpeg": "mp3",
-    "audio/mp4": "m4a",
-    "audio/wav": "wav",
-    "audio/ogg": "ogg",
-    "audio/aac": "aac",
-    "audio/x-m4a": "m4a",
-    "video/mp4": "mp4",
-    "video/webm": "webm",
-    "video/quicktime": "mov",
-    "video/x-m4v": "m4v",
-    "video/x-msvideo": "avi",
-    "video/mpeg": "mpeg",
-  };
-  return map[mimeType] ?? "pdf";
+const DOC_MIME_TO_EXT: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/msword": "docx",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/heic": "heic",
+  // Browsers report either heic or heif for the same Apple container; the
+  // backend enum only has "heic", so both resolve to it.
+  "image/heif": "heic",
+  "audio/webm": "webm",
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/wav": "wav",
+  "audio/ogg": "ogg",
+  "audio/aac": "aac",
+  "audio/x-m4a": "m4a",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "video/quicktime": "mov",
+  "video/x-m4v": "m4v",
+  "video/x-msvideo": "avi",
+  "video/mpeg": "mpeg",
+};
+
+// The exact set the backend's @IsIn accepts. An extension outside this set is
+// not worth guessing at — see the fallback note in deriveDocFileType.
+const DOC_FILE_TYPES = new Set([
+  "pdf",
+  "docx",
+  "jpg",
+  "jpeg",
+  "png",
+  "heic",
+  "mp3",
+  "m4a",
+  "wav",
+  "ogg",
+  "aac",
+  "webm",
+  "mp4",
+  "mov",
+  "m4v",
+  "avi",
+  "mpeg",
+]);
+
+function deriveDocFileType(mimeType: string, fileName: string): string {
+  const mapped = DOC_MIME_TO_EXT[mimeType.toLowerCase()];
+  if (mapped) return mapped;
+
+  // Unrecognised MIME — browsers occasionally report "" or
+  // application/octet-stream for a file they can't sniff. Derive from the
+  // filename extension instead of defaulting to "pdf": a wrong-but-valid "pdf"
+  // is persisted as this document's type forever and silently mislabels it,
+  // whereas an unsupported extension passed through here is rejected loudly by
+  // the backend's @IsIn (there is no "other" member to fall back to).
+  const ext = /\.([a-z0-9]+)$/.exec(fileName.toLowerCase())?.[1] ?? "";
+  const normalised = ext === "heif" ? "heic" : ext === "jpe" ? "jpeg" : ext;
+  return DOC_FILE_TYPES.has(normalised) ? normalised : ext;
 }
 
 function getImageDimensions(
@@ -240,6 +278,10 @@ export default function AddPhotosModal({
 
   // Reset the form ONLY when the modal transitions to open — never on a
   // re-render or after an upload error, so the user's selection is preserved.
+  // Deliberately a synchronous effect keyed on `open` rather than a `key`-based
+  // remount: this modal is rendered from many call sites and remounting it would
+  // also discard the recipient list fetched below.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return;
     setFiles([]);
@@ -254,6 +296,7 @@ export default function AddPhotosModal({
     setUploading(false);
     setProgress({ current: 0, total: 0 });
   }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Load real recipients for the "Search by name…" picker.
   useEffect(() => {
@@ -409,7 +452,7 @@ export default function AddPhotosModal({
         {
           storagePath: urlInfo.storagePath,
           originalFilename: file.name,
-          fileType: deriveDocFileType(file.type),
+          fileType: deriveDocFileType(file.type, file.name),
           fileSizeBytes: file.size,
           mimeType: file.type,
         },
@@ -534,7 +577,7 @@ export default function AddPhotosModal({
           documents: succeeded.map((s) => ({
             storagePath: s.urlInfo.storagePath,
             originalFilename: s.file.name,
-            fileType: deriveDocFileType(s.file.type),
+            fileType: deriveDocFileType(s.file.type, s.file.name),
             fileSizeBytes: s.file.size,
             mimeType: s.file.type,
             title:
@@ -1321,23 +1364,6 @@ function GroupRow({
     border = "1.1px solid #FDEBA2";
   }
 
-  // Checkbox border for yellow row should pick up theme color
-  const ChecboxYellow = () => (
-    <span
-      className="flex items-center justify-center flex-shrink-0"
-      style={{
-        width: 16,
-        height: 16,
-        borderRadius: 4,
-        background: selected ? "#4F46E5" : "#FFFFFF",
-        border: selected ? "1.1px solid #4F46E5" : "1.1px solid #FDEBA2",
-        boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)",
-      }}
-    >
-      {selected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-    </span>
-  );
-
   return (
     <button
       type="button"
@@ -1353,7 +1379,21 @@ function GroupRow({
       }}
     >
       {variant === "yellow" ? (
-        <ChecboxYellow />
+        // Inline rather than a nested component: the yellow row's checkbox
+        // picks up the theme colour but is used exactly once here.
+        <span
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 16,
+            height: 16,
+            borderRadius: 4,
+            background: selected ? "#4F46E5" : "#FFFFFF",
+            border: selected ? "1.1px solid #4F46E5" : "1.1px solid #FDEBA2",
+            boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)",
+          }}
+        >
+          {selected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+        </span>
       ) : (
         <CheckBox checked={selected} />
       )}
