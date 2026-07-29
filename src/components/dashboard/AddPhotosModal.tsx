@@ -132,7 +132,10 @@ async function convertHeicIfNeeded(file: File): Promise<File> {
     const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
     const blob = Array.isArray(result) ? result[0] : result;
     const newName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
-    return new File([blob], newName, { type: "image/jpeg" });
+    return new File([blob], newName, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
   } catch {
     // Conversion failed (corrupt file, unsupported variant, etc.) — fall back
     // to the original file rather than blocking the upload entirely.

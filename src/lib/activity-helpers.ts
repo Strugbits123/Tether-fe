@@ -64,7 +64,7 @@ export function getActivityIconStyle(eventType: string): { bg: string; color: st
 export function formatActivityTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
-  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   const dateStr = date.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',

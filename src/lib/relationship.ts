@@ -34,11 +34,11 @@ const RECIPIENT_VALUES: Record<string, string> = {
 }
 
 export function toReleaseManagerRelationship(label: string): string {
-  return RELEASE_MANAGER_VALUES[label] ?? label.toLowerCase()
+  return RELEASE_MANAGER_VALUES[label] ?? 'other'
 }
 
 export function toRecipientRelationship(label: string): string {
-  return RECIPIENT_VALUES[label] ?? label.toLowerCase()
+  return RECIPIENT_VALUES[label] ?? 'other'
 }
 
 /** Capitalises a backend relationship value for display (e.g. "family" → "Family"). */

@@ -239,7 +239,7 @@ export default function AccessPage() {
           }}
         >
           Manage your recipients and what they will have access to. All
-          Recipients must be atleast 18 years old.
+          Recipients must be at least 18 years old.
         </p>
       </div>
 
