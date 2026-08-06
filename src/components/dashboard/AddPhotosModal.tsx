@@ -377,13 +377,19 @@ export default function AddPhotosModal({
 
   const mergeFiles = async (incomingRaw: File[]) => {
     const incoming = await Promise.all(incomingRaw.map(convertHeicIfNeeded));
-    const errs: string[] = [];
     const maxAllowed = isOnboarding ? 1 : MAX_FILES;
-    setFiles((prev) => {
+
+    // Computed as a single pure pass over the current files, rather than inside a
+    // setFiles updater. React may invoke an updater more than once for the same
+    // update (StrictMode double-invokes deliberately), and the loop below pushes
+    // into `errs` — so running it as an updater duplicated every message. State
+    // updaters have to be side-effect free; both results now come from here.
+    const errs: string[] = [];
+    const next = (() => {
       const seen = new Set(
-        prev.map((f) => `${f.name}::${f.size}::${f.lastModified}`),
+        files.map((f) => `${f.name}::${f.size}::${f.lastModified}`),
       );
-      const next = isOnboarding ? [] : [...prev]; // onboarding: always replace with new selection
+      const next = isOnboarding ? [] : [...files]; // onboarding: always replace with new selection
       for (const f of incoming) {
         const key = `${f.name}::${f.size}::${f.lastModified}`;
         if (seen.has(key) && !isOnboarding) continue;
@@ -434,7 +440,9 @@ export default function AddPhotosModal({
         next.push(f);
       }
       return next;
-    });
+    })();
+
+    setFiles(next);
     setErrors(errs);
   };
 

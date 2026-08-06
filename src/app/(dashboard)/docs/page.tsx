@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Briefcase,
@@ -438,9 +444,17 @@ export default function DocsPage() {
     top: number;
     left: number;
     width: number;
+    /** Arrow offset from the panel's left edge, so it keeps pointing at the icon
+     *  even after `left` has been clamped away from the anchor. */
+    arrowLeft: number;
+    /** Rendered above the anchor rather than below, when there's no room below. */
+    above: boolean;
   } | null>(null);
 
   const TOOLTIP_WIDTH = 280;
+  // Approximate rendered height (description + tag row + padding). Only used to
+  // decide flip-vs-clamp, so being a little out just biases that choice.
+  const TOOLTIP_EST_HEIGHT = 190;
 
   const openTooltipAt = (key: string, anchor: HTMLElement) => {
     const rect = anchor.getBoundingClientRect();
@@ -453,14 +467,43 @@ export default function DocsPage() {
       Math.max(8, rect.right - width),
       window.innerWidth - width - 8,
     );
-    setTooltipPos({ top: rect.bottom + 8, left, width });
+
+    // Flip above the icon when there isn't room below — a card near the bottom of
+    // the scroll area would otherwise open a panel that runs off screen, and
+    // being fixed-positioned it can't be scrolled into view.
+    const roomBelow = window.innerHeight - rect.bottom - 8;
+    const above = roomBelow < TOOLTIP_EST_HEIGHT && rect.top > roomBelow;
+    const top = above
+      ? Math.max(8, rect.top - 8 - TOOLTIP_EST_HEIGHT)
+      : Math.min(rect.bottom + 8, window.innerHeight - 16);
+
+    // Anchor-relative arrow position, clamped to stay on the panel.
+    const arrowLeft = Math.min(
+      Math.max(10, rect.left + rect.width / 2 - left - 6),
+      width - 22,
+    );
+
+    setTooltipPos({ top, left, width, arrowLeft, above });
     setOpenTooltip(key);
   };
 
-  const closeTooltip = () => {
+  const closeTooltip = useCallback(() => {
     setOpenTooltip(null);
     setTooltipPos(null);
-  };
+  }, []);
+
+  // The panel is position:fixed from the anchor's coordinates at hover time, so
+  // any scroll or resize leaves it pointing at where the icon *used to be*.
+  // Closing is the honest response — recomputing would fight the scroll.
+  useEffect(() => {
+    if (!openTooltip) return;
+    window.addEventListener("scroll", closeTooltip, true);
+    window.addEventListener("resize", closeTooltip);
+    return () => {
+      window.removeEventListener("scroll", closeTooltip, true);
+      window.removeEventListener("resize", closeTooltip);
+    };
+  }, [openTooltip, closeTooltip]);
 
   // vault_viewed is a page-view metric, so fire it once per mount — not on the
   // loadStats() calls triggered by deletes/refreshes.
@@ -790,7 +833,10 @@ export default function DocsPage() {
                             top: tooltipPos.top,
                             left: tooltipPos.left,
                             width: tooltipPos.width,
-                            zIndex: 60,
+                            // Above the sidebar (z-30) but below the document
+                            // modals (z-50), which must always win over a hover
+                            // affordance.
+                            zIndex: 40,
                             border: "1px solid #E5E7EB",
                             animation: "fadeIn 0.15s ease-out",
                           }}
@@ -828,18 +874,21 @@ export default function DocsPage() {
                             </span>
                           ))}
                         </div>
-                          {/* Arrow */}
+                          {/* Arrow — offset derived from the anchor rather than
+                              pinned to the panel's right edge, so it still points
+                              at the icon once `left` has been clamped. Flips to
+                              the bottom edge when the panel opens upward. */}
                           <div
                             className="absolute"
                             style={{
-                              top: -6,
-                              right: 6,
+                              ...(tooltipPos.above
+                                ? { bottom: -6, borderTop: "none", borderLeft: "none" }
+                                : { top: -6, borderBottom: "none", borderRight: "none" }),
+                              left: tooltipPos.arrowLeft,
                               width: 12,
                               height: 12,
                               background: "#FFFFFF",
                               border: "1px solid #E5E7EB",
-                              borderBottom: "none",
-                              borderRight: "none",
                               transform: "rotate(45deg)",
                             }}
                           />

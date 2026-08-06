@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   Award,
   ChevronDown,
@@ -719,6 +719,7 @@ function RecipientGroup({
                 setExpandedId((id) => (id === m.id ? null : m.id))
               }
               canDesignateGuardian={guardianCount < maxGuardians}
+              maxGuardians={maxGuardians}
               guardianOrder={
                 guardianOrderMap.get(m.id) ?? m.guardian_order ?? undefined
               }
@@ -737,6 +738,7 @@ function RichRecipientCard({
   expanded,
   onToggleExpand,
   canDesignateGuardian,
+  maxGuardians,
   guardianOrder,
   onRemove,
   onRefresh,
@@ -745,6 +747,9 @@ function RichRecipientCard({
   expanded: boolean;
   onToggleExpand: () => void;
   canDesignateGuardian: boolean;
+  /** Server-provided limit (stats.max_guardians) — drives the notice copy so it
+   *  can't drift from the value the API actually enforces. */
+  maxGuardians: number;
   guardianOrder?: number;
   onRemove: () => void;
   onRefresh: () => void;
@@ -757,6 +762,8 @@ function RichRecipientCard({
   const [guardianModalOpen, setGuardianModalOpen] = useState(false);
   const [guardianSubmitting, setGuardianSubmitting] = useState(false);
   const [guardianCapNoticeOpen, setGuardianCapNoticeOpen] = useState(false);
+  // Stable id so the button can point at the notice via aria-describedby.
+  const guardianCapNoticeId = useId();
 
   // Re-sync the editable fields when the parent refetches and hands down a
   // changed member. Deliberately a synchronous effect rather than a `key`-based
@@ -776,11 +783,20 @@ function RichRecipientCard({
     phone !== (member.phone ?? "");
 
   const handleSave = async () => {
+    // Checked before the request, not after: the API accepts any string for
+    // `name`, so a blank one would persist and leave the recipient nameless
+    // everywhere they're listed.
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      showToast("Recipient name can't be empty.", "error");
+      return;
+    }
+
     const token = await getToken();
     if (!token) return;
     setSaving(true);
     try {
-      await updateRecipient(token, member.id, { name: name.trim(), email, phone });
+      await updateRecipient(token, member.id, { name: trimmedName, email, phone });
       showToast("Contact information updated.", "success");
       onRefresh();
     } catch (e) {
@@ -1047,11 +1063,34 @@ function RichRecipientCard({
                   }
                   onMouseLeave={() => setGuardianCapNoticeOpen(false)}
                 >
+                  {/* aria-disabled rather than the `disabled` attribute: a truly
+                      disabled button is removed from the tab order and swallows
+                      pointer events, so keyboard and touch users could never
+                      reach the explanation — hover was the only way in. This
+                      stays focusable and tappable, announces itself as disabled,
+                      and reveals the notice instead of opening the modal. */}
                   <button
                     type="button"
-                    onClick={() => setGuardianModalOpen(true)}
-                    disabled={!canDesignateGuardian}
-                    className="flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-disabled={!canDesignateGuardian}
+                    aria-describedby={
+                      !canDesignateGuardian ? guardianCapNoticeId : undefined
+                    }
+                    onFocus={() =>
+                      !canDesignateGuardian && setGuardianCapNoticeOpen(true)
+                    }
+                    onBlur={() => setGuardianCapNoticeOpen(false)}
+                    onClick={() => {
+                      if (!canDesignateGuardian) {
+                        setGuardianCapNoticeOpen(true);
+                        return;
+                      }
+                      setGuardianModalOpen(true);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 ${
+                      canDesignateGuardian
+                        ? "cursor-pointer hover:bg-purple-50"
+                        : "cursor-not-allowed opacity-40"
+                    }`}
                     style={{
                       height: 32,
                       padding: "0 14px",
@@ -1070,6 +1109,7 @@ function RichRecipientCard({
 
                   {guardianCapNoticeOpen && !canDesignateGuardian && (
                     <div
+                      id={guardianCapNoticeId}
                       role="status"
                       className="absolute z-50 bg-white rounded-lg p-3 shadow-lg"
                       style={{
@@ -1083,8 +1123,9 @@ function RichRecipientCard({
                         color: "#4A5565",
                       }}
                     >
-                      You have already selected two Guardians. Remove one first to
-                      choose someone else.
+                      {`You have already selected ${maxGuardians} Guardian${
+                        maxGuardians === 1 ? "" : "s"
+                      }. Remove one first to choose someone else.`}
                     </div>
                   )}
                 </div>
