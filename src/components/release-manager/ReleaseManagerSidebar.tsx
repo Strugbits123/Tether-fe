@@ -56,11 +56,16 @@ export default function ReleaseManagerSidebar({
   const pathname = usePathname()
   const { profile, signOut, switchAccount, membershipCount } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
-  // null = follow the route (expanded whenever a downloads page is open);
-  // once the user clicks the header their choice wins. Derived rather than
-  // synced in an effect, so navigating into /rm/downloads/* opens the group
-  // without a second render pass.
-  const [downloadsOpen, setDownloadsOpen] = useState<boolean | null>(null)
+  // Default is route-driven: expanded whenever a downloads page is open. A click
+  // on the header overrides that, but the override is scoped to the pathname it
+  // was made on, so it lapses as soon as the user navigates — otherwise
+  // collapsing the group once would keep it collapsed forever, including when
+  // navigating straight into /rm/downloads. Keyed this way rather than reset in
+  // an effect so there's no second render pass on every navigation.
+  const [downloadsOverride, setDownloadsOverride] = useState<{
+    path: string
+    open: boolean
+  } | null>(null)
   const [ownerName, setOwnerName] = useState<string | null>(null)
   const [recipientCount, setRecipientCount] = useState<number | null>(null)
   const [unreadCount, setUnreadCount] = useState<number | null>(null)
@@ -212,7 +217,10 @@ export default function ReleaseManagerSidebar({
   }
 
   const inDownloads = pathname?.startsWith('/rm/downloads') ?? false
-  const downloadsExpanded = downloadsOpen ?? inDownloads
+  const downloadsExpanded =
+    downloadsOverride && downloadsOverride.path === pathname
+      ? downloadsOverride.open
+      : inDownloads
 
   const renderDownloadsGroup = () => (
     <div className="flex flex-col" style={{ gap: 4 }}>
@@ -220,7 +228,9 @@ export default function ReleaseManagerSidebar({
         type="button"
         aria-expanded={downloadsExpanded}
         aria-controls="rm-downloads-subnav"
-        onClick={() => setDownloadsOpen(!downloadsExpanded)}
+        onClick={() =>
+          setDownloadsOverride({ path: pathname ?? '', open: !downloadsExpanded })
+        }
         className="flex items-center w-full text-left rounded-[10px] transition-colors cursor-pointer hover:bg-white/5"
         style={{
           gap: 12,

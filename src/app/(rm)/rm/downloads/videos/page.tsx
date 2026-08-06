@@ -18,8 +18,12 @@ async function getToken(): Promise<string | null> {
 
 function formatDuration(seconds: number | null): string | null {
   if (!seconds || seconds <= 0) return null
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
+  // Round the total first, then split. Flooring the minutes and separately
+  // rounding the remainder lets 59.6s render as "0:60" — the remainder can round
+  // up to 60 without the minute ever incrementing.
+  const total = Math.round(seconds)
+  const m = Math.floor(total / 60)
+  const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
@@ -40,6 +44,10 @@ export default function RmVideoDownloadsPage() {
   const [videos, setVideos] = useState<DownloadableVideo[]>([])
   const [loading, setLoading] = useState(true)
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null)
+  // Tracked separately from `videos` being empty: a failed request would
+  // otherwise fall through to the "No video messages" empty state and tell the
+  // user there are no videos when we simply couldn't find out.
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const token = await getToken()
@@ -51,13 +59,17 @@ export default function RmVideoDownloadsPage() {
       const data = await getDownloadableVideos(token)
       setVideos(data.videos)
       setBlockedMessage(null)
+      setLoadError(null)
     } catch (e) {
       // 403 is the expected "release hasn't been initiated yet" state, not an
       // error worth a toast — it gets its own explanatory panel below.
       if (e instanceof ApiError && e.statusCode === 403) {
         setBlockedMessage(e.message)
+        setLoadError(null)
       } else {
-        showToast(e instanceof ApiError ? e.message : 'Failed to load videos.', 'error')
+        const message = e instanceof ApiError ? e.message : 'Failed to load videos.'
+        setLoadError(message)
+        showToast(message, 'error')
       }
     } finally {
       setLoading(false)
@@ -134,7 +146,46 @@ export default function RmVideoDownloadsPage() {
         </div>
       )}
 
-      {!loading && !blockedMessage && videos.length === 0 && (
+      {!loading && !blockedMessage && loadError && (
+        <div
+          className="flex flex-col gap-3"
+          style={{
+            borderRadius: 12,
+            background: '#FEF2F2',
+            border: '1px solid #FECACA',
+            padding: '18px 20px',
+          }}
+        >
+          <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 14, color: '#991B1B' }}>
+            Couldn&apos;t load videos
+          </p>
+          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#7F1D1D' }}>
+            {loadError}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true)
+              load()
+            }}
+            className="w-fit cursor-pointer hover:opacity-90"
+            style={{
+              height: 34,
+              padding: '0 14px',
+              borderRadius: 8,
+              background: '#4F46E5',
+              color: '#FFFFFF',
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 500,
+              fontSize: 13.5,
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!loading && !blockedMessage && !loadError && videos.length === 0 && (
         <div
           className="flex flex-col items-center text-center gap-3"
           style={{

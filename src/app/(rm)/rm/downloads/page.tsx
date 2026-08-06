@@ -265,17 +265,19 @@ export default function RmDownloadsPage() {
               {[
                 {
                   key: 'video',
-                  // Videos are stored in Mux, not Supabase Storage, so they
-                  // can't be added to the ZIP — they get their own page.
+                  // Videos are stored in Mux, not Supabase Storage, so they can't
+                  // be added to this ZIP — they're downloaded individually from
+                  // their own page. Worded around what this package *does*
+                  // contain, so it doesn't read as "videos aren't downloadable".
                   content: (
                     <span>
-                      Video messages cannot be downloaded from this page but can be
-                      downloaded{' '}
+                      This package contains everything except video messages —
+                      download those individually from{' '}
                       <Link
                         href="/rm/downloads/videos"
                         style={{ color: '#4F46E5', fontWeight: 500, textDecoration: 'underline' }}
                       >
-                        here
+                        the video downloads page
                       </Link>
                     </span>
                   ),
