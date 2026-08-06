@@ -750,11 +750,13 @@ function RichRecipientCard({
   onRefresh: () => void;
 }) {
   const { showToast } = useToast();
+  const [name, setName] = useState(member.name);
   const [email, setEmail] = useState(member.email);
   const [phone, setPhone] = useState(member.phone ?? "");
   const [saving, setSaving] = useState(false);
   const [guardianModalOpen, setGuardianModalOpen] = useState(false);
   const [guardianSubmitting, setGuardianSubmitting] = useState(false);
+  const [guardianCapNoticeOpen, setGuardianCapNoticeOpen] = useState(false);
 
   // Re-sync the editable fields when the parent refetches and hands down a
   // changed member. Deliberately a synchronous effect rather than a `key`-based
@@ -762,19 +764,23 @@ function RichRecipientCard({
   // refresh; the writes are guarded by the dep array and settle in one pass.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    setName(member.name);
     setEmail(member.email);
     setPhone(member.phone ?? "");
-  }, [member.email, member.phone]);
+  }, [member.name, member.email, member.phone]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const dirty = email !== member.email || phone !== (member.phone ?? "");
+  const dirty =
+    name.trim() !== member.name ||
+    email !== member.email ||
+    phone !== (member.phone ?? "");
 
   const handleSave = async () => {
     const token = await getToken();
     if (!token) return;
     setSaving(true);
     try {
-      await updateRecipient(token, member.id, { email, phone });
+      await updateRecipient(token, member.id, { name: name.trim(), email, phone });
       showToast("Contact information updated.", "success");
       onRefresh();
     } catch (e) {
@@ -938,6 +944,11 @@ function RichRecipientCard({
                 Contact Information
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Editable because a recipient's legal name can genuinely change
+                    (marriage, for example) and there was previously no way to
+                    correct it — only email and phone. The API already accepted
+                    `name` on PATCH /access/recipients/:id. */}
+                <LabeledInput label="Full name" value={name} onChange={setName} />
                 <LabeledInput
                   label="Email"
                   value={email}
@@ -1025,26 +1036,58 @@ function RichRecipientCard({
                   Remove as Guardian
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setGuardianModalOpen(true)}
-                  disabled={!canDesignateGuardian}
-                  className="self-start flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{
-                    height: 32,
-                    padding: "0 14px",
-                    borderRadius: 9999,
-                    border: "1.25px solid #7C3AED",
-                    background: "#FFFFFF",
-                    fontFamily: "Inter, sans-serif",
-                    fontWeight: 500,
-                    fontSize: 13,
-                    color: "#7C3AED",
-                  }}
+                // Wrapper carries the hover handlers: a disabled <button> fires no
+                // pointer events, so the "already selected two" disclaimer has to
+                // hang off an enabled parent. The button itself stays greyed, as
+                // requested — the disclaimer explains *why* rather than replacing it.
+                <div
+                  className="relative self-start"
+                  onMouseEnter={() =>
+                    !canDesignateGuardian && setGuardianCapNoticeOpen(true)
+                  }
+                  onMouseLeave={() => setGuardianCapNoticeOpen(false)}
                 >
-                  <Shield className="w-3.5 h-3.5" strokeWidth={2} />
-                  Select as Guardian
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setGuardianModalOpen(true)}
+                    disabled={!canDesignateGuardian}
+                    className="flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      height: 32,
+                      padding: "0 14px",
+                      borderRadius: 9999,
+                      border: "1.25px solid #7C3AED",
+                      background: "#FFFFFF",
+                      fontFamily: "Inter, sans-serif",
+                      fontWeight: 500,
+                      fontSize: 13,
+                      color: "#7C3AED",
+                    }}
+                  >
+                    <Shield className="w-3.5 h-3.5" strokeWidth={2} />
+                    Select as Guardian
+                  </button>
+
+                  {guardianCapNoticeOpen && !canDesignateGuardian && (
+                    <div
+                      role="status"
+                      className="absolute z-50 bg-white rounded-lg p-3 shadow-lg"
+                      style={{
+                        top: 38,
+                        left: 0,
+                        width: 240,
+                        border: "1px solid #E5E7EB",
+                        fontFamily: "Inter, sans-serif",
+                        fontSize: 12.5,
+                        lineHeight: "18px",
+                        color: "#4A5565",
+                      }}
+                    >
+                      You have already selected two Guardians. Remove one first to
+                      choose someone else.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

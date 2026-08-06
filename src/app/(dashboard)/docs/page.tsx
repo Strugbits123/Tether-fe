@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import {
   Briefcase,
   Check,
@@ -427,6 +428,39 @@ export default function DocsPage() {
   const [editingDoc, setEditingDoc] = useState<DocumentDetail | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<ApiDoc | null>(null);
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
+  // Screen coordinates for the open tooltip. The category cards can be as narrow
+  // as 140px (the grid is minmax(140px, 1fr)) so a readable ~280px panel can
+  // never fit inside one, and the dashboard <main> is overflow-y-auto — which
+  // clips horizontally too — so it can't hang outside the card either. The
+  // tooltip is therefore rendered in a portal on document.body with fixed
+  // positioning, escaping the scroll container entirely.
+  const [tooltipPos, setTooltipPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  const TOOLTIP_WIDTH = 280;
+
+  const openTooltipAt = (key: string, anchor: HTMLElement) => {
+    const rect = anchor.getBoundingClientRect();
+    // Shrink before clamping: on a viewport narrower than the panel plus its
+    // margins, no left offset can keep a fixed 280px box on screen.
+    const width = Math.min(TOOLTIP_WIDTH, window.innerWidth - 16);
+    // Right-aligned to the icon, then clamped so it never leaves the viewport on
+    // either side regardless of which column the card sits in.
+    const left = Math.min(
+      Math.max(8, rect.right - width),
+      window.innerWidth - width - 8,
+    );
+    setTooltipPos({ top: rect.bottom + 8, left, width });
+    setOpenTooltip(key);
+  };
+
+  const closeTooltip = () => {
+    setOpenTooltip(null);
+    setTooltipPos(null);
+  };
 
   // vault_viewed is a page-view metric, so fire it once per mount — not on the
   // loadStats() calls triggered by deletes/refreshes.
@@ -727,12 +761,11 @@ export default function DocsPage() {
                     />
                   </div>
                   <div
-                    className="relative"
                     onMouseEnter={(e) => {
                       e.stopPropagation();
-                      setOpenTooltip(cat.key);
+                      openTooltipAt(cat.key, e.currentTarget);
                     }}
-                    onMouseLeave={() => setOpenTooltip(null)}
+                    onMouseLeave={closeTooltip}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Info
@@ -740,14 +773,28 @@ export default function DocsPage() {
                       color="#99A1AF"
                       strokeWidth={2}
                     />
-                    {isTooltipOpen && (
-                      <div
-                        className="absolute right-0 top-6 z-50 w-[280px] bg-white rounded-xl p-4 shadow-xl"
-                        style={{
-                          border: "1px solid #E5E7EB",
-                          animation: "fadeIn 0.15s ease-out",
-                        }}
-                      >
+                    {isTooltipOpen &&
+                      tooltipPos &&
+                      createPortal(
+                        // Rendered on document.body, not inside the card. The card
+                        // can be as narrow as 140px so a readable panel will never
+                        // fit within it, and the dashboard <main> is
+                        // overflow-y-auto — which clips the x-axis too — so it
+                        // can't overhang the card either. A portal plus fixed
+                        // positioning sidesteps both constraints and keeps the full
+                        // 280px width at every breakpoint.
+                        <div
+                          className="bg-white rounded-xl p-4 shadow-xl"
+                          style={{
+                            position: "fixed",
+                            top: tooltipPos.top,
+                            left: tooltipPos.left,
+                            width: tooltipPos.width,
+                            zIndex: 60,
+                            border: "1px solid #E5E7EB",
+                            animation: "fadeIn 0.15s ease-out",
+                          }}
+                        >
                         <p
                           className="text-sm text-gray-600 mb-3"
                           style={{
@@ -781,23 +828,24 @@ export default function DocsPage() {
                             </span>
                           ))}
                         </div>
-                        {/* Arrow */}
-                        <div
-                          className="absolute"
-                          style={{
-                            top: -6,
-                            right: 6,
-                            width: 12,
-                            height: 12,
-                            background: "#FFFFFF",
-                            border: "1px solid #E5E7EB",
-                            borderBottom: "none",
-                            borderRight: "none",
-                            transform: "rotate(45deg)",
-                          }}
-                        />
-                      </div>
-                    )}
+                          {/* Arrow */}
+                          <div
+                            className="absolute"
+                            style={{
+                              top: -6,
+                              right: 6,
+                              width: 12,
+                              height: 12,
+                              background: "#FFFFFF",
+                              border: "1px solid #E5E7EB",
+                              borderBottom: "none",
+                              borderRight: "none",
+                              transform: "rotate(45deg)",
+                            }}
+                          />
+                        </div>,
+                        document.body,
+                      )}
                   </div>
                 </div>
 

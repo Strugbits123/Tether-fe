@@ -85,9 +85,14 @@ const DOC_CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
-const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/heic";
+// Extensions as well as MIME types, deliberately. Chrome/Edge on Windows have no
+// HEIF codec, so a .heic file reports an empty File.type and — more importantly —
+// a MIME-only accept list makes the OS picker refuse to offer the file at all.
+// That's why selecting a .HEIC appeared to do nothing.
+const PHOTO_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif";
 const DOC_ACCEPT =
-  ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,.mp4,.mov,.m4v,.webm,.mp3,.wav,.m4a,.aac";
+  ".pdf,.docx,.doc,.jpg,.jpeg,.png,.heic,.heif,.mp4,.mov,.m4v,.webm,.mp3,.wav,.m4a,.aac";
 const DOC_ALLOWED_MIME = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -382,6 +387,19 @@ export default function AddPhotosModal({
       for (const f of incoming) {
         const key = `${f.name}::${f.size}::${f.lastModified}`;
         if (seen.has(key) && !isOnboarding) continue;
+
+        // Still HEIC after convertHeicIfNeeded means the conversion failed (a
+        // variant heic2any can't decode, or the dynamic import didn't load).
+        // Previously the original was passed through silently and the upload then
+        // died server-side — the photo upload DTO only accepts
+        // image/jpeg|png|webp|heic, and Windows reports no type at all for these.
+        // Reject here with something the user can act on instead.
+        if (isHeicFile(f)) {
+          errs.push(
+            `${f.name} couldn't be converted from HEIC. Please save it as JPEG and try again.`,
+          );
+          continue;
+        }
         // Type check (drag-and-drop can bypass the picker's `accept` filter).
         // Server-side validation is the source of truth; this is a UX layer.
         if (isDoc && !isOnboarding) {

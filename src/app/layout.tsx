@@ -24,6 +24,17 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: 'Tether — Your digital legacy, protected.',
   description: 'Record video/audio messages, upload documents, and ensure your legacy reaches the people you love.',
+  // Declared explicitly because the icon lives in public/ rather than as an
+  // app-directory `icon.png`. Next.js only auto-injects icon links for the
+  // file-convention path (src/app/icon.*), so a public/ asset needs this to be
+  // referenced at all. The stale default src/app/favicon.ico was removed —
+  // while it existed it kept answering /favicon.ico with the Next.js logo
+  // regardless of what was declared here.
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
+  },
 }
 
 export default function RootLayout({
