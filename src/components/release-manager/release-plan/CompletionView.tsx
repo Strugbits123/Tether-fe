@@ -2,6 +2,7 @@
 
 import { Check, Download, Loader2 } from 'lucide-react'
 import type { ReleasePlanActivityEvent } from '@/lib/api/rm'
+import { formatDateTimeDot } from './constants'
 
 /** Final completion screen — celebratory recap shown once the release is fully
  * delivered. Stands alone (no header/stepper); centered card layout. */
@@ -160,7 +161,7 @@ export default function CompletionView({
                     color: '#4A5565',
                   }}
                 >
-                  {item.actor_name} — {new Date(item.created_at).toLocaleString()}
+                  {item.actor_name} — {formatDateTimeDot(item.created_at)}
                 </span>
               </div>
             </div>

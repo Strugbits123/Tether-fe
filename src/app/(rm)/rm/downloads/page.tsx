@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Check, Lock, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
@@ -80,9 +81,14 @@ export default function RmDownloadsPage() {
     }
   }, [showToast])
 
+  // Data-fetch-on-mount. The setState calls inside load() run after an await
+  // (never synchronously in the effect body), so the cascading-render the rule
+  // guards against doesn't apply here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     load()
   }, [load])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggle = (key: CategoryKey) => setSelection((prev) => ({ ...prev, [key]: !prev[key] }))
 
@@ -257,14 +263,40 @@ export default function RmDownloadsPage() {
             </p>
             <ul className="flex flex-col" style={{ gap: 6 }}>
               {[
-                'Video messages cannot be downloaded but remain accessible in the recipient portal forever',
-                'Photos are included at full resolution',
-                'Documents are included in their original format (PDF, Word, etc.)',
-                'You can download this package as many times as you need',
-                'Only content assigned for delivery is included — draft or unassigned content never appears here',
-              ].map((text) => (
+                {
+                  key: 'video',
+                  // Videos are stored in Mux, not Supabase Storage, so they
+                  // can't be added to the ZIP — they get their own page.
+                  content: (
+                    <span>
+                      Video messages cannot be downloaded from this page but can be
+                      downloaded{' '}
+                      <Link
+                        href="/rm/downloads/videos"
+                        style={{ color: '#4F46E5', fontWeight: 500, textDecoration: 'underline' }}
+                      >
+                        here
+                      </Link>
+                    </span>
+                  ),
+                },
+                { key: 'photos', content: 'Photos are included at full resolution' },
+                {
+                  key: 'documents',
+                  content: 'Documents are included in their original format (PDF, Word, etc.)',
+                },
+                {
+                  key: 'repeat',
+                  content: 'You can download this package as many times as you need',
+                },
+                {
+                  key: 'assigned',
+                  content:
+                    'Only content assigned for delivery is included — draft or unassigned content never appears here',
+                },
+              ].map((item) => (
                 <li
-                  key={text}
+                  key={item.key}
                   className="flex items-start gap-2"
                   style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#4A5565' }}
                 >
@@ -272,7 +304,7 @@ export default function RmDownloadsPage() {
                     className="flex-shrink-0 mt-[7px]"
                     style={{ width: 5, height: 5, borderRadius: 9999, background: '#16A34A' }}
                   />
-                  {text}
+                  {item.content}
                 </li>
               ))}
             </ul>

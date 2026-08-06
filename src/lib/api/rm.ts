@@ -258,6 +258,25 @@ export interface DownloadSummary {
 export const getDownloadSummary = (token: string) =>
   api.get<DownloadSummary>('/rm/downloads/summary', token)
 
+/** A video message. Videos live in Mux rather than Supabase Storage, so they
+ *  can't be added to the content ZIP — they're downloaded one at a time. */
+export interface DownloadableVideo {
+  id: string
+  title: string
+  duration_seconds: number | null
+  created_at: string
+  /** Signed Mux thumbnail URL. Null if the token couldn't be minted. */
+  thumbnail_url: string | null
+  /** Signed MP4 URL. Null until Mux finishes generating the static rendition. */
+  download_url: string | null
+  file_size_bytes: number | null
+  /** 'preparing' — Mux is still transcoding the downloadable MP4. */
+  status: 'ready' | 'preparing' | 'errored'
+}
+
+export const getDownloadableVideos = (token: string) =>
+  api.get<{ videos: DownloadableVideo[] }>('/rm/downloads/videos', token)
+
 export interface PrepareDownloadSelection {
   audio?: boolean
   documents?: boolean

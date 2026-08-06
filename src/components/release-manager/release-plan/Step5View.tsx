@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import type { DeliveryStatusRecipient, ReleasePlanActivityEvent } from '@/lib/api/rm'
+import { formatDateTimeDot, formatReleaseDate } from './constants'
 
 const AVATAR_PALETTE: { bg: string; color: string }[] = [
   { bg: '#DBEAFE', color: '#1E40AF' },
@@ -201,7 +202,7 @@ export default function Step5View({
                     }}
                   >
                     {r.portal_status === 'accessed'
-                      ? `Accessed ${r.portal_first_accessed_at ? new Date(r.portal_first_accessed_at).toLocaleDateString() : ''}`
+                      ? `Accessed ${formatReleaseDate(r.portal_first_accessed_at ?? null)}`
                       : bounced
                         ? 'Delivery email bounced'
                         : 'Waiting for portal access...'}
@@ -256,7 +257,7 @@ export default function Step5View({
                   className="flex-shrink-0 whitespace-nowrap"
                   style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#9CA3AF' }}
                 >
-                  {new Date(event.created_at).toLocaleString()}
+                  {formatDateTimeDot(event.created_at)}
                 </span>
               </div>
             ))

@@ -14,8 +14,10 @@ import {
   HelpCircle,
   Home,
   LogOut,
+  Package,
   User,
   Users,
+  Video,
 } from 'lucide-react'
 
 interface ReleaseManagerSidebarProps {
@@ -34,8 +36,15 @@ type NavItem = {
 }
 
 const SECONDARY_NAV: NavItem[] = [
-  { label: 'Download everything', icon: Download, href: '/rm/downloads' },
   { label: 'Get support', icon: HelpCircle, href: '/rm/help' },
+]
+
+// Videos live in Mux and are downloaded individually, everything else comes
+// down as one ZIP — two genuinely different flows, so "Download everything"
+// expands rather than linking straight to a page.
+const DOWNLOAD_CHILDREN: Array<{ label: string; icon: typeof Home; href: string }> = [
+  { label: 'Download videos', icon: Video, href: '/rm/downloads/videos' },
+  { label: 'Download other content', icon: Package, href: '/rm/downloads' },
 ]
 
 export default function ReleaseManagerSidebar({
@@ -47,6 +56,11 @@ export default function ReleaseManagerSidebar({
   const pathname = usePathname()
   const { profile, signOut, switchAccount, membershipCount } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  // null = follow the route (expanded whenever a downloads page is open);
+  // once the user clicks the header their choice wins. Derived rather than
+  // synced in an effect, so navigating into /rm/downloads/* opens the group
+  // without a second render pass.
+  const [downloadsOpen, setDownloadsOpen] = useState<boolean | null>(null)
   const [ownerName, setOwnerName] = useState<string | null>(null)
   const [recipientCount, setRecipientCount] = useState<number | null>(null)
   const [unreadCount, setUnreadCount] = useState<number | null>(null)
@@ -197,6 +211,110 @@ export default function ReleaseManagerSidebar({
     )
   }
 
+  const inDownloads = pathname?.startsWith('/rm/downloads') ?? false
+  const downloadsExpanded = downloadsOpen ?? inDownloads
+
+  const renderDownloadsGroup = () => (
+    <div className="flex flex-col" style={{ gap: 4 }}>
+      <button
+        type="button"
+        aria-expanded={downloadsExpanded}
+        aria-controls="rm-downloads-subnav"
+        onClick={() => setDownloadsOpen(!downloadsExpanded)}
+        className="flex items-center w-full text-left rounded-[10px] transition-colors cursor-pointer hover:bg-white/5"
+        style={{
+          gap: 12,
+          padding: '10px 12px',
+          // The header is a disclosure control, not a destination, so it never
+          // takes the active treatment — the child page owns that.
+          background: 'transparent',
+          borderLeft: '2px solid transparent',
+        }}
+      >
+        <Download
+          className="flex-shrink-0"
+          style={{
+            width: 16,
+            height: 16,
+            color: inDownloads ? '#FFFFFF' : 'rgba(255,255,255,0.6)',
+          }}
+          strokeWidth={2}
+        />
+        <span
+          className="flex-1"
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 500,
+            fontSize: 14,
+            lineHeight: '21px',
+            letterSpacing: '-0.15px',
+            color: inDownloads ? '#FFFFFF' : 'rgba(255,255,255,0.6)',
+          }}
+        >
+          Download everything
+        </span>
+        <ChevronDown
+          className={`flex-shrink-0 transition-transform duration-200 ${
+            downloadsExpanded ? 'rotate-180' : ''
+          }`}
+          style={{ width: 15, height: 15, color: 'rgba(255,255,255,0.5)' }}
+          strokeWidth={2}
+        />
+      </button>
+
+      {downloadsExpanded && (
+        <div id="rm-downloads-subnav" className="flex flex-col" style={{ gap: 2 }}>
+          {DOWNLOAD_CHILDREN.map((child) => {
+            const ChildIcon = child.icon
+            // Exact match: /rm/downloads/videos must not also light up
+            // /rm/downloads.
+            const isActive = pathname === child.href
+            return (
+              <button
+                key={child.href}
+                type="button"
+                onClick={() => {
+                  router.push(child.href)
+                  onClose()
+                }}
+                className="flex items-center w-full text-left rounded-[8px] transition-colors cursor-pointer hover:bg-white/5"
+                style={{
+                  gap: 10,
+                  padding: '8px 12px 8px 26px',
+                  background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  borderLeft: isActive ? '2px solid #FFFFFF' : '2px solid transparent',
+                }}
+              >
+                <ChildIcon
+                  className="flex-shrink-0"
+                  style={{
+                    width: 14,
+                    height: 14,
+                    color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.5)',
+                  }}
+                  strokeWidth={2}
+                />
+                <span
+                  className="flex-1"
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 13,
+                    lineHeight: '19px',
+                    letterSpacing: '-0.12px',
+                    color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)',
+                  }}
+                >
+                  {child.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <>
       {/* Mobile overlay */}
@@ -257,6 +375,7 @@ export default function ReleaseManagerSidebar({
           <div style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
 
           <nav className="flex flex-col" style={{ gap: 4 }}>
+            {renderDownloadsGroup()}
             {SECONDARY_NAV.map(renderNavItem)}
 
             {/* Create my Tether — links back to the main app. Only relevant

@@ -39,26 +39,40 @@ export const REASONS: ReasonOption[] = [
 
 export const MIN_DESCRIPTION = 100
 
+// Every date in the release module renders as numeric M/D/YYYY — e.g. 3/10/2026.
+// The locale is pinned to en-US rather than left as `undefined`: the default
+// follows the viewer's locale, so the same timestamp would render 3/10/2026 for
+// one RM and 10/03/2026 for another. On a release timeline — where the delivery
+// date is the thing people act on — an ambiguous day/month is a real hazard.
+export function formatReleaseDate(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function formatReleaseTime(d: Date): string {
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** `3/10/2026 at 1:45 PM` */
 function formatDateTime(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return (
-    d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
-    ' at ' +
-    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  )
+  return `${formatReleaseDate(iso)} at ${formatReleaseTime(d)}`
 }
 
+/** `3/10/2026 · 1:45 PM` */
 export function formatDateTimeDot(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return (
-    d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
-    ' · ' +
-    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  )
+  return `${formatReleaseDate(iso)} · ${formatReleaseTime(d)}`
 }
 
 export { formatDateTime }
