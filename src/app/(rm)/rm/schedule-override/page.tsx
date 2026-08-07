@@ -61,14 +61,18 @@ export default function ScheduleOverridePage() {
   const submittingRef = useRef(false)
 
   const load = useCallback(async () => {
-    const token = await getToken()
-    if (!token) {
-      setNeedsAuth(true)
-      setLoading(false)
-      return
-    }
-    setNeedsAuth(false)
+    // getToken() awaits supabase.auth.getSession(), which can reject on a network
+    // failure — outside the try that would escape an effect-invoked async
+    // function and leave `loading` true forever, pinning the page on its spinner.
+    // Inside, `finally` still clears it.
     try {
+      const token = await getToken()
+      if (!token) {
+        setNeedsAuth(true)
+        return
+      }
+      setNeedsAuth(false)
+
       const plan = await getReleasePlan(token)
       if ('status' in plan && plan.status !== 'none') {
         const active = plan as unknown as {
@@ -114,21 +118,23 @@ export default function ScheduleOverridePage() {
       return
     }
 
+    // Claimed synchronously, then everything that can throw runs inside the try
+    // so `finally` is the single place that releases it. A rejecting getToken()
+    // outside the try would leave the ref set for the life of the page and make
+    // every later submission a silent no-op.
     submittingRef.current = true
     setSaving(true)
 
-    const token = await getToken()
-    if (!token) {
-      // Previously returned silently, leaving the button spinning with no
-      // explanation of why nothing happened.
-      setNeedsAuth(true)
-      submittingRef.current = false
-      setSaving(false)
-      showToast('Your session has expired. Sign in again.', 'error')
-      return
-    }
-
     try {
+      const token = await getToken()
+      if (!token) {
+        // Previously returned silently, leaving the button spinning with no
+        // explanation of why nothing happened.
+        setNeedsAuth(true)
+        showToast('Your session has expired. Sign in again.', 'error')
+        return
+      }
+
       // datetime-local yields a zone-less string; construct a Date so it's sent
       // as a proper instant rather than being reinterpreted server-side.
       const iso = new Date(scheduledAt).toISOString()
