@@ -86,15 +86,43 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// Sentry's build plugin registers a `runAfterProductionCompile` hook that walks
+// the whole .next directory. On the 4-core/8GB Vercel builder that step ran for
+// ~12 minutes and was then OOM-killed (SIGKILL). The Turbopack compile itself
+// finishes in ~60s and a full type check is ~15s, so this hook was the entire
+// problem — not TypeScript, which is where the earlier (cached) build happened
+// to be standing when the container hit its memory ceiling.
+//
+// `sourcemaps.disable: true` alone does NOT prevent it. In @sentry/nextjs
+// 10.60.0 that flag only guards `injectDebugIds`; `uploadSourcemaps([distDir])`
+// and `deleteArtifacts()` are called unconditionally straight after it — see
+// build/cjs/config/handleRunAfterProductionCompile.js. The options below cut the
+// work that hook actually performs.
+//
+// SENTRY_DISABLE_PLUGIN=1 skips the wrapper entirely, as an escape hatch for
+// unblocking a deploy without a code change. Runtime error reporting is
+// unaffected either way — that comes from instrument.ts / sentry.*.config.ts,
+// not from this build plugin.
+const sentryBuildOptions = {
   org: "tether-inc",
   project: "tether-web",
   silent: true,
-  widenClientFileUpload: true,
+  // Was `true`, which widens the set of files the plugin globs and uploads. With
+  // source maps disabled there is nothing to widen — it only enlarged the walk.
+  widenClientFileUpload: false,
   tunnelRoute: "/monitoring",
   sourcemaps: { disable: true },
+  // Both make network calls during the build. Releases aren't consumed anywhere
+  // (source maps are off, so there are no artifacts to associate with one), and
+  // a slow or unreachable Sentry API stalls the build rather than failing fast.
+  release: { create: false },
+  telemetry: false,
   webpack: {
     treeshake: { removeDebugLogging: true },
     automaticVercelMonitors: true,
   },
-});
+};
+
+export default process.env.SENTRY_DISABLE_PLUGIN === "1"
+  ? nextConfig
+  : withSentryConfig(nextConfig, sentryBuildOptions);
