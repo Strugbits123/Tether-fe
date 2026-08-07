@@ -2,6 +2,28 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // The 4-core/8GB Vercel builder cannot fit compile + type check at once. The
+  // evidence: a build that got past compile (36s) and Sentry (4.4s) then spent
+  // 6m55s in "Running TypeScript" before being SIGKILLed — a full type check of
+  // this repo takes 14.8s locally under a 1.5GB cap. Seven minutes for a
+  // fifteen-second job is thrashing, not slow type checking.
+  //
+  // Skipping it here drops a whole extra Node process from the memory peak.
+  // Types are NOT going unchecked: `npm run typecheck` runs the identical
+  // `tsc --noEmit` in CI (.github/workflows/typecheck.yml) on every push and PR,
+  // so a type error blocks the PR instead of the deploy.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  experimental: {
+    // Turbopack scales workers with core count and each holds its own graph.
+    // Halving them trades some build wall-time for headroom — the box has 2GB
+    // per core, which is thin for a 47k-line TSX codebase.
+    cpus: 2,
+    // Lets Next size the worker pool from memory actually available rather than
+    // assuming it can use all cores.
+    memoryBasedWorkersCount: true,
+  },
   images: {
     remotePatterns: [
       {
