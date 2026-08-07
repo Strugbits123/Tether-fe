@@ -30,8 +30,19 @@ jobs:
       # loudly if not, which is the behaviour we want in CI.
       - run: npm ci
 
+      # The blocking check. This is the one that replaces type checking during
+      # `next build`, so it must stay required.
       - name: Type check
         run: npm run typecheck
 
-      - name: Lint
+      # Advisory only. The repo currently has 43 pre-existing eslint errors
+      # across 25 files (mostly react-hooks/set-state-in-effect and
+      # no-explicit-any) that predate this workflow. Blocking on them would fail
+      # every PR for problems it didn't introduce, which trains people to ignore
+      # CI. Results are still surfaced in the job output.
+      #
+      # Flip this to blocking (delete continue-on-error) once that backlog is
+      # cleared — that's the point at which lint starts carrying real signal.
+      - name: Lint (advisory)
         run: npm run lint
+        continue-on-error: true

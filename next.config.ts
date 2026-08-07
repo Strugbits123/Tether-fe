@@ -12,17 +12,16 @@ const nextConfig: NextConfig = {
   // Types are NOT going unchecked: `npm run typecheck` runs the identical
   // `tsc --noEmit` in CI (.github/workflows/typecheck.yml) on every push and PR,
   // so a type error blocks the PR instead of the deploy.
+  //
+  // DO NOT add `experimental: { cpus, memoryBasedWorkersCount }` here. Those
+  // were tried to reduce build memory and instead made Turbopack emit NO
+  // application output — .next/static and .next/server both came out empty
+  // while `next build` still exited 0 and printed a full route table. Vercel
+  // then hung on "Deploying outputs..." and failed with no error, because the
+  // build had technically succeeded. Measured on an identical commit:
+  // with the block 0.9MB / 0 files in static+server, without it 49MB / 1039.
   typescript: {
     ignoreBuildErrors: true,
-  },
-  experimental: {
-    // Turbopack scales workers with core count and each holds its own graph.
-    // Halving them trades some build wall-time for headroom — the box has 2GB
-    // per core, which is thin for a 47k-line TSX codebase.
-    cpus: 2,
-    // Lets Next size the worker pool from memory actually available rather than
-    // assuming it can use all cores.
-    memoryBasedWorkersCount: true,
   },
   images: {
     remotePatterns: [
