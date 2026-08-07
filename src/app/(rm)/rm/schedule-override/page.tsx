@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
@@ -52,13 +52,22 @@ export default function ScheduleOverridePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<RescheduledPlan | null>(null)
+  // Distinct from "no plan": without a session we know nothing about the plan,
+  // and rendering the empty state would tell the operator there's no release
+  // plan when we simply never asked.
+  const [needsAuth, setNeedsAuth] = useState(false)
+  // Synchronous double-submit guard. `saving` is only set after an await, so two
+  // fast clicks could both get past it and fire two overrides.
+  const submittingRef = useRef(false)
 
   const load = useCallback(async () => {
     const token = await getToken()
     if (!token) {
+      setNeedsAuth(true)
       setLoading(false)
       return
     }
+    setNeedsAuth(false)
     try {
       const plan = await getReleasePlan(token)
       if ('status' in plan && plan.status !== 'none') {
@@ -92,6 +101,10 @@ export default function ScheduleOverridePage() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSubmit = async () => {
+    // Claimed before the first await — the disabled attribute and `saving` both
+    // only take effect a tick later, which is too late to stop a double click.
+    if (submittingRef.current) return
+
     if (!password.trim()) {
       showToast('Enter the override password.', 'error')
       return
@@ -101,10 +114,20 @@ export default function ScheduleOverridePage() {
       return
     }
 
-    const token = await getToken()
-    if (!token) return
-
+    submittingRef.current = true
     setSaving(true)
+
+    const token = await getToken()
+    if (!token) {
+      // Previously returned silently, leaving the button spinning with no
+      // explanation of why nothing happened.
+      setNeedsAuth(true)
+      submittingRef.current = false
+      setSaving(false)
+      showToast('Your session has expired. Sign in again.', 'error')
+      return
+    }
+
     try {
       // datetime-local yields a zone-less string; construct a Date so it's sent
       // as a proper instant rather than being reinterpreted server-side.
@@ -120,6 +143,7 @@ export default function ScheduleOverridePage() {
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Failed to update.', 'error')
     } finally {
+      submittingRef.current = false
       setSaving(false)
     }
   }
@@ -178,7 +202,24 @@ export default function ScheduleOverridePage() {
         </div>
       )}
 
-      {!loading && !currentPlan && (
+      {!loading && needsAuth && (
+        <p
+          style={{
+            fontFamily: 'Inter, sans-serif',
+            fontSize: 14,
+            color: '#7F1D1D',
+            borderRadius: 10,
+            background: '#FEF2F2',
+            border: '1px solid #FECACA',
+            padding: 16,
+          }}
+        >
+          You&apos;re not signed in, so the release plan couldn&apos;t be loaded.
+          Sign in as the Release Manager for this account and reload.
+        </p>
+      )}
+
+      {!loading && !needsAuth && !currentPlan && (
         <p
           style={{
             fontFamily: 'Inter, sans-serif',
@@ -195,7 +236,7 @@ export default function ScheduleOverridePage() {
         </p>
       )}
 
-      {!loading && currentPlan && (
+      {!loading && !needsAuth && currentPlan && (
         <div className="flex flex-col gap-4">
           <div
             className="flex flex-col gap-1"
