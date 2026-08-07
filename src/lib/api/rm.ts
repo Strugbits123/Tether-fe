@@ -285,6 +285,58 @@ export interface PrepareDownloadSelection {
   life_story?: boolean
 }
 
+export interface RescheduledPlan {
+  id: string
+  plan_id: string
+  status: string
+  initiated_at: string
+  delivery_scheduled_at: string
+  previous_delivery_scheduled_at: string
+}
+
+/**
+ * QA-only: move an active release plan's delivery date, so the steps after the
+ * five-business-day waiting period can be tested without waiting it out.
+ *
+ * The password is sent as a header for the server to verify — it is never stored
+ * in the frontend or its env. Raw fetch rather than api.patch because the shared
+ * client has no way to pass an extra header.
+ */
+export async function overrideDeliverySchedule(
+  token: string,
+  password: string,
+  deliveryScheduledAt: string,
+): Promise<RescheduledPlan> {
+  const response = await fetch(`${API_URL}/rm/release-plan/schedule`, {
+    method: 'PATCH',
+    headers: {
+      ...buildAuthHeaders(token),
+      'Content-Type': 'application/json',
+      'x-release-override-secret': password,
+    },
+    body: JSON.stringify({ deliveryScheduledAt }),
+  })
+
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    // 404 is what the API returns when the override isn't configured at all, so
+    // say that rather than "not found", which reads as a missing release plan.
+    if (response.status === 404 && !body?.message) {
+      throw new Error(
+        'The schedule override is not enabled on this environment.',
+      )
+    }
+    throw new Error(
+      typeof body?.message === 'string'
+        ? body.message
+        : 'Failed to update the delivery date.',
+    )
+  }
+
+  return body.data as RescheduledPlan
+}
+
 export async function prepareDownload(
   token: string,
   selection: PrepareDownloadSelection,
