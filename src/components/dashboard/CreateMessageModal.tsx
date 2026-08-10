@@ -6,7 +6,7 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
-  Camera,
+  Video,
   Check,
   ChevronDown,
   ChevronUp,
@@ -1045,7 +1045,7 @@ function SetupStep({
             />
             <TypeCard
               icon={
-                <Camera
+                <Video
                   className="w-[40px] h-[40px] text-[#4F46E5]"
                   strokeWidth={1.75}
                 />
@@ -3320,7 +3320,7 @@ function TypeStep({
           />
           <TypeCard
             icon={
-              <Camera
+              <Video
                 className="w-[40px] h-[40px] text-[#4F46E5]"
                 strokeWidth={1.75}
               />

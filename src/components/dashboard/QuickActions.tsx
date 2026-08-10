@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MessageSquare, FileText, Users, UserCheck, LucideIcon } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
-import { notifyActivityChanged } from '@/lib/activity-helpers'
+import { createClient } from '@/lib/supabase/client'
+import { getUnassignedContent } from '@/lib/api/content'
+import { ACTIVITY_REFRESH_EVENT, notifyActivityChanged } from '@/lib/activity-helpers'
 import CreateMessageModal from './CreateMessageModal'
 import AddPhotosModal from './AddPhotosModal'
 import AddRecipientsModal from './AddRecipientsModal'
@@ -51,6 +53,36 @@ export default function QuickActions() {
   const router = useRouter()
   const { refreshProfile } = useAuth()
   const [openAction, setOpenAction] = useState<ActionKey | null>(null)
+  // null until the count is known — the badge stays hidden rather than flashing
+  // a "0" that then jumps to the real number a moment later.
+  const [unassignedCount, setUnassignedCount] = useState<number | null>(null)
+
+  const loadUnassignedCount = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const { counts } = await getUnassignedContent(session.access_token)
+      setUnassignedCount(counts.total)
+    } catch {
+      // A failed count must not break the Quick Actions panel — the button
+      // still works, it just shows no badge.
+    }
+  }, [])
+
+  // Refetch on mount and whenever content changes elsewhere (uploads, bulk
+  // assignment on /unassigned), so the badge doesn't go stale behind the user.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    loadUnassignedCount()
+    window.addEventListener(ACTIVITY_REFRESH_EVENT, loadUnassignedCount)
+    return () =>
+      window.removeEventListener(ACTIVITY_REFRESH_EVENT, loadUnassignedCount)
+  }, [loadUnassignedCount])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const refreshAll = () => {
     refreshProfile()
@@ -135,6 +167,31 @@ export default function QuickActions() {
               Review items waiting for recipients
             </p>
           </div>
+
+          {/* Hidden at 0 — an empty state doesn't need a badge drawing the eye
+              to it, and the button still reads fine without one. */}
+          {unassignedCount !== null && unassignedCount > 0 && (
+            <span
+              aria-label={`${unassignedCount} unassigned ${
+                unassignedCount === 1 ? 'item' : 'items'
+              }`}
+              className="flex-shrink-0 flex items-center justify-center"
+              style={{
+                minWidth: 24,
+                height: 24,
+                padding: '0 7px',
+                borderRadius: 999,
+                background: '#BB4D00',
+                color: '#FFFFFF',
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 12,
+                lineHeight: '24px',
+              }}
+            >
+              {unassignedCount > 99 ? '99+' : unassignedCount}
+            </span>
+          )}
         </button>
       </div>
 

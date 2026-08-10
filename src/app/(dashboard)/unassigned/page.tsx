@@ -23,6 +23,7 @@ import {
   type BulkDeleteResponse,
 } from "@/lib/api/content";
 import { type Assignment } from "@/lib/api/messages";
+import { notifyActivityChanged } from "@/lib/activity-helpers";
 
 /* ─── helpers ─────────────────────────────────────────────── */
 
@@ -214,6 +215,7 @@ export default function UnassignedPage() {
       showToast("Recipients assigned", "success");
       setAssignTarget(null);
       loadData();
+      notifyActivityChanged();
     } catch (e) {
       showToast(errorMessage(e, "Failed to assign"), "error");
     } finally {
@@ -238,6 +240,7 @@ export default function UnassignedPage() {
       );
       setBulkAssignOpen(false);
       loadData();
+      notifyActivityChanged();
     } catch (e) {
       showToast(errorMessage(e, "Failed to assign"), "error");
     } finally {
@@ -268,6 +271,7 @@ export default function UnassignedPage() {
       });
       handleDeleteResult(result);
       loadData();
+      notifyActivityChanged();
     } catch (e) {
       showToast(errorMessage(e, "Failed to delete"), "error");
     }
@@ -284,6 +288,7 @@ export default function UnassignedPage() {
       const result = await bulkDeleteContent(token, { items });
       handleDeleteResult(result);
       loadData();
+      notifyActivityChanged();
     } catch (e) {
       showToast(errorMessage(e, "Failed to delete"), "error");
     }

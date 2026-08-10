@@ -114,12 +114,15 @@ src/
 │   │       ├── overview/           # Dashboard: content stats, recent activity
 │   │       ├── profile/            # My Profile — view saved / edit toggle. SMS opt-in,
 │   │       │                        Age Group, and Status are hidden (not applicable)
-│   │       ├── release-plan/       # Currently a "Coming in next sprint" placeholder.
-│   │       │                        Full step 1–5 flow lives on as ReleasePlanPageImpl
-│   │       │                        in the same file — swap the default export back
-│   │       │                        to re-enable it
+│   │       ├── release-plan/       # The full step 1–5 release flow (live since Sprint 6)
 │   │       ├── recipients/         # Recipient delivery/access status once a release exists
 │   │       ├── downloads/          # Prepare & download a content package post-release
+│   │       │   └── videos/         # Per-video download list. Thumbnails only — deliberately
+│   │       │                        not playable, and there is no download-all
+│   │       ├── schedule-override/  # Hidden QA page (unlinked). Moves a plan's delivery
+│   │       │                        date so post-waiting-period steps can be tested
+│   │       │                        without waiting 5 business days. Gated by a
+│   │       │                        server-held secret — see Hidden Routes
 │   │       ├── notifications/      # Announcements + activity feed; mark read/unread
 │   │       │                        (never deleted)
 │   │       ├── help/               # RM-specific FAQs/tutorials — not the owner's
@@ -176,9 +179,11 @@ src/
 | `/(dashboard)/unassigned`       | Unassigned content — filter by type, bulk assign/delete (the "Memoir" tab filters the `chapter` content type) |
 | `/rm/overview`                  | Release Manager dashboard — content stats, recent activity                                                      |
 | `/rm/profile`                   | RM's own profile (view saved / edit toggle)                                                                     |
-| `/rm/release-plan`              | Placeholder — full release flow built but paused for this sprint                                                |
+| `/rm/release-plan`              | Full release flow — initiate, notifications, waiting period, delivery, completion                               |
 | `/rm/recipients`                | Recipient delivery/access status                                                                                |
-| `/rm/downloads`                 | Prepare and download a released content package                                                                 |
+| `/rm/downloads`                 | Prepare and download a released content package (everything except video)                                       |
+| `/rm/downloads/videos`          | Per-video download list with thumbnails — not playable, no download-all                                         |
+| `/rm/schedule-override`         | **Hidden/unlinked** QA page — change a plan's delivery date (password-gated server-side)                        |
 | `/rm/notifications`             | Announcements + activity feed; mark read/unread (never deleted)                                                 |
 | `/rm/help`                      | RM-specific Help Center (same shared component as `/help`, re-themed + re-contented)                            |
 | `/rm/create-account`            | "Create my Tether" promo — only reachable/visible if the RM has no owner account                                |
@@ -204,7 +209,7 @@ src/
 | `access.ts`           | `/access/*` — owner-side recipient/guardian/release-manager management, overview                                   |
 | `invitations.ts`      | `/invitations/*` — send/resend/revoke invites, `acceptInvitation` (token-based accept)                              |
 | `memberships.ts`      | `/auth/memberships`, `switchContext`, `getActiveContext`, `hasOwnerMembership`                                      |
-| `rm.ts`               | `/rm/*` — overview, release-plan, recipients, notifications, downloads (includes raw-`fetch` ZIP/PDF streaming that intentionally bypasses the JSON envelope client) |
+| `rm.ts`               | `/rm/*` — overview, release-plan (incl. `overrideDeliverySchedule`), recipients, notifications, downloads (incl. `getDownloadableVideos`). Includes raw-`fetch` ZIP/PDF streaming that intentionally bypasses the JSON envelope client, and the one call that needs a custom header |
 
 `client.ts` is the **single source of truth** for success/failure. It unwraps `data` on
 success and throws a typed `ApiError(statusCode, message)` for every failure class
@@ -226,7 +231,7 @@ downloads) never drift from the JSON client's behavior.
 | `AddReleaseManagerModal`      | Release manager create/edit form — no phone field collected here (the RM sets their own from their portal's My Profile)                       |
 | `ReleaseManagerConsentModal`  | Legal-notice gate before designating/changing an RM — dialog semantics, focus trap, synchronous reset on reopen                               |
 | `FinishProfileModal`          | Shared profile form — modal (onboarding) or `embedded` (owner "Finish Your Profile" / RM "My Profile"); `hideSmsOptIn` / `hideAgeAndStatus` / `onEdit` props tailor it per portal |
-| `QuickActions`                | Dashboard quick-action cards                                                                                                                 |
+| `QuickActions`                | Dashboard quick-action cards, plus "See Unassigned Content" with a live count badge (hidden at 0 and while loading; refetches on `ACTIVITY_REFRESH_EVENT`) |
 | `SetupSteps` / `OnboardingWidget` | Setup checklist, mirrors onboarding completion                                                                                           |
 | `WelcomeBanner`               | Shown while onboarding is incomplete                                                                                                          |
 | `ActivityFeed` / `StatCard`   | Dashboard data widgets                                                                                                                        |
@@ -235,9 +240,9 @@ downloads) never drift from the JSON client's behavior.
 
 | Component               | Purpose                                                                                                                                                  |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ReleaseManagerSidebar` | RM portal nav — content stats, polled unread-notification badge; "Switch Account" only shown with 2+ memberships; "Create my Tether" only shown with no owner account |
+| `ReleaseManagerSidebar` | RM portal nav — content stats, polled unread-notification badge; "Switch Account" only shown with 2+ memberships; "Create my Tether" only shown with no owner account. "Download everything" is a collapsible group with two children (videos / other content), since the two downloads work differently |
 | `RequestGuardianModal`  | Two-step "ask a Guardian to complete the release" flow                                                                                                       |
-| `release-plan/*`        | Step1–Step5 views + header/constants for the full release-plan flow (currently unmounted from the page — see Pages table)                                    |
+| `release-plan/*`        | Step1–Step5 views + header/constants for the release-plan flow                                                                                               |
 
 ## Auth Flow
 
@@ -274,8 +279,9 @@ reason.)
      re-authenticates from `/signin` with a still-valid stored membership is routed
      onward instead of being left stuck on the sign-in page.
 5. **Invitation acceptance** (`/invitations/accept/[token]`) — requires an explicit
-   "Accept invitation" click; the accept endpoint is a `GET` with a side effect, so it
-   must never fire just because the page loaded. If not logged in, redirects to
+   "Accept invitation" click. The accept endpoint is a `POST` (it was moved off `GET`
+   precisely because it mutates), and acceptance must never fire just because the page
+   loaded — link previews and prefetchers would trip it. If not logged in, redirects to
    `/signin` instead of `/signup` when the invited email already belongs to an
    existing user (signing up again would always 409). The accepting user's email is
    verified server-side against the invite before it's honored.
@@ -333,12 +339,62 @@ reason.)
   `PostHogPageView`) so client-side route changes are tracked correctly. PostHog is
   a no-op when `NEXT_PUBLIC_POSTHOG_KEY` is unset (e.g. local dev).
 
+## Hidden Routes
+
+`/rm/schedule-override` is deliberately unlinked — no nav entry points at it, and
+it's reachable only by typing the URL. **Being hidden is not the security
+control.** The gate is a password the page never stores or knows: it is sent as
+an `x-release-override-secret` header and compared server-side against
+`RELEASE_SCHEDULE_OVERRIDE_SECRET`. On any environment where that variable is
+unset the API returns 404, so the page is inert in production. Every successful
+override is written to the release activity log.
+
+It exists so the steps after the five-business-day waiting period can be tested
+without waiting five real days.
+
+## Build & Deploy Notes
+
+Type checking is **not** part of `next build` (`typescript.ignoreBuildErrors` in
+`next.config.ts`). This is not a lowering of standards — the identical
+`tsc --noEmit` runs in CI (`.github/workflows/typecheck.yml`) on every push and
+PR, so a type error blocks the PR rather than the deploy. If you remove that
+workflow, re-enable checking in the config.
+
+`npm run lint` also runs in CI but is **advisory** (`continue-on-error`), because
+the repo carries ~43 pre-existing eslint errors that predate the workflow.
+Blocking on them would fail every PR for problems it didn't introduce. Clear the
+backlog, then make it blocking. Note that Next 16 removed build-time ESLint
+entirely — there is no `eslint` key in `NextConfig` and no `next lint` command.
+
+Two hard-won constraints, both of which cost a day each:
+
+- **Do not add `experimental: { cpus, memoryBasedWorkersCount }`.** Those were
+  tried to reduce build memory and instead made Turbopack emit **no application
+  output** — `.next/static` and `.next/server` both empty — while `next build`
+  still exited 0 and printed a full route table. Vercel then hung on "Deploying
+  outputs…" and failed with no error, because the build had technically
+  succeeded. Measured on an identical commit: 0.9 MB / 0 files with the block,
+  49 MB / 1039 without.
+- **The Sentry build plugin's `runAfterProductionCompile` hook walks all of
+  `.next`** and once ran ~12 minutes before being OOM-killed. The options in
+  `sentryBuildOptions` (`widenClientFileUpload: false`, `sourcemaps.disable`,
+  `release.create: false`, `telemetry: false`) cut it to ~1.5s. Note that
+  `sourcemaps.disable` alone is not enough — in `@sentry/nextjs` 10.60.0 it only
+  guards `injectDebugIds`, while `uploadSourcemaps` and `deleteArtifacts` run
+  unconditionally. `SENTRY_DISABLE_PLUGIN=1` skips the wrapper entirely as an
+  escape hatch; runtime error reporting is unaffected either way, since that
+  comes from `instrument.ts` / `sentry.*.config.ts`.
+
+If a deploy builds successfully but then stalls on "Deploying outputs…", check
+the build machine size before changing any config — a 4-core/8 GB builder was
+the actual cause once, and every config change made to chase it was a red
+herring.
+
 ## Known Follow-ups
 
-- `/rm/release-plan` is intentionally a placeholder this sprint — the real
-  implementation (`ReleasePlanPageImpl` in the same file) is complete and just
-  needs to be swapped back in as the default export.
 - `/rm/create-account` is a static promo/signup form — billing isn't wired up yet.
+- ~43 pre-existing eslint errors (mostly `react-hooks/set-state-in-effect` and
+  `no-explicit-any`) keep CI lint advisory rather than blocking.
 
 ## Sprint Progress
 
@@ -347,4 +403,5 @@ reason.)
 - **Sprint 3** ✅ — Unassigned content page, message read/edit wizard, audio/video player polish, editorial write-message UI
 - **Sprint 4** ✅ — Memoir (`/story`): chapter editor, voice chapters, preview, PDF/text export, TTS narration; feedback/help page; PostHog analytics + first-touch attribution
 - **Sprint 5** ✅ — Release Manager portal (`/rm/*`): overview, recipients, notifications, content downloads, RM-specific Help Center; multi-membership auth flow (`/select-account`, `/invitations/accept/[token]`); portal guards on both `(dashboard)` and `(rm)`; invite-signup email locking and redirect fixes
-- **Sprint 6–10** — See sprint execution plan
+- **Sprint 6** ✅ — Release plan live end to end (`/rm/release-plan` steps 1–5, cancel, guardian escalation, activity log + PDF report); downloads split into a content ZIP and a separate per-video download page (`/rm/downloads/videos`) with a collapsible sidebar group; unassigned-content count badge; hidden `/rm/schedule-override` QA page; `M/D/YYYY` date format across the release module; HEIC upload support; portal-rendered docs tooltip; Guardian cap lowered to 2; favicon; Vercel build fixes (Sentry hook, CI typecheck)
+- **Sprint 7–10** — See sprint execution plan

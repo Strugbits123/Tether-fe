@@ -558,7 +558,7 @@ export default function ReleaseManagerSidebar({
                   color: 'rgba(255,255,255,0.5)',
                 }}
               >
-                {ownerName ? `Executor for ${ownerName}` : 'Release Manager'}
+                {ownerName ? `Release Manager for ${ownerName}` : 'Release Manager'}
               </p>
             </div>
             <ChevronDown
