@@ -67,16 +67,17 @@ export default function Step3({ onNext, onBack, loading, initialManager }: Step3
 
   // Re-fill if a *different* manager arrives after mount. Kept out of an effect
   // so the fields are correct on the first paint rather than one frame later.
+  // Also handles the manager going away (removed upstream): `seed` is the blank
+  // set in that case, so the stale details don't linger in an editable form the
+  // user could unknowingly resubmit.
   const [lastManager, setLastManager] = useState(initialManager)
   if (initialManager !== lastManager) {
     setLastManager(initialManager)
-    if (initialManager) {
-      setFirstName(seed.firstName)
-      setLastName(seed.lastName)
-      setEmail(seed.email)
-      setPhone(seed.phone)
-      setRelationship(seed.relationship)
-    }
+    setFirstName(seed.firstName)
+    setLastName(seed.lastName)
+    setEmail(seed.email)
+    setPhone(seed.phone)
+    setRelationship(seed.relationship)
   }
 
   const handleContinue = () => {

@@ -41,6 +41,7 @@ export default function CancelReleaseModal({
 }: CancelReleaseModalProps) {
   const [reason, setReason] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
 
   // Clear the previous reason on reopen, during render so it never flashes.
   // See react.dev "Adjusting some state when a prop changes".
@@ -50,15 +51,47 @@ export default function CancelReleaseModal({
     if (open) setReason('')
   }
 
-  // Escape-to-close, scroll lock, and focus the reason field — it's the only
-  // thing the operator has to fill in.
+  // Escape-to-close, scroll lock, focus the reason field, and keep Tab inside the
+  // dialog. Without the trap, tabbing walks out into the page behind the overlay
+  // — for a destructive confirmation that means a keyboard user can end up
+  // operating controls they can't see.
   useEffect(() => {
     if (!open) return
+
+    // Remembered so focus can go back where it came from on dismissal, rather
+    // than resetting to the top of the document.
+    const opener = document.activeElement as HTMLElement | null
+
+    const focusable = () =>
+      Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button, [href], textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1)
+
     const onKey = (e: KeyboardEvent) => {
       // Never close mid-request: the release may already be cancelled server-side
       // and dismissing here would leave the UI showing a stale active plan.
-      if (e.key === 'Escape' && !cancelling) onClose()
+      if (e.key === 'Escape' && !cancelling) {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const items = focusable()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      // Wrap at both ends, and pull focus back in if it has already escaped.
+      if (e.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (active === last || !dialogRef.current?.contains(active))) {
+        e.preventDefault()
+        first.focus()
+      }
     }
+
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -66,6 +99,9 @@ export default function CancelReleaseModal({
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      // Only restore if the opener is still in the document — the element may
+      // have unmounted while the modal was open.
+      if (opener && document.contains(opener)) opener.focus()
     }
   }, [open, onClose, cancelling])
 
@@ -94,6 +130,7 @@ export default function CancelReleaseModal({
         }}
       >
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="cancel-release-title"

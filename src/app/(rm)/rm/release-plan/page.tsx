@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/lib/context/ToastContext'
 import { ApiError } from '@/lib/api/client'
@@ -67,6 +67,8 @@ export default function ReleasePlanPage() {
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
+  // Synchronous double-submit guard for cancel — see handleCancel.
+  const cancellingRef = useRef(false)
   const [continuing, setContinuing] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
@@ -202,13 +204,20 @@ export default function ReleasePlanPage() {
   // The reason comes from CancelReleaseModal, which enforces the API's
   // non-empty + 1000-character rules before this is ever called.
   const handleCancel = async (reason: string) => {
-    const token = await getToken()
-    if (!token) {
-      showToast('Your session has expired. Sign in again.', 'error')
-      return
-    }
+    // Claimed synchronously, before the first await. `cancelling` is only set
+    // after getToken() resolves, so two fast activations could both get past it
+    // and fire two cancels. The API itself is safe — the update is conditional
+    // on status='active', so no duplicate emails — but the loser returns an
+    // error *after* the winner reported success, which reads as a failed cancel.
+    if (cancellingRef.current) return
+    cancellingRef.current = true
     setCancelling(true)
     try {
+      const token = await getToken()
+      if (!token) {
+        showToast('Your session has expired. Sign in again.', 'error')
+        return
+      }
       await cancelRelease(token, { reason })
       showToast('Release plan cancelled.', 'success')
       // Only dismiss on success — a failure keeps the modal (and the typed
@@ -219,6 +228,8 @@ export default function ReleasePlanPage() {
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Failed to cancel the release plan.', 'error')
     } finally {
+      // Single owner of both flags, so an early return can't strand them.
+      cancellingRef.current = false
       setCancelling(false)
     }
   }

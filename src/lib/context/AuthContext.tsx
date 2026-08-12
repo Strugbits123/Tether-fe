@@ -6,6 +6,7 @@ import { getActiveContext, getMemberships, switchContext } from '@/lib/api/membe
 import { acceptInvitation } from '@/lib/api/invitations'
 import { identifyUser, resetIdentity, track } from '@/lib/posthog/analytics'
 import type { UserProfile } from '@/lib/api/users'
+import { AuthRetryableFetchError } from '@supabase/supabase-js'
 import type { Session, User } from '@supabase/supabase-js'
 import { useRouter, usePathname } from 'next/navigation'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -114,33 +115,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, delay)
   }, [])
 
+  // Bumped whenever the authenticated identity changes (sign-out, or a different
+  // user). A profile fetch already in flight at that moment belongs to the
+  // previous identity, so its result must be discarded rather than written over
+  // the new account's — otherwise switching accounts can briefly show the wrong
+  // person's profile, and signing out can repopulate one after it was cleared.
+  // Deliberately NOT bumped on TOKEN_REFRESHED: the identity is unchanged there,
+  // and cancelling on every refresh would starve the load.
+  const authGenerationRef = useRef(0)
+  // Last identity seen by onAuthStateChange, so a token refresh can be told
+  // apart from a genuine account change.
+  const lastUserIdRef = useRef<string | null>(null)
+
   // Loads /users/me, reading a fresh token each time. On failure it keeps
   // retrying with backoff (capped at 30s) so the UI auto-recovers once the
   // backend is reachable — no page reload needed.
   const loadProfile = useCallback(async () => {
-    const { data, error: sessionError } = await supabase.auth.getSession()
-    // A failed session lookup (network drop, refresh-token round trip) is not
-    // proof of being signed out. Treating it as such stopped the retry loop
-    // permanently and left the app profile-less until a manual reload — retry
-    // instead, and reserve stopRetry for a confirmed absence of a session.
-    if (sessionError) {
+    const generation = authGenerationRef.current
+    const isCurrent = () => generation === authGenerationRef.current
+
+    let token: string | undefined
+    try {
+      const { data, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) {
+        // Only a transport-level failure is worth retrying. Any other auth error
+        // (an invalid or revoked refresh token, say) will fail identically
+        // forever, and retrying it would loop every 30s for the life of the tab.
+        if (sessionError instanceof AuthRetryableFetchError) {
+          scheduleRetry()
+        } else {
+          stopRetry()
+        }
+        return
+      }
+      token = data.session?.access_token
+    } catch {
+      // getSession can reject outright rather than returning an error — a
+      // navigator lock timeout or blocked storage access, for instance. Left
+      // uncaught this escaped as an unhandled rejection and skipped the retry
+      // entirely, leaving the app profile-less until a manual reload.
       scheduleRetry()
       return
     }
-    const token = data.session?.access_token
+
+    if (!isCurrent()) return
     if (!token) {
+      // A confirmed absence of a session — genuinely signed out, so stop.
       stopRetry()
       return
     }
+
     setProfileLoading(true)
     try {
-      const data = await api.get<UserProfile>('/users/me', token)
-      setProfile(data)
+      const profileData = await api.get<UserProfile>('/users/me', token)
+      if (!isCurrent()) return
+      setProfile(profileData)
       // Enrich the PostHog person + register user_id/environment super props
       // once the profile is available.
-      identifyUser(data)
+      identifyUser(profileData)
       stopRetry()
     } catch (e) {
+      if (!isCurrent()) return
       // Only retry transient failures (cold-start 5xx, network drop, rate limit).
       // Terminal auth/not-found statuses won't recover by retrying, so stop.
       const terminal =
@@ -151,7 +186,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         scheduleRetry()
       }
     } finally {
-      setProfileLoading(false)
+      // Guarded: a superseded fetch must not clear the flag the current one set.
+      // The signed-out branch of onAuthStateChange clears it independently, so
+      // this can't strand a spinner.
+      if (isCurrent()) setProfileLoading(false)
     }
   }, [supabase, stopRetry, scheduleRetry])
 
@@ -269,6 +307,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Invalidate in-flight profile fetches only when the identity actually
+      // changes — a signed-in user id differing from the last one, or a
+      // transition to no session. TOKEN_REFRESHED keeps the same id and must not
+      // cancel a load in progress.
+      const nextUserId = session?.user?.id ?? null
+      if (nextUserId !== lastUserIdRef.current) {
+        authGenerationRef.current += 1
+        lastUserIdRef.current = nextUserId
+      }
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
@@ -281,6 +328,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         stopRetry()
         setProfile(null)
+        // Cleared here because loadProfile's `finally` deliberately skips it for
+        // a superseded fetch — this is the one place that owns the signed-out
+        // reset, so a load cancelled by sign-out can't leave a spinner running.
+        setProfileLoading(false)
         setMembershipCount(null)
         resolvedRef.current = false
         resetIdentity()
