@@ -5,14 +5,14 @@ import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react'
 import CustomSelect from './CustomSelect'
 import { useRouter } from 'next/navigation'
 
-interface Recipient {
+export interface Recipient {
   firstName: string
   lastName: string
   relationship: string
   email: string
 }
 
-interface FetchedRecipient {
+export interface FetchedRecipient {
   id: string
   name: string
   email: string

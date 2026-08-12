@@ -194,6 +194,8 @@ export default function MessagesPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // Fetch on mount: the setState calls run after an await inside the loader, not synchronously here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

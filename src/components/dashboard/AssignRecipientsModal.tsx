@@ -42,14 +42,21 @@ export default function AssignRecipientsModal({
   const [search, setSearch] = useState('')
   const [recipients, setRecipients] = useState<Recipient[]>([])
 
-  useEffect(() => {
-    if (!open) return
-    setGroups(initialGroups)
-    setIndividualIds(initialIndividualIds)
-    setShowIndividuals(false)
-    setSearch('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  // Re-seed from props each time the modal opens. Done during render so the
+  // reopened modal never shows the previous selection for a frame. Deliberately
+  // keyed on `open` alone, not on initialGroups/initialIndividualIds — those are
+  // fresh array literals on every parent render, so depending on them would
+  // reset the user's in-progress selection mid-edit.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setGroups(initialGroups)
+      setIndividualIds(initialIndividualIds)
+      setShowIndividuals(false)
+      setSearch('')
+    }
+  }
 
   // Load real recipients for the individual picker.
   useEffect(() => {

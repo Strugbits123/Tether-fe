@@ -5,7 +5,9 @@ export default function PromiseSection() {
     <section className="bg-[#0B0B1E] text-white py-24 border-t border-white/5">
       <div className="max-w-7xl mx-auto px-6">
         <div className="max-w-3xl mb-12">
-          <span className="text-orange-400 text-xs font-bold uppercase tracking-widest">// THE PROMISE</span>
+          {/* The leading "//" is deliberate label styling, not a code comment —
+              it has to be an expression or JSX parses it as one. */}
+          <span className="text-orange-400 text-xs font-bold uppercase tracking-widest">{'// THE PROMISE'}</span>
           <h2 className="text-4xl md:text-5xl font-bold mt-4 mb-6">
             The promise <em className="text-violet-400 font-normal not-italic">tether makes</em>
           </h2>

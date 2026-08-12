@@ -30,14 +30,19 @@ export default function RequestGuardianModal({
     null,
   )
 
-  // Reset to the form whenever the modal (re)opens.
-  useEffect(() => {
+  // Reset to the form whenever the modal (re)opens. Done during render rather
+  // than in an effect, so a reopened modal never flashes the previous result
+  // screen before returning to the form. See react.dev "Adjusting some state
+  // when a prop changes".
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (open) {
       setStep('form')
       setExplanation('')
       setResult(null)
     }
-  }, [open])
+  }
 
   // Escape-to-close + scroll lock.
   useEffect(() => {

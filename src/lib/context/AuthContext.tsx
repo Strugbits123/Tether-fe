@@ -94,6 +94,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     retryRef.current = { timer: null, attempt: 0 }
   }, [])
 
+  // The retry below re-invokes loadProfile from inside its own definition, so it
+  // can't reference the binding directly — that reads a `const` before it is
+  // declared. Holding the latest instance in a ref is the standard indirection:
+  // the ref is populated on every render, and the retry timer only ever fires
+  // after at least one render has happened.
+  const loadProfileRef = useRef<() => void>(() => {})
+
   // Loads /users/me, reading a fresh token each time. On failure it keeps
   // retrying with backoff (capped at 30s) so the UI auto-recovers once the
   // backend is reachable — no page reload needed.
@@ -128,13 +135,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (retryRef.current.timer) clearTimeout(retryRef.current.timer)
         retryRef.current.attempt = attempt + 1
         retryRef.current.timer = setTimeout(() => {
-          loadProfile()
+          loadProfileRef.current()
         }, delay)
       }
     } finally {
       setProfileLoading(false)
     }
   }, [supabase, stopRetry])
+
+  // Assigned in an effect rather than during render — a render-phase ref write
+  // is itself a lint violation (and unsafe under concurrent rendering).
+  useEffect(() => {
+    loadProfileRef.current = loadProfile
+  }, [loadProfile])
 
   // Finalizes a pending invitation acceptance once a session exists. The
   // invite-accept page stores the token here (instead of relying on it

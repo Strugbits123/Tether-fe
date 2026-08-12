@@ -40,6 +40,8 @@ export default function RecentActivity() {
   }, [])
 
   useEffect(() => {
+    // Fetch on mount: the setState calls run after an await inside the loader, not synchronously here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadActivity()
     const onRefresh = () => loadActivity()
     window.addEventListener(ACTIVITY_REFRESH_EVENT, onRefresh)

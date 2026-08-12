@@ -286,6 +286,11 @@ function MessageModalInner({
     return audience[0] ?? "someone special";
   })();
 
+  const handleClose = () => {
+    setStep("setup");
+    onClose();
+  };
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -300,11 +305,6 @@ function MessageModalInner({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  const handleClose = () => {
-    setStep("setup");
-    onClose();
-  };
 
   const handleOpenRecorder = () => {
     if (messageType === "write") setStep("write");
@@ -1599,6 +1599,13 @@ function RecordStep({
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | null>(null);
   const blobRef = useRef<Blob | null>(null);
+  // Render-visible mirror of blobRef. Kept in lockstep by every assignment
+  // below — read this in JSX, never blobRef.current. Seeded from initialBlob so
+  // resuming from the details step paints the waveform on the first render
+  // rather than after a mount effect.
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(
+    initialBlob ?? null,
+  );
   const previewUrlRef = useRef<string | null>(null);
 
   const [phase, setPhase] = useState<RecordPhase>(
@@ -1636,23 +1643,6 @@ function RecordStep({
 
   const maxSeconds = kind === "video" ? 5 * 60 : 10 * 60;
 
-  // Start the camera preview as soon as the video recorder opens — unless we're
-  // resuming a previously recorded blob (back from details), in which case we
-  // restore its preview and leave the camera/mic untouched.
-  useEffect(() => {
-    if (initialBlob) {
-      blobRef.current = initialBlob;
-      if (kind === "video") {
-        const url = URL.createObjectURL(initialBlob);
-        previewUrlRef.current = url;
-        setPreviewUrl(url);
-      }
-    } else if (kind === "video") {
-      initStream();
-    }
-    return () => cleanup();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const stopTracks = () => {
     if (streamRef.current) {
@@ -1707,12 +1697,35 @@ function RecordStep({
     }
   };
 
+  // Start the camera preview as soon as the video recorder opens — unless we're
+  // resuming a previously recorded blob (back from details), in which case we
+  // restore its preview and leave the camera/mic untouched.
+  useEffect(() => {
+    if (initialBlob) {
+      blobRef.current = initialBlob;
+      if (kind === "video") {
+        const url = URL.createObjectURL(initialBlob);
+        previewUrlRef.current = url;
+        // Synchronous setState in an effect, deliberately: the object URL must
+        // be created and revoked together, and cleanup() below revokes it.
+        // Moving this to a lazy initialiser would leak the URL on unmount.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPreviewUrl(url);
+      }
+    } else if (kind === "video") {
+      initStream();
+    }
+    return () => cleanup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Audio: WaveSurfer's Record plugin opens the mic and captures the blob (see
   // AudioRecordingWaveform). We just drive the phase + elapsed timer here; the
   // blob arrives via handleAudioRecordEnd.
   const startAudioRecording = () => {
     setError(null);
     blobRef.current = null;
+    setRecordedBlob(null);
     setElapsed(0);
     setPhase("recording");
     setAudioRecording(true);
@@ -1727,6 +1740,7 @@ function RecordStep({
 
   const handleAudioRecordEnd = (blob: Blob) => {
     blobRef.current = blob;
+    setRecordedBlob(blob);
     setPhase("preview");
   };
 
@@ -1756,6 +1770,7 @@ function RecordStep({
           type: kind === "video" ? "video/webm" : "audio/webm",
         });
         blobRef.current = blob;
+        setRecordedBlob(blob);
         if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
         const url = URL.createObjectURL(blob);
         previewUrlRef.current = url;
@@ -1821,6 +1836,7 @@ function RecordStep({
     track("recording_restarted", { attempt_number: attemptRef.current });
     setAudioRecording(false);
     blobRef.current = null;
+    setRecordedBlob(null);
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
@@ -2025,9 +2041,9 @@ function RecordStep({
                 </span>
               </>
             ) : (phase === "preview" || phase === "uploading") &&
-              blobRef.current ? (
+              recordedBlob ? (
               <AudioPlaybackWaveform
-                audioBlob={blobRef.current}
+                audioBlob={recordedBlob}
                 height={80}
                 waveColor="rgba(255, 255, 255, 0.3)"
                 progressColor="rgba(255, 255, 255, 1)"

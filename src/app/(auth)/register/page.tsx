@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, Suspense } from 'react'
+import React, { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/lib/context/ToastContext'
@@ -28,14 +28,17 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  useEffect(() => {
-    const mode = searchParams.get('mode')
-    if (mode === 'signup') {
-      setIsSignUp(true)
-    } else if (mode === 'signin') {
-      setIsSignUp(false)
-    }
-  }, [searchParams])
+  // Sync the tab to ?mode= during render rather than in an effect, so arriving
+  // at /register?mode=signup never paints the sign-in form first. The user can
+  // still toggle tabs afterwards — this only re-runs when the query changes.
+  // See react.dev "Adjusting some state when a prop changes".
+  const modeParam = searchParams.get('mode')
+  const [lastMode, setLastMode] = useState(modeParam)
+  if (modeParam !== lastMode) {
+    setLastMode(modeParam)
+    if (modeParam === 'signup') setIsSignUp(true)
+    else if (modeParam === 'signin') setIsSignUp(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,8 +126,8 @@ function RegisterForm() {
         showToast('Welcome back to Tether!', 'success')
         router.push('/dashboard')
       }
-    } catch (err: any) {
-      showToast(err.message || 'Something went wrong', 'error')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Something went wrong', 'error')
     } finally {
       setLoading(false)
     }

@@ -12,9 +12,15 @@ import { getMessages } from '@/lib/api/messages'
 import { requestDocUploadUrls, createDocumentsBatch } from '@/lib/api/documents'
 import { toRecipientRelationship, toReleaseManagerRelationship } from '@/lib/relationship'
 import Step1 from '@/components/onboarding/Step1'
-import Step2 from '@/components/onboarding/Step2'
-import Step3 from '@/components/onboarding/Step3'
-import Step4 from '@/components/onboarding/Step4'
+import Step2, {
+  type Recipient,
+  type FetchedRecipient,
+} from '@/components/onboarding/Step2'
+import Step3, {
+  type ReleaseManager,
+  type FetchedManager,
+} from '@/components/onboarding/Step3'
+import Step4, { type SavedMessage } from '@/components/onboarding/Step4'
 import Step5 from '@/components/onboarding/Step5'
 
 const ASSIGN_LATER = [{ scope: 'assign_later' as const }]
@@ -153,16 +159,16 @@ export default function OnboardingPage() {
   const [purposes, setPurposes] = useState<string[]>([])
 
   // Step 2: Recipients
-  const [recipients, setRecipients] = useState<any[]>([])
-  const [fetchedRecipients, setFetchedRecipients] = useState<any[]>([])
+  const [recipients, setRecipients] = useState<Recipient[]>([])
+  const [fetchedRecipients, setFetchedRecipients] = useState<FetchedRecipient[]>([])
 
   // Step 3: Release Manager
-  const [releaseManager, setReleaseManager] = useState<any>(null)
-  const [fetchedManager, setFetchedManager] = useState<any>(null)
+  const [releaseManager, setReleaseManager] = useState<ReleaseManager | null>(null)
+  const [fetchedManager, setFetchedManager] = useState<FetchedManager | null>(null)
   const [releaseManagerSaved, setReleaseManagerSaved] = useState(false)
 
   // Step 4: Messages
-  const [fetchedMessages, setFetchedMessages] = useState<any[]>([])
+  const [fetchedMessages, setFetchedMessages] = useState<SavedMessage[]>([])
 
   const handleStep1Next = async (selections: string[]) => {
     setPurposes(selections)
@@ -187,7 +193,7 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleStep2Next = async (recips: any[]) => {
+  const handleStep2Next = async (recips: Recipient[]) => {
     setRecipients(recips)
     setStepLoading(true)
     try {
@@ -241,7 +247,7 @@ export default function OnboardingPage() {
     setCurrentStep(1)
   }
 
-  const handleStep3Next = async (manager: any) => {
+  const handleStep3Next = async (manager: ReleaseManager | null) => {
     setReleaseManager(manager)
     setStepLoading(true)
     try {
@@ -352,8 +358,8 @@ export default function OnboardingPage() {
       })
       showToast('Welcome to Tether!', 'success')
       router.push('/dashboard?onboarded=true')
-    } catch (err: any) {
-      showToast(err.message || 'Something went wrong. Please try again.', 'error')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Something went wrong. Please try again.', 'error')
     } finally {
       setLoading(false)
     }

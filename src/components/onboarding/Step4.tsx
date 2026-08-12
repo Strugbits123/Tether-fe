@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Video, Mic, PencilIcon } from 'lucide-react'
 import CreateMessageModal from '@/components/dashboard/CreateMessageModal'
 
-interface SavedMessage {
+export interface SavedMessage {
   id: string
   title: string
   type: string

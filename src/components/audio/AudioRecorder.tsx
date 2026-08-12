@@ -66,6 +66,20 @@ export default function AudioRecorder({
     }
   };
 
+  // Declared above the recording effect because that effect's auto-stop timer
+  // calls it. Referencing it from further down still worked at runtime — the
+  // interval fires long after this function body has finished — but reading a
+  // `const` before its declaration is exactly the hazard
+  // react-hooks/immutability flags. It closes over refs only, so hoisting it
+  // changes nothing.
+  const stopRecording = useCallback(() => {
+    clearTimer();
+    const record = recordRef.current;
+    if (record && record.isRecording()) {
+      record.stopRecording(); // record-end → preview
+    }
+  }, []);
+
   // Build the live recording waveform + mic capture while in the recording phase.
   useEffect(() => {
     if (phase !== "recording" || !containerRef.current) return;
@@ -138,14 +152,6 @@ export default function AudioRecorder({
     blobRef.current = null;
     setPreviewBlob(null);
     setPhase("recording");
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    clearTimer();
-    const record = recordRef.current;
-    if (record && record.isRecording()) {
-      record.stopRecording(); // record-end → preview
-    }
   }, []);
 
   const cancelRecording = useCallback(() => {

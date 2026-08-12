@@ -22,9 +22,14 @@ export default function GuardianConfirmModal({
 }: GuardianConfirmModalProps) {
   const [acknowledged, setAcknowledged] = useState(false);
 
-  useEffect(() => {
-    if (open) setAcknowledged(false);
-  }, [open]);
+  // Reset on open during render rather than in an effect: the effect version
+  // paints one frame with the previous acknowledgement still ticked before
+  // clearing it. See react.dev "Adjusting some state when a prop changes".
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    setAcknowledged(false);
+  }
 
   useEffect(() => {
     if (!open) return;

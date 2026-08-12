@@ -79,6 +79,18 @@ export default function AudioPlaybackWaveform({
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Re-arm the loading state whenever the source changes. This used to be a
+  // `setIsLoading(true)` at the top of the build effect below, which is a
+  // synchronous setState in an effect body — the render-phase form does the
+  // same job without the extra render, and the initial `true` above already
+  // covers first mount.
+  const srcKey: Blob | string | null = audioBlob ?? audioUrl ?? null;
+  const [lastSrcKey, setLastSrcKey] = useState<Blob | string | null>(srcKey);
+  if (srcKey !== lastSrcKey) {
+    setLastSrcKey(srcKey);
+    setIsLoading(true);
+  }
+
   const cbRef = useRef({ onReady, onTimeUpdate, onFinish, autoPlay });
   useEffect(() => {
     cbRef.current = { onReady, onTimeUpdate, onFinish, autoPlay };
@@ -94,7 +106,6 @@ export default function AudioPlaybackWaveform({
     let ws: WaveSurfer | null = null;
     let cancelled = false;
 
-    setIsLoading(true);
     extractPeaks(src).then((peakData) => {
       if (cancelled || !containerRef.current) return;
 

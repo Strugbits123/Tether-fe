@@ -82,9 +82,23 @@ function MainAuthForm({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
+  // Seeded from the invite link's ?name=/?email= on first render. Lazy
+  // initialisers run once, which is exactly the old mount-effect semantics —
+  // minus the extra render pass and the mount-only dependency exemption.
+  const invitedName = searchParams.get('name')
+  const invitedEmail = searchParams.get('email')
+  const [firstName, setFirstName] = useState(
+    () => (isSignUp && invitedName ? invitedName.trim().split(/\s+/)[0] : '') ?? '',
+  )
+  const [lastName, setLastName] = useState(
+    () =>
+      isSignUp && invitedName
+        ? invitedName.trim().split(/\s+/).slice(1).join(' ')
+        : '',
+  )
+  const [email, setEmail] = useState(() =>
+    isSignUp && invitedEmail ? invitedEmail : '',
+  )
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(false)
@@ -100,25 +114,12 @@ function MainAuthForm({
     window.localStorage.setItem('pending_invite_token', inviteToken)
   }, [inviteToken])
 
-  useEffect(() => {
-    const name = searchParams.get('name')
-    if (!name || !isSignUp) return
-    const [first, ...rest] = name.trim().split(/\s+/)
-    setFirstName((prev) => prev || first || '')
-    setLastName((prev) => prev || rest.join(' '))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // The invited email is locked — accepting an invite only makes sense for
   // the address it was sent to (the backend rejects a mismatched email on
   // accept), so let people change everything except that.
-  const inviteEmail = searchParams.get('email')
+  const inviteEmail = invitedEmail
   const emailLocked = isSignUp && !!inviteToken && !!inviteEmail
-  useEffect(() => {
-    if (!inviteEmail || !isSignUp) return
-    setEmail(inviteEmail)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const DUPLICATE_EMAIL_MESSAGE =
     'An account with this email already exists. Please sign in or reset your password.'
@@ -214,8 +215,8 @@ function MainAuthForm({
         // (also triggered by the auth-state-change listener) redirects again.
         await resolveMembership(loginData.access_token)
       }
-    } catch (err: any) {
-      setFormError(err.message || 'Something went wrong. Please try again.')
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -502,8 +503,8 @@ function MagicLinkForm({
     try {
       await api.post('/auth/magic-link', { email })
       onSent(email)
-    } catch (err: any) {
-      showToast(err.message || 'Failed to send magic link', 'error')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to send magic link', 'error')
     } finally {
       setLoading(false)
     }
@@ -842,8 +843,8 @@ function ForgotPasswordForm({
     try {
       await api.post('/auth/reset-password', { email })
       onSent(email)
-    } catch (err: any) {
-      showToast(err.message || 'Failed to send reset email', 'error')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to send reset email', 'error')
     } finally {
       setLoading(false)
     }
@@ -996,10 +997,14 @@ export default function AuthModePage({
   // resend to the same address.
   const [flowEmail, setFlowEmail] = useState('')
 
-  // Reset to main view if the route changes (e.g. signup → signin)
-  React.useEffect(() => {
+  // Reset to main view if the route changes (e.g. signup → signin). Done during
+  // render so the new route never paints the previous route's sub-view (a
+  // magic-link "check your inbox" screen, say) for a frame first.
+  const [lastMode, setLastMode] = useState(mode)
+  if (mode !== lastMode) {
+    setLastMode(mode)
     setView('main')
-  }, [mode])
+  }
 
   const handleToggleMode = () => {
     router.push(isSignUp ? '/signin' : '/signup')

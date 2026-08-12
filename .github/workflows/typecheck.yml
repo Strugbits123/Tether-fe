@@ -35,14 +35,11 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      # Advisory only. The repo currently has 43 pre-existing eslint errors
-      # across 25 files (mostly react-hooks/set-state-in-effect and
-      # no-explicit-any) that predate this workflow. Blocking on them would fail
-      # every PR for problems it didn't introduce, which trains people to ignore
-      # CI. Results are still surfaced in the job output.
+      # Blocking. The 43-error backlog this workflow was originally written
+      # around has been cleared, so lint now carries real signal: an error here
+      # was introduced by the change under review.
       #
-      # Flip this to blocking (delete continue-on-error) once that backlog is
-      # cleared — that's the point at which lint starts carrying real signal.
-      - name: Lint (advisory)
+      # Warnings still pass (unused vars, next/no-img-element). Add
+      # `--max-warnings 0` to the lint script once those are cleared too.
+      - name: Lint
         run: npm run lint
-        continue-on-error: true

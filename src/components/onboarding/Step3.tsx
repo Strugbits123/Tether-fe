@@ -1,10 +1,10 @@
 "use client"
 
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import CustomSelect from './CustomSelect'
 
-interface ReleaseManager {
+export interface ReleaseManager {
   firstName: string
   lastName: string
   phone: string
@@ -12,7 +12,7 @@ interface ReleaseManager {
   relationship: string
 }
 
-interface FetchedManager {
+export interface FetchedManager {
   id: string
   name: string
   email: string
@@ -43,18 +43,23 @@ export default function Step3({ onNext, onBack, loading, initialManager }: Step3
   const [email, setEmail] = useState('')
   const [relationship, setRelationship] = useState('')
 
-  // Pre-fill form when returning from Step 4 with an already-saved manager.
-  useEffect(() => {
-    if (!initialManager) return
-    const parts = initialManager.name.trim().split(' ')
-    setFirstName(parts[0] ?? '')
-    setLastName(parts.slice(1).join(' ') ?? '')
-    setEmail(initialManager.email)
-    setPhone(initialManager.phone ?? '')
-    // Capitalise the stored enum value to match dropdown options (e.g. "family" → "Family")
-    const rel = initialManager.relationship
-    setRelationship(rel.charAt(0).toUpperCase() + rel.slice(1))
-  }, [initialManager])
+  // Pre-fill the form when returning from Step 4 with an already-saved manager.
+  // Done during render rather than in an effect so the fields are populated on
+  // the first paint — the effect version showed an empty form for a frame.
+  const [lastManager, setLastManager] = useState(initialManager)
+  if (initialManager !== lastManager) {
+    setLastManager(initialManager)
+    if (initialManager) {
+      const parts = initialManager.name.trim().split(' ')
+      setFirstName(parts[0] ?? '')
+      setLastName(parts.slice(1).join(' ') ?? '')
+      setEmail(initialManager.email)
+      setPhone(initialManager.phone ?? '')
+      // Capitalise the stored enum value to match dropdown options (e.g. "family" → "Family")
+      const rel = initialManager.relationship
+      setRelationship(rel.charAt(0).toUpperCase() + rel.slice(1))
+    }
+  }
 
   const handleContinue = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !relationship) return

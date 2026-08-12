@@ -20,9 +20,12 @@ export default function GuardianConsentModal({
 }: GuardianConsentModalProps) {
   const [acknowledged, setAcknowledged] = useState(false)
 
-  useEffect(() => {
-    if (open) setAcknowledged(false)
-  }, [open])
+  // Reset on open during render, not in an effect — see note above.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    setAcknowledged(false)
+  }
 
   useEffect(() => {
     if (!open) return

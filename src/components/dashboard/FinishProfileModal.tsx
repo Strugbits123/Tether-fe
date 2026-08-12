@@ -213,13 +213,22 @@ export default function FinishProfileModal({
 
   // Pre-populate from the current user when the modal opens (works as both
   // first-time setup and an edit form). Resets transient state too.
+  // Transient state is cleared during render on the open transition, so a
+  // reopened modal never shows the previous attempt's validation errors.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setError(null);
+      setFieldErrors({});
+      setSubmitting(false);
+      setStatusText("");
+      setAvatarFile(null);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
-    setError(null);
-    setFieldErrors({});
-    setSubmitting(false);
-    setStatusText("");
-    setAvatarFile(null);
     let active = true;
     (async () => {
       const token = await getToken();
