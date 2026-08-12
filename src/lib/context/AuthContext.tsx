@@ -138,6 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error: sessionError } = await supabase.auth.getSession()
       if (sessionError) {
+        // Retry state is shared across identities, so a lookup that belongs to a
+        // signed-out or switched-away account must not schedule or cancel
+        // retries for whoever is signed in now.
+        if (!isCurrent()) return
         // Only a transport-level failure is worth retrying. Any other auth error
         // (an invalid or revoked refresh token, say) will fail identically
         // forever, and retrying it would loop every 30s for the life of the tab.
@@ -154,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // navigator lock timeout or blocked storage access, for instance. Left
       // uncaught this escaped as an unhandled rejection and skipped the retry
       // entirely, leaving the app profile-less until a manual reload.
+      if (!isCurrent()) return
       scheduleRetry()
       return
     }
@@ -296,6 +301,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      // Record the identity here so the SIGNED_IN event that follows this on a
+      // fresh load isn't mistaken for an account switch — that would bump the
+      // generation and cancel the profile fetch started two lines below.
+      lastUserIdRef.current = session?.user?.id ?? null
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
@@ -312,9 +321,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // transition to no session. TOKEN_REFRESHED keeps the same id and must not
       // cancel a load in progress.
       const nextUserId = session?.user?.id ?? null
-      if (nextUserId !== lastUserIdRef.current) {
+      const previousUserId = lastUserIdRef.current
+      if (nextUserId !== previousUserId) {
         authGenerationRef.current += 1
         lastUserIdRef.current = nextUserId
+
+        // A switch straight from one signed-in identity to another (no
+        // SIGNED_OUT in between) has to tear down everything scoped to the old
+        // one. Bumping the generation alone only stops stale *writes*; the
+        // already-written state would survive and the new account would render
+        // the previous person's profile until /users/me resolved. Worse,
+        // resolveMembership() early-returns on resolvedRef, so the new account's
+        // memberships would never load at all, and the stored membership id
+        // belongs to the old user.
+        //
+        // Scoped to a genuine switch: the first observation here is null -> id
+        // on a normal load, where clearing the stored membership would break the
+        // returning-user path that validates it. Sign-out (id -> null) is
+        // handled by the else branch below.
+        if (previousUserId !== null && nextUserId !== null) {
+          stopRetry()
+          setProfile(null)
+          setProfileLoading(false)
+          setMembershipCount(null)
+          resolvedRef.current = false
+          window.localStorage.removeItem(ACTIVE_MEMBERSHIP_KEY)
+          resetIdentity()
+        }
       }
       setSession(session)
       setUser(session?.user ?? null)
