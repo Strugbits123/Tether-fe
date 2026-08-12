@@ -59,12 +59,16 @@ export default function AudioRecorder({
     initialBlob ?? null,
   );
 
-  const clearTimer = () => {
+  // Memoised so the useCallbacks and unmount effect below can list it as a
+  // dependency honestly. As a plain function it was recreated every render while
+  // its consumers declared `[]` deps — inert here (it only touches a ref) but a
+  // stale closure on paper, and it silently under-declared those deps.
+  const clearTimer = useCallback(() => {
     if (timerRef.current) {
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  };
+  }, []);
 
   // Declared above the recording effect because that effect's auto-stop timer
   // calls it. Referencing it from further down still worked at runtime — the
@@ -78,7 +82,7 @@ export default function AudioRecorder({
     if (record && record.isRecording()) {
       record.stopRecording(); // record-end → preview
     }
-  }, []);
+  }, [clearTimer]);
 
   // Build the live recording waveform + mic capture while in the recording phase.
   useEffect(() => {
@@ -166,7 +170,7 @@ export default function AudioRecorder({
       }
     }
     onCancel();
-  }, [onCancel]);
+  }, [onCancel, clearTimer]);
 
   const reRecord = useCallback(() => {
     blobRef.current = null;
@@ -180,7 +184,7 @@ export default function AudioRecorder({
     if (blobRef.current) onComplete(blobRef.current, durationRef.current);
   }, [onComplete]);
 
-  useEffect(() => () => clearTimer(), []);
+  useEffect(() => () => clearTimer(), [clearTimer]);
 
   const remaining = Math.max(0, maxSeconds - elapsed);
 

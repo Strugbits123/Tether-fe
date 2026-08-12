@@ -224,6 +224,17 @@ export default function FinishProfileModal({
       setSubmitting(false);
       setStatusText("");
       setAvatarFile(null);
+      // Drop the preview that belonged to the avatarFile just discarded —
+      // otherwise reopening shows an unsaved photo that will never upload.
+      // Only blob: URLs are ours to revoke; a persisted avatar URL is kept
+      // (the fetch below refreshes it either way).
+      setPhoto((prev) => {
+        if (prev && prev.startsWith("blob:")) {
+          URL.revokeObjectURL(prev);
+          return null;
+        }
+        return prev;
+      });
     }
   }
 

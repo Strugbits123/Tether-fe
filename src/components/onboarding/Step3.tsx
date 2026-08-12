@@ -36,28 +36,46 @@ const relationshipOptions = [
   'Other',
 ]
 
-export default function Step3({ onNext, onBack, loading, initialManager }: Step3Props) {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [relationship, setRelationship] = useState('')
+/** Splits a saved manager into the form's field values. Relationship is
+ *  capitalised to match the dropdown options (e.g. "family" → "Family"). */
+function managerToFields(manager: FetchedManager | null | undefined) {
+  if (!manager) {
+    return { firstName: '', lastName: '', phone: '', email: '', relationship: '' }
+  }
+  const parts = manager.name.trim().split(' ')
+  const rel = manager.relationship
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+    phone: manager.phone ?? '',
+    email: manager.email,
+    relationship: rel.charAt(0).toUpperCase() + rel.slice(1),
+  }
+}
 
-  // Pre-fill the form when returning from Step 4 with an already-saved manager.
-  // Done during render rather than in an effect so the fields are populated on
-  // the first paint — the effect version showed an empty form for a frame.
+export default function Step3({ onNext, onBack, loading, initialManager }: Step3Props) {
+  // Seeded from initialManager, not empty strings. The tracker below only fires
+  // on a *change*, so initialising these blank left the form empty whenever the
+  // manager was already known at mount — which is the common case coming back
+  // from Step 4. The previous effect ran on mount and covered it.
+  const seed = managerToFields(initialManager)
+  const [firstName, setFirstName] = useState(seed.firstName)
+  const [lastName, setLastName] = useState(seed.lastName)
+  const [phone, setPhone] = useState(seed.phone)
+  const [email, setEmail] = useState(seed.email)
+  const [relationship, setRelationship] = useState(seed.relationship)
+
+  // Re-fill if a *different* manager arrives after mount. Kept out of an effect
+  // so the fields are correct on the first paint rather than one frame later.
   const [lastManager, setLastManager] = useState(initialManager)
   if (initialManager !== lastManager) {
     setLastManager(initialManager)
     if (initialManager) {
-      const parts = initialManager.name.trim().split(' ')
-      setFirstName(parts[0] ?? '')
-      setLastName(parts.slice(1).join(' ') ?? '')
-      setEmail(initialManager.email)
-      setPhone(initialManager.phone ?? '')
-      // Capitalise the stored enum value to match dropdown options (e.g. "family" → "Family")
-      const rel = initialManager.relationship
-      setRelationship(rel.charAt(0).toUpperCase() + rel.slice(1))
+      setFirstName(seed.firstName)
+      setLastName(seed.lastName)
+      setEmail(seed.email)
+      setPhone(seed.phone)
+      setRelationship(seed.relationship)
     }
   }
 

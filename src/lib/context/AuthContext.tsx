@@ -101,14 +101,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // after at least one render has happened.
   const loadProfileRef = useRef<() => void>(() => {})
 
+  // Backoff-scheduled retry, shared by the two transient-failure paths below
+  // (session lookup and the /users/me call).
+  const scheduleRetry = useCallback(() => {
+    const delays = [2000, 4000, 8000, 15000, 30000]
+    const attempt = retryRef.current.attempt
+    const delay = delays[Math.min(attempt, delays.length - 1)]
+    if (retryRef.current.timer) clearTimeout(retryRef.current.timer)
+    retryRef.current.attempt = attempt + 1
+    retryRef.current.timer = setTimeout(() => {
+      loadProfileRef.current()
+    }, delay)
+  }, [])
+
   // Loads /users/me, reading a fresh token each time. On failure it keeps
   // retrying with backoff (capped at 30s) so the UI auto-recovers once the
   // backend is reachable — no page reload needed.
   const loadProfile = useCallback(async () => {
-    const {
-      data: { session: current },
-    } = await supabase.auth.getSession()
-    const token = current?.access_token
+    const { data, error: sessionError } = await supabase.auth.getSession()
+    // A failed session lookup (network drop, refresh-token round trip) is not
+    // proof of being signed out. Treating it as such stopped the retry loop
+    // permanently and left the app profile-less until a manual reload — retry
+    // instead, and reserve stopRetry for a confirmed absence of a session.
+    if (sessionError) {
+      scheduleRetry()
+      return
+    }
+    const token = data.session?.access_token
     if (!token) {
       stopRetry()
       return
@@ -129,19 +148,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (terminal) {
         stopRetry()
       } else {
-        const delays = [2000, 4000, 8000, 15000, 30000]
-        const attempt = retryRef.current.attempt
-        const delay = delays[Math.min(attempt, delays.length - 1)]
-        if (retryRef.current.timer) clearTimeout(retryRef.current.timer)
-        retryRef.current.attempt = attempt + 1
-        retryRef.current.timer = setTimeout(() => {
-          loadProfileRef.current()
-        }, delay)
+        scheduleRetry()
       }
     } finally {
       setProfileLoading(false)
     }
-  }, [supabase, stopRetry])
+  }, [supabase, stopRetry, scheduleRetry])
 
   // Assigned in an effect rather than during render — a render-phase ref write
   // is itself a lint violation (and unsafe under concurrent rendering).

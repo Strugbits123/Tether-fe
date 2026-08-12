@@ -70,7 +70,9 @@ export default function SelectAccountPage() {
   }, [router, showToast])
 
   useEffect(() => {
-    // Fetch on mount: the setState calls run after an await inside the loader, not synchronously here.
+    // Fetch on mount. load() does set loading/error synchronously before its
+    // first await, but on mount those already hold their initial values, so React
+    // bails out without an extra render. The resets matter on later refetches.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])

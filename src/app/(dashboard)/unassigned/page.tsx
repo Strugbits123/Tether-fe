@@ -180,7 +180,8 @@ export default function UnassignedPage() {
   }, [typeFilter, showToast]);
 
   useEffect(() => {
-    // Fetch on mount: the setState calls run after an await inside the loader, not synchronously here.
+    // Fetch on mount and whenever typeFilter changes. loadData() awaits before
+    // touching state, so nothing is set synchronously in this effect body.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, [loadData]);

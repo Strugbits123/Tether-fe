@@ -158,12 +158,9 @@ export default function OnboardingPage() {
   // Step 1: Purpose
   const [purposes, setPurposes] = useState<string[]>([])
 
-  // Step 2: Recipients
-  const [recipients, setRecipients] = useState<Recipient[]>([])
   const [fetchedRecipients, setFetchedRecipients] = useState<FetchedRecipient[]>([])
 
   // Step 3: Release Manager
-  const [releaseManager, setReleaseManager] = useState<ReleaseManager | null>(null)
   const [fetchedManager, setFetchedManager] = useState<FetchedManager | null>(null)
   const [releaseManagerSaved, setReleaseManagerSaved] = useState(false)
 
@@ -194,7 +191,6 @@ export default function OnboardingPage() {
   }
 
   const handleStep2Next = async (recips: Recipient[]) => {
-    setRecipients(recips)
     setStepLoading(true)
     try {
       const token = await getToken()
@@ -248,7 +244,6 @@ export default function OnboardingPage() {
   }
 
   const handleStep3Next = async (manager: ReleaseManager | null) => {
-    setReleaseManager(manager)
     setStepLoading(true)
     try {
       const token = await getToken()
@@ -288,7 +283,6 @@ export default function OnboardingPage() {
     } catch {
       // Non-blocking — show step 2 regardless
     } finally {
-      setRecipients([])
       setCurrentStep(2)
     }
   }

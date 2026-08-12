@@ -14,8 +14,12 @@ function RegisterForm() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
 
-  // Read view mode from URL search param (?mode=signin or ?mode=signup)
-  const [isSignUp, setIsSignUp] = useState(false)
+  // Read view mode from URL search param (?mode=signin or ?mode=signup).
+  // Seeded from the param directly: the tracker below only fires on a *change*,
+  // so initialising this to `false` made /register?mode=signup render the
+  // sign-in form (the previous effect ran on mount and covered that case).
+  const initialMode = searchParams.get('mode')
+  const [isSignUp, setIsSignUp] = useState(initialMode === 'signup')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -28,9 +32,9 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  // Sync the tab to ?mode= during render rather than in an effect, so arriving
-  // at /register?mode=signup never paints the sign-in form first. The user can
-  // still toggle tabs afterwards — this only re-runs when the query changes.
+  // Keep the tab in sync if ?mode= changes after mount (client-side nav). The
+  // first render is already handled by the initial state above; the user can
+  // still toggle tabs freely in between.
   // See react.dev "Adjusting some state when a prop changes".
   const modeParam = searchParams.get('mode')
   const [lastMode, setLastMode] = useState(modeParam)

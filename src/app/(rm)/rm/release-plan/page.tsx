@@ -20,6 +20,7 @@ import {
   type ReleasePlanState,
 } from '@/lib/api/rm'
 import RequestGuardianModal from '@/components/release-manager/RequestGuardianModal'
+import CancelReleaseModal from '@/components/release-manager/CancelReleaseModal'
 import ReleasePlanHeader, {
   type ReleasePlanView,
 } from '@/components/release-manager/release-plan/ReleasePlanHeader'
@@ -65,6 +66,7 @@ export default function ReleasePlanPage() {
   const [plan, setPlan] = useState<ReleasePlanActiveState | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
   const [continuing, setContinuing] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
@@ -197,15 +199,21 @@ export default function ReleasePlanPage() {
 
   /* ---------------------- Cancel (shared by steps 2 & 3) ---------------------- */
 
-  const handleCancel = async () => {
-    const reason = window.prompt('Reason for cancelling this release plan:')
-    if (!reason || !reason.trim()) return
+  // The reason comes from CancelReleaseModal, which enforces the API's
+  // non-empty + 1000-character rules before this is ever called.
+  const handleCancel = async (reason: string) => {
     const token = await getToken()
-    if (!token) return
+    if (!token) {
+      showToast('Your session has expired. Sign in again.', 'error')
+      return
+    }
     setCancelling(true)
     try {
-      await cancelRelease(token, { reason: reason.trim() })
+      await cancelRelease(token, { reason })
       showToast('Release plan cancelled.', 'success')
+      // Only dismiss on success — a failure keeps the modal (and the typed
+      // reason) so the operator can retry without writing it again.
+      setCancelOpen(false)
       setPlan(null)
       await load()
     } catch (e) {
@@ -370,7 +378,7 @@ export default function ReleasePlanPage() {
           parties={parties}
           allSent={allSent}
           cancelling={cancelling}
-          onCancel={handleCancel}
+          onCancel={() => setCancelOpen(true)}
         />
       )}
 
@@ -386,7 +394,7 @@ export default function ReleasePlanPage() {
           canContinue={plan.step_3_waiting.can_continue}
           cancelling={cancelling}
           continuing={continuing}
-          onCancel={handleCancel}
+          onCancel={() => setCancelOpen(true)}
           onContinue={handleContinue}
         />
       )}
@@ -420,6 +428,13 @@ export default function ReleasePlanPage() {
       <RequestGuardianModal
         open={guardianModalOpen}
         onClose={() => setGuardianModalOpen(false)}
+      />
+
+      <CancelReleaseModal
+        open={cancelOpen}
+        cancelling={cancelling}
+        onConfirm={handleCancel}
+        onClose={() => setCancelOpen(false)}
       />
     </div>
   )
